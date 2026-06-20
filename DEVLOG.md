@@ -22,3 +22,12 @@
 - **해결**: 모든 파일을 python 문자열 리터럴로 직접 /tmp/shl5에 작성 후 push
 - **수정된 파일**: index.html(72줄), google-drive.js(169줄), app.js(355줄), style.css(138줄), data.js, gemini.js
 - **추가 개선**: style.css — .opt-btn, .tag, .spinner @keyframes, .foot, @media print 스타일 누락분 복원
+
+## 2026-06-21 (6차) · Gemini 제거 → TMDB 유사작품 검색으로 교체
+- **gemini.js** 삭제
+- **cloudflare-worker.js** 삭제
+- **SETUP-GEMINI.md** 삭제
+- **tmdb.js** 신규 생성 — TMDB API로 장르 기반 유사 영화 검색, 포스터/줄거리/평점 표시
+- **index.html** 수정 — gemini.js → tmdb.js 스크립트 교체
+- **app.js** 수정 — AI 조언 버튼 제거, 유사작품 찾기를 TMDB 검색으로 교체
+- TMDB API 키: cd6415b1f647445096c926d2408b8d9e (byeorie 계정)
