@@ -71,8 +71,26 @@ function googleLogin() {
 }
 
 /* ===== 초기화 트리거 ===== */
-// GSI 라이브러리 로드 완료 시 자동 호출되는 콜백
-window.onGoogleLibraryLoad = () => { initGoogle(); };
+// 버튼 클릭 핸들러는 라이브러리 로드와 무관하게 즉시 연결
+function bindLoginButton() {
+  const btn = document.getElementById("googleLoginBtn");
+  if (btn) btn.onclick = googleLogin;
+}
+
+// GSI 라이브러리(accounts.google.com/gsi/client)는 async/defer 로드되므로
+// google.accounts 객체가 준비될 때까지 폴링 후 초기화
+function waitForGsiAndInit() {
+  if (window.google && google.accounts && google.accounts.id) {
+    initGoogle();
+  } else {
+    setTimeout(waitForGsiAndInit, 200);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  bindLoginButton();
+  waitForGsiAndInit();
+});
 
 /* ===== Drive API ===== */
 async function driveRequest(method, url, body) {
@@ -127,17 +145,4 @@ async function saveToDrive() {
   const content = JSON.stringify(DB);
   const boundary = "-------StoryHelper";
   const body =
-    `--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
-    JSON.stringify({ name: DRIVE_FILE_NAME, parents: ["appDataFolder"] }) +
-    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
-    content +
-    `\r\n--${boundary}--`;
-
-  const method = gDriveFileId ? "PATCH" : "POST";
-  const url = gDriveFileId
-    ? `https://www.googleapis.com/upload/drive/v3/files/${gDriveFileId}?uploadType=multipart`
-    : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-
-  const r = await fetch(url, {
-    method,
-    header
+    `--${boundary}\r\nContent-Type: a
