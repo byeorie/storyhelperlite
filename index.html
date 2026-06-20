@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>스토리헬퍼 Lite</title>
+<title>글쓰기도우미 Lite</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <header class="topbar">
-  <h1>📖 스토리헬퍼 <span class="lite">Lite</span></h1>
+  <h1>✍️ 글쓰기도우미 <span class="lite">Lite</span></h1>
   <div class="proj-controls">
     <select id="projSelect" title="프로젝트 선택"></select>
     <button id="newProjBtn" title="새 프로젝트">＋ 새 작품</button>
@@ -33,14 +33,4 @@
   <button class="tab" data-tab="export">⑦ 내보내기</button>
 </nav>
 
-<main id="app"></main>
-
-<footer class="foot">스토리헬퍼 Lite · 데이터는 이 브라우저에만 저장됩니다 · <a href="#" id="aboutLink">정보</a></footer>
-
-<script src="data.js"></script>
-<script src="gemini.js"></script>
-<script src="app.js"></script>
-<script src="google-drive.js"></script>
-<script>window.addEventListener("load", initGoogle);</script>
-</body>
-</html>
+<main id="app">

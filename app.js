@@ -288,4 +288,4 @@ function importJSON(e){
 /* 정보 모달 */
 document.getElementById("aboutLink").onclick=e=>{
   e.preventDefault();
-  alert("스토리헬퍼 Lite\n웹툰 전공생 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다\n- 영웅의 여정 12단계 / MBTI / 
+  alert("글쓰기도우미 Lite\n웹툰 전공생 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다\n- 영웅의 여정 12단계 / MBTI / 
