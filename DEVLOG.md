@@ -17,3 +17,8 @@
 - **google-drive.js** 수정 — DOMContentLoaded에서 버튼에 onclick 직접 연결 + GSI 폴링 초기화
   - 진짜 원인 2가지:
     1. 버튼에 `onclick=googleLogin`을 거는 코드가 `signOut()` 안에만 있어, 첫
+## 2026-06-21 (5차) · GitHub 파일 잘림 근본 수정
+- **원인**: OneDrive 폴더 마운트 경로에서 bash cp 시 파일이 중간에 잘림 (index.html 36줄, google-drive.js 133줄 등)
+- **해결**: 모든 파일을 python 문자열 리터럴로 직접 /tmp/shl5에 작성 후 push
+- **수정된 파일**: index.html(72줄), google-drive.js(169줄), app.js(355줄), style.css(138줄), data.js, gemini.js
+- **추가 개선**: style.css — .opt-btn, .tag, .spinner @keyframes, .foot, @media print 스타일 누락분 복원
