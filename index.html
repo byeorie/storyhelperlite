@@ -18,19 +18,22 @@
     <span id="saveStatus" class="save-status">저장됨</span>
   </div>
   <div class="google-auth">
-    <button id="googleLoginBtn" onclick="googleLogin()">Google로 로그인</button>
+    <button id="googleLoginBtn">Google로 로그인</button>
     <span id="driveStatus" class="save-status">로컬 저장</span>
   </div>
 </header>
 
-<nav class="tabs">
-  <button class="tab active" data-tab="character">① 캐릭터</button>
-  <button class="tab" data-tab="world">② 세계관</button>
-  <button class="tab" data-tab="background">③ 배경</button>
-  <button class="tab" data-tab="event">④ 사건</button>
-  <button class="tab" data-tab="plot">⑤ 플롯(영웅의 여정)</button>
-  <button class="tab" data-tab="ai">⑥ AI 도움</button>
-  <button class="tab" data-tab="export">⑦ 내보내기</button>
-</nav>
-
-<main id="app">
+<div class="layout">
+  <nav class="sidebar">
+    <div class="nav-group">
+      <div class="nav-label">💡 아이디어</div>
+      <button class="tab active" data-tab="idea">아이디어 탐색</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">👤 캐릭터</div>
+      <button class="tab" data-tab="character">캐릭터 설정</button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">🌍 배경</div>
+      <button class="tab" data-tab="world">세계관</button>
+      <butt

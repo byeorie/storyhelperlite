@@ -1,11 +1,11 @@
 /* ===== 상태 & 저장 ===== */
 const LS_KEY = "storyhelper_v1";
-let DB = load();          // {projects:[...], current:id}
-let P = currentProject(); // 현재 프로젝트 참조
+let DB = load();
+let P = currentProject();
 
 function load(){
-  try{ const d = JSON.parse(localStorage.getItem(LS_KEY)); if(d&&d.projects) return d; }catch(e){}
-  const id = uid();
+  try{ const d=JSON.parse(localStorage.getItem(LS_KEY)); if(d&&d.projects) return d; }catch(e){}
+  const id=uid();
   return {current:id, projects:[blankProject(id,"내 첫 작품")]};
 }
 function save(){
@@ -17,6 +17,7 @@ function save(){
 function uid(){ return "p"+Date.now()+Math.floor(Math.random()*1000); }
 function blankProject(id,name){
   return {id,name,logline:"",genres:[],
+    idea:{protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""},
     characters:[blankChar()],
     world:{summary:"",rules:"",era:"",place:""},
     background:{social:"",mood:"",detail:""},
@@ -27,7 +28,7 @@ function blankChar(){
   return {name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:""};
 }
 function currentProject(){
-  return DB.projects.find(p=>p.id===DB.current) || DB.projects[0];
+  return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
 }
 
 /* ===== 프로젝트 UI ===== */
@@ -59,8 +60,14 @@ document.getElementById("delProjBtn").onclick=()=>{
   DB.current=DB.projects[0].id; P=currentProject(); save(); refreshProjSelect(); render();
 };
 
+/* Google 로그인 */
+document.getElementById("googleLoginBtn").onclick=()=>{
+  if(typeof googleLogin==="function") googleLogin();
+  else alert("Google 라이브러리 로딩 중입니다. 잠시 후 다시 눌러주세요.");
+};
+
 /* ===== 탭 ===== */
-let activeTab="character";
+let activeTab="idea";
 document.querySelectorAll(".tab").forEach(t=>{
   t.onclick=()=>{
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
@@ -75,19 +82,90 @@ function bind(el,obj,key){
   el.oninput=()=>{ obj[key]=el.value; save(); };
 }
 
+/* 옵션 버튼 그룹 (단일선택) */
+function optGroup(container, options, obj, key){
+  options.forEach(v=>{
+    const b=document.createElement("button");
+    b.className="opt-btn"+(obj[key]===v?" on":"");
+    b.textContent=v;
+    b.onclick=()=>{ obj[key]=v; save(); container.querySelectorAll(".opt-btn").forEach(x=>x.classList.remove("on")); b.classList.add("on"); };
+    container.appendChild(b);
+  });
+}
+
 /* ===== 렌더 ===== */
 const app=document.getElementById("app");
 function render(){
   refreshProjSelect();
   app.innerHTML="";
-  ({character:rChar, world:rWorld, background:rBg, event:rEvent,
-    plot:rPlot, ai:rAI, export:rExport}[activeTab])();
+  if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
+  ({idea:rIdea, character:rChar, world:rWorld, background:rBg,
+    event:rEvent, plot:rPlot, export:rExport}[activeTab])();
+}
+
+/* ===== 💡 아이디어 탐색 ===== */
+const PROTAGONIST_TYPES=["영웅형","반영웅형","평범한 주인공","성장형","복수자","탐정/조사자","생존자","이상주의자","냉소주의자"];
+const ENDING_TYPES=["해피엔딩","새드엔딩","열린 결말","비극적 성장","권선징악","아이러닉 엔딩","순환 구조"];
+const IDEA_GENRES=["판타지","SF","로맨스","액션","미스터리","스릴러","호러","일상","스포츠","역사","학원","이세계"];
+
+function rIdea(){
+  if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
+  const id=P.idea;
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card">
+    <h2>💡 아이디어 탐색</h2>
+    <p class="hint">주인공과 이야기 방향을 설정하면 Gemini가 유사 작품을 분석해드립니다.</p>
+
+    <label>주인공 유형</label>
+    <div class="option-grid" id="typeGrid"></div>
+
+    <label>주인공 MBTI (선택)</label>
+    <div class="option-grid" id="mbtiGrid"></div>
+
+    <label>장르</label>
+    <div class="option-grid" id="genreGrid"></div>
+
+    <label>엔딩 형식</label>
+    <div class="option-grid" id="endingGrid"></div>
+
+    <label>로그라인 (한 줄 요약)</label>
+    <textarea id="ideaLogline" placeholder="누가, 무엇을 원하지만, 어떤 장애물 때문에… 한 문장으로"></textarea>
+
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" id="findSimilarBtn">🎞 유사 작품 분석</button>
+      <button class="btn ghost" id="clearIdeaBtn">초기화</button>
+    </div>
+    <div class="ai-box empty" id="similarBox">버튼을 누르면 결과가 표시됩니다.</div>
+  </div>`;
+  app.appendChild(c);
+
+  optGroup(c.querySelector("#typeGrid"), PROTAGONIST_TYPES, id, "protagonistType");
+  optGroup(c.querySelector("#mbtiGrid"), MBTI_TYPES, id, "protagonistMbti");
+  optGroup(c.querySelector("#genreGrid"), IDEA_GENRES, id, "genre");
+  optGroup(c.querySelector("#endingGrid"), ENDING_TYPES, id, "endingType");
+  bind(c.querySelector("#ideaLogline"), id, "logline");
+
+  c.querySelector("#findSimilarBtn").onclick=async()=>{
+    const box=c.querySelector("#similarBox");
+    box.className="ai-box"; box.innerHTML=`<span class="spinner"></span> 유사 작품을 분석 중…`;
+    const r=await askGemini(buildIdeaSimilarPrompt(id));
+    box.innerHTML=r.text ? formatSimilarResult(r.text) : "결과를 받지 못했습니다.";
+  };
+  c.querySelector("#clearIdeaBtn").onclick=()=>{
+    P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
+    save(); render();
+  };
+}
+
+function formatSimilarResult(text){
+  // 텍스트를 그대로 표시하되 <pre> 스타일 유지
+  return `<div style="white-space:pre-wrap;font-size:14px">${esc(text)}</div>`;
 }
 
 /* ① 캐릭터 */
 function rChar(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>① 캐릭터 설정</h2>
+  c.innerHTML=`<div class="card"><h2>👤 캐릭터 설정</h2>
     <p class="hint">MBTI와 에니어그램으로 성격의 뼈대를 잡고, 목표·결함·변화를 채워보세요.</p>
     <div class="charlist" id="charlist"></div>
     <button class="btn ghost" id="addChar">＋ 캐릭터 추가</button></div>`;
@@ -110,18 +188,16 @@ function charCard(ch,i){
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
     <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
     <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투, 관계 등"></textarea>`;
-  d.querySelectorAll("[data-k]").forEach(el=>{
-    const k=el.dataset.k; bind(el,ch,k);
-  });
+  d.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
   const del=d.querySelector("[data-del]");
   if(del)del.onclick=()=>{P.characters.splice(i,1);save();render();};
   return d;
 }
 
-/* ② 세계관 */
+/* 세계관 */
 function rWorld(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>② 세계관 설정</h2>
+  c.innerHTML=`<div class="card"><h2>🌍 세계관 설정</h2>
     <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기를 정합니다.</p>
     <label>한 줄 요약</label><textarea id="w_summary" placeholder="이 세계는 어떤 곳인가"></textarea>
     <div class="row"><div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
@@ -134,10 +210,10 @@ function rWorld(){
   bind(c.querySelector("#w_rules"),P.world,"rules");
 }
 
-/* ③ 배경 */
+/* 배경 */
 function rBg(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>③ 배경 설정</h2>
+  c.innerHTML=`<div class="card"><h2>🏙 배경 설정</h2>
     <p class="hint">세계관 속에서 이야기가 시작되는 구체적 상황입니다.</p>
     <label>사회·정치적 배경</label><textarea id="b_social"></textarea>
     <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
@@ -148,10 +224,10 @@ function rBg(){
   bind(c.querySelector("#b_detail"),P.background,"detail");
 }
 
-/* ④ 사건 */
+/* 사건 */
 function rEvent(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>④ 사건 설정</h2>
+  c.innerHTML=`<div class="card"><h2>⚡ 사건 설정</h2>
     <p class="hint">이야기를 굴러가게 하는 핵심 사건과 갈등, 결말 방향입니다.</p>
     <label>주요 사건 (발단)</label><textarea id="e_main" placeholder="이야기를 시작시키는 사건"></textarea>
     <label>핵심 갈등</label><textarea id="e_conflict" placeholder="주인공 vs 무엇/누구"></textarea>
@@ -162,20 +238,19 @@ function rEvent(){
   bind(c.querySelector("#e_ending"),P.event,"ending");
 }
 
-/* ⑤ 플롯 — 영웅의 여정 12단계 */
+/* 플롯 */
 function rPlot(){
   const filled=P.plot.filter(Boolean).length;
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>⑤ 플롯 — 영웅의 여정 12단계</h2>
+  c.innerHTML=`<div class="card"><h2>📖 플롯 — 영웅의 여정 12단계</h2>
     <p class="hint">${filled}/12 단계 작성됨. 각 단계를 눌러 펼치고 내용을 채우세요.</p>
     <label>🎬 로그라인 (한 문장 요약)</label>
-    <textarea id="logline" placeholder="누가, 무엇을 원하지만, 어떤 장애물 때문에… 한 문장으로"></textarea>
+    <textarea id="logline" placeholder="누가, 무엇을 원하지만, 어떤 장애물 때문에…"></textarea>
     <div class="row"><div><label>장르 (복수 선택)</label><div id="genreTags"></div></div></div>
     </div>
     <div id="stages"></div>`;
   app.appendChild(c);
   bind(c.querySelector("#logline"),P,"logline");
-  // 장르 태그
   const gt=c.querySelector("#genreTags");
   GENRES.forEach(g=>{
     const on=P.genres.includes(g);
@@ -185,7 +260,6 @@ function rPlot(){
     b.onclick=()=>{ if(on)P.genres=P.genres.filter(x=>x!==g); else P.genres.push(g); save(); render(); };
     gt.appendChild(b);
   });
-  // 12단계
   const st=c.querySelector("#stages");
   HERO_STAGES.forEach((s,i)=>{
     const wrap=document.createElement("div"); wrap.className="stage";
@@ -198,8 +272,7 @@ function rPlot(){
       <button class="btn sm ghost" data-advice="${i}">💡 이 단계 AI 조언</button>
       <div class="ai-box empty" data-advicebox="${i}">조언 버튼을 누르면 여기에 표시됩니다.</div></div>`;
     st.appendChild(wrap);
-    const head=wrap.querySelector(".stage-head");
-    head.onclick=e=>{ if(e.target.closest("button"))return; wrap.classList.toggle("open"); };
+    wrap.querySelector(".stage-head").onclick=e=>{ if(e.target.closest("button"))return; wrap.classList.toggle("open"); };
     const ta=wrap.querySelector("textarea");
     ta.value=P.plot[i]||"";
     ta.oninput=()=>{P.plot[i]=ta.value;save();};
@@ -207,85 +280,24 @@ function rPlot(){
   });
 }
 
-/* ⑥ AI 도움 */
-function rAI(){
-  const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>⑥ AI 도움 (Gemini)</h2>
-    <p class="hint">작성한 설정과 플롯을 바탕으로 비슷한 작품을 찾아드립니다. 각 단계별 조언은 ⑤ 플롯 탭에서 가능합니다.</p>
-    <button class="btn" id="findSimilar">🎞 비슷한 영화·만화·애니 찾기</button>
-    <div class="ai-box empty" id="similarBox">버튼을 누르면 결과가 표시됩니다.</div></div>`;
-  app.appendChild(c);
-  c.querySelector("#findSimilar").onclick=async()=>{
-    const box=c.querySelector("#similarBox");
-    box.className="ai-box"; box.innerHTML=`<span class="spinner"></span> 비슷한 작품을 찾는 중…`;
-    const r=await askGemini(buildSimilarPrompt(P));
-    box.textContent=r.text;
-  };
-}
 async function doAdvice(i,box){
   box.className="ai-box"; box.innerHTML=`<span class="spinner"></span> 조언 생성 중…`;
   const r=await askGemini(buildAdvicePrompt(P,i));
   box.textContent=r.text;
 }
 
-/* ⑦ 내보내기 */
+/* 내보내기 */
 function rExport(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>⑦ 내보내기 / 백업</h2>
+  c.innerHTML=`<div class="card"><h2>📤 내보내기 / 백업</h2>
     <p class="hint">완성본을 PDF로 저장하거나, 데이터를 파일로 백업·복원할 수 있습니다.</p>
-    <button class="btn" id="pdfBtn">📄 PDF로 내보내기 (인쇄)</button>
+    <button class="btn" id="pdfBtn">📄 PDF로 내보내기</button>
     <button class="btn ghost" id="jsonOut">💾 백업 파일 내보내기 (.json)</button>
     <label class="btn ghost" style="display:inline-block">📂 백업 불러오기
       <input type="file" id="jsonIn" accept=".json" style="display:none"></label>
-    <p class="muted" style="margin-top:14px">※ PDF는 인쇄 창에서 '대상'을 'PDF로 저장'으로 선택하세요.</p>
+    <p class="muted" style="margin-top:14px;font-size:12px;color:var(--muted)">※ PDF는 인쇄 창에서 '대상'을 'PDF로 저장'으로 선택하세요.</p>
     </div>
     <div id="preview" class="card"></div>`;
   app.appendChild(c);
   c.querySelector("#pdfBtn").onclick=()=>{ buildPreview(); window.print(); };
   c.querySelector("#jsonOut").onclick=exportJSON;
-  c.querySelector("#jsonIn").onchange=importJSON;
-  buildPreview();
-}
-function buildPreview(){
-  const pv=document.getElementById("preview"); if(!pv)return;
-  const chars=P.characters.map((ch,i)=>`
-    <p><b>인물 ${i+1}: ${esc(ch.name)||"-"}</b> (${esc(ch.role)})<br>
-    MBTI: ${esc(ch.mbti)||"-"} / 에니어그램: ${esc(ch.enneagram)||"-"}<br>
-    목표: ${esc(ch.goal)||"-"} / 결함: ${esc(ch.flaw)||"-"}<br>
-    아크: ${esc(ch.arc)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
-  const plot=HERO_STAGES.map((s,i)=>`<p><b>${i+1}. ${s.name}</b><br>${esc(P.plot[i])||"<i>(미작성)</i>"}</p>`).join("");
-  pv.innerHTML=`<h2 style="border-bottom:2px solid var(--accent);padding-bottom:8px">${esc(P.name)}</h2>
-    <p><b>로그라인:</b> ${esc(P.logline)||"-"}<br><b>장르:</b> ${P.genres.join(", ")||"-"}</p>
-    <div class="section-title">캐릭터</div>${chars}
-    <div class="section-title">세계관</div><p>${esc(P.world.summary)||"-"}<br>시대: ${esc(P.world.era)} / 장소: ${esc(P.world.place)}<br>규칙: ${esc(P.world.rules)}</p>
-    <div class="section-title">배경</div><p>사회: ${esc(P.background.social)}<br>분위기: ${esc(P.background.mood)}<br>${esc(P.background.detail)}</p>
-    <div class="section-title">사건</div><p>주요 사건: ${esc(P.event.main)}<br>갈등: ${esc(P.event.conflict)}<br>결말: ${esc(P.event.ending)}</p>
-    <div class="section-title">플롯 — 영웅의 여정</div>${plot}`;
-}
-function esc(s){return (s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
-
-function exportJSON(){
-  const blob=new Blob([JSON.stringify(P,null,2)],{type:"application/json"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob); a.download=(P.name||"story")+".json"; a.click();
-}
-function importJSON(e){
-  const f=e.target.files[0]; if(!f)return;
-  const rd=new FileReader();
-  rd.onload=()=>{
-    try{
-      const obj=JSON.parse(rd.result);
-      if(!obj.plot||!obj.characters)throw 0;
-      obj.id=uid(); obj.name=(obj.name||"가져온 작품")+" (복원)";
-      DB.projects.push(obj); DB.current=obj.id; P=currentProject();
-      save(); refreshProjSelect(); render();
-      alert("불러오기 완료!");
-    }catch(_){ alert("올바른 백업 파일이 아닙니다."); }
-  };
-  rd.readAsText(f);
-}
-
-/* 정보 모달 */
-document.getElementById("aboutLink").onclick=e=>{
-  e.preventDefault();
-  alert("글쓰기도우미 Lite\n웹툰 전공생 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다\n- 영웅의 여정 12단계 / MBTI / 

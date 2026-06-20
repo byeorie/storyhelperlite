@@ -7,23 +7,28 @@ let gTokenClient = null;
 let gAccessToken = null;
 let gDriveFileId = null;
 
+/* ===== 초기화 ===== */
 function initGoogle() {
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: onGoogleSignIn,
     auto_select: true,
   });
+
   gTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: DRIVE_SCOPE,
     callback: onTokenResponse,
   });
+
+  // 자동 로그인 시도
   google.accounts.id.prompt();
 }
 
 function onGoogleSignIn(resp) {
   const payload = JSON.parse(atob(resp.credential.split(".")[1]));
   updateUserUI(payload.name, payload.picture);
+  // Drive 접근 토큰 요청
   gTokenClient.requestAccessToken({ prompt: "" });
 }
 
@@ -33,6 +38,7 @@ function onTokenResponse(resp) {
   loadFromDrive();
 }
 
+/* ===== UI ===== */
 function updateUserUI(name, picture) {
   const btn = document.getElementById("googleLoginBtn");
   if (!btn) return;
@@ -52,11 +58,29 @@ function signOut() {
 }
 
 function googleLogin() {
-  google.accounts.id.prompt((n) => {
-    if (n.isNotDisplayed() || n.isSkippedMoment()) {
-      gTokenClient.requestAccessToken({ prompt: "select_account" });
-    }
+  // One Tap이 차단되면 바로 OAuth 팝업으로 전환
+  try {
+    google.accounts.id.prompt((n) => {
+      if (!n || n.isNotDisplayed() || n.isSkippedMoment() || n.isDismissedMoment()) {
+        gTokenClient.requestAccessToken({ prompt: "select_account" });
+      }
+    });
+  } catch(e) {
+    gTokenClient.requestAccessToken({ prompt: "select_account" });
+  }
+}
+
+/* ===== Drive API ===== */
+async function driveRequest(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: {
+      Authorization: "Bearer " + gAccessToken,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
+  return r.ok ? r.json() : null;
 }
 
 async function findDriveFile() {
@@ -75,7 +99,7 @@ async function loadFromDrive() {
     gDriveFileId = await findDriveFile();
     if (!gDriveFileId) {
       st.textContent = "☁️ 드라이브 연결됨 (새 파일)";
-      saveToDrive();
+      saveToDrive(); // 현재 로컬 데이터 업로드
       return;
     }
     const r = await fetch(
@@ -119,9 +143,4 @@ async function saveToDrive() {
     body,
   });
   if (r.ok) {
-    const j = await r.json();
-    if (!gDriveFileId) gDriveFileId = j.id;
-    const st = document.getElementById("driveStatus");
-    if (st) st.textContent = "☁️ 드라이브에 저장됨";
-  }
-}
+    con
