@@ -1,11 +1,7 @@
 // Gemini 연동 — Cloudflare Worker 프록시 경유 (서버가 API키 보관, 학생은 설정 불필요)
-// 교수님이 프록시 배포 후 아래 PROXY_URL 만 교체하면 됩니다.
-const PROXY_URL = "https://your-worker.workers.dev"; // ← 배포 후 교체
+const PROXY_URL = "https://storyhelper-gemini.byeorie.workers.dev";
 
 async function askGemini(prompt){
-  if(PROXY_URL.includes("your-worker")){
-    return {ok:false, text:"⚠️ 아직 AI 서버(프록시)가 연결되지 않았습니다.\n교수님이 gemini.js의 PROXY_URL을 배포 주소로 교체하면 작동합니다."};
-  }
   try{
     const r = await fetch(PROXY_URL, {
       method:"POST",
