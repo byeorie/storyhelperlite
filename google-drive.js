@@ -2,6 +2,7 @@
 const GOOGLE_CLIENT_ID = "612980273037-1sv5i8tgv9rduiq7hvg2h0u0d78r1kgp.apps.googleusercontent.com";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 const DRIVE_FILE_NAME = "storyhelper_data.json";
+const TOKEN_LS_KEY = "gAccessToken_v1";
 
 let gTokenClient = null;
 let gAccessToken = null;
@@ -14,26 +15,41 @@ function initGoogle() {
     scope: DRIVE_SCOPE,
     callback: onTokenResponse,
   });
-}
 
-function onGoogleSignIn(resp) {
-  const payload = JSON.parse(atob(resp.credential.split(".")[1]));
-  document.body.classList.add("logged-in");
-  updateUserUI(payload.name, payload.picture);
-  // Drive 접근 토큰 요청
-  gTokenClient.requestAccessToken({ prompt: "" });
+  // 저장된 토큰 복원 시도
+  const saved = localStorage.getItem(TOKEN_LS_KEY);
+  if (saved) {
+    try {
+      const { token, expiry, name, picture } = JSON.parse(saved);
+      if (Date.now() < expiry) {
+        gAccessToken = token;
+        document.body.classList.add("logged-in");
+        updateUserUI(name, picture);
+        loadFromDrive();
+        return;
+      }
+    } catch(e) {}
+    localStorage.removeItem(TOKEN_LS_KEY);
+  }
 }
 
 async function onTokenResponse(resp) {
   if (resp.error) return;
   gAccessToken = resp.access_token;
   document.body.classList.add("logged-in");
-  // 사용자 정보 가져와 UI 갱신
   try {
     const u = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
       headers: { Authorization: "Bearer " + gAccessToken },
     }).then(r => r.json());
-    updateUserUI(u.name || u.email, u.picture || "");
+    const name = u.name || u.email;
+    const picture = u.picture || "";
+    updateUserUI(name, picture);
+    // 토큰 저장 (1시간 유효)
+    localStorage.setItem(TOKEN_LS_KEY, JSON.stringify({
+      token: gAccessToken,
+      expiry: Date.now() + 55 * 60 * 1000,
+      name, picture
+    }));
   } catch (e) {}
   loadFromDrive();
 }
@@ -52,6 +68,7 @@ function signOut() {
   document.body.classList.remove("logged-in");
   gAccessToken = null;
   gDriveFileId = null;
+  localStorage.removeItem(TOKEN_LS_KEY);
   const btn = document.getElementById("googleLoginBtn");
   btn.innerHTML = "Google로 로그인";
   btn.onclick = googleLogin;
@@ -59,13 +76,11 @@ function signOut() {
 }
 
 function googleLogin() {
-  // 버튼 클릭 시 바로 OAuth 팝업 (One Tap prompt 콜백은 불안정하여 사용 안 함)
   if (!gTokenClient) { alert("구글 로그인 준비 중입니다. 잠시 후 다시 시도해주세요."); return; }
   gTokenClient.requestAccessToken({ prompt: "select_account" });
 }
 
 /* ===== 초기화 트리거 ===== */
-// 버튼 클릭 핸들러는 라이브러리 로드와 무관하게 즉시 연결
 function bindLoginButton() {
   const btn = document.getElementById("googleLoginBtn");
   if (btn) btn.onclick = googleLogin;
@@ -73,8 +88,6 @@ function bindLoginButton() {
   if (ov) ov.onclick = googleLogin;
 }
 
-// GSI 라이브러리(accounts.google.com/gsi/client)는 async/defer 로드되므로
-// google.accounts 객체가 준비될 때까지 폴링 후 초기화
 function waitForGsiAndInit() {
   if (window.google && google.accounts && google.accounts.oauth2) {
     initGoogle();
@@ -89,18 +102,6 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ===== Drive API ===== */
-async function driveRequest(method, url, body) {
-  const r = await fetch(url, {
-    method,
-    headers: {
-      Authorization: "Bearer " + gAccessToken,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return r.ok ? r.json() : null;
-}
-
 async function findDriveFile() {
   const r = await fetch(
     `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${DRIVE_FILE_NAME}'&fields=files(id)`,
@@ -117,7 +118,7 @@ async function loadFromDrive() {
     gDriveFileId = await findDriveFile();
     if (!gDriveFileId) {
       st.textContent = "☁️ 드라이브 연결됨 (새 파일)";
-      saveToDrive(); // 현재 로컬 데이터 업로드
+      saveToDrive();
       return;
     }
     const r = await fetch(
@@ -132,7 +133,10 @@ async function loadFromDrive() {
     }
     st.textContent = "☁️ 드라이브에서 불러옴";
   } catch (e) {
-    st.textContent = "☁️ 드라이브 오류";
+    // 토큰 만료 가능성 — 저장된 토큰 삭제
+    localStorage.removeItem(TOKEN_LS_KEY);
+    st.textContent = "☁️ 드라이브 오류 (재로그인 필요)";
+    document.body.classList.remove("logged-in");
   }
 }
 
@@ -164,6 +168,6 @@ async function saveToDrive() {
     const j = await r.json();
     if (!gDriveFileId) gDriveFileId = j.id;
     const st = document.getElementById("driveStatus");
-    if (st) { st.textContent = "☁️ 드라이브에 저장됨"; }
+    if (st) st.textContent = "☁️ 드라이브에 저장됨";
   }
 }
