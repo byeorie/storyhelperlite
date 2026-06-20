@@ -27,6 +27,7 @@ function initGoogle() {
 
 function onGoogleSignIn(resp) {
   const payload = JSON.parse(atob(resp.credential.split(".")[1]));
+  document.body.classList.add("logged-in");
   updateUserUI(payload.name, payload.picture);
   // Drive 접근 토큰 요청
   gTokenClient.requestAccessToken({ prompt: "" });
@@ -35,6 +36,7 @@ function onGoogleSignIn(resp) {
 function onTokenResponse(resp) {
   if (resp.error) return;
   gAccessToken = resp.access_token;
+  document.body.classList.add("logged-in");
   loadFromDrive();
 }
 
@@ -49,6 +51,7 @@ function updateUserUI(name, picture) {
 
 function signOut() {
   google.accounts.id.disableAutoSelect();
+  document.body.classList.remove("logged-in");
   gAccessToken = null;
   gDriveFileId = null;
   const btn = document.getElementById("googleLoginBtn");
@@ -75,6 +78,8 @@ function googleLogin() {
 function bindLoginButton() {
   const btn = document.getElementById("googleLoginBtn");
   if (btn) btn.onclick = googleLogin;
+  const ov = document.getElementById("overlayLoginBtn");
+  if (ov) ov.onclick = googleLogin;
 }
 
 // GSI 라이브러리(accounts.google.com/gsi/client)는 async/defer 로드되므로
@@ -136,13 +141,4 @@ async function loadFromDrive() {
     }
     st.textContent = "☁️ 드라이브에서 불러옴";
   } catch (e) {
-    st.textContent = "☁️ 드라이브 오류";
-  }
-}
-
-async function saveToDrive() {
-  if (!gAccessToken) return;
-  const content = JSON.stringify(DB);
-  const boundary = "-------StoryHelper";
-  const body =
-    `--${boundary}\r\nContent-Type: a
+    st.textContent = 
