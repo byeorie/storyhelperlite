@@ -12,6 +12,7 @@ function save(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
+  if(typeof saveToDrive==="function") saveToDrive();
 }
 function uid(){ return "p"+Date.now()+Math.floor(Math.random()*1000); }
 function blankProject(id,name){
@@ -287,8 +288,4 @@ function importJSON(e){
 /* 정보 모달 */
 document.getElementById("aboutLink").onclick=e=>{
   e.preventDefault();
-  alert("스토리헬퍼 Lite\n웹툰 전공생 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다\n- 영웅의 여정 12단계 / MBTI / 에니어그램 기반");
-};
-
-/* 시작 */
-render();
+  alert("스토리헬퍼 Lite\n웹툰 전공생 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다\n- 영웅의 여정 12단계 / MBTI / 

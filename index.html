@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>스토리헬퍼 Lite</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <header class="topbar">
@@ -15,6 +16,10 @@
     <button id="renameProjBtn" title="이름 변경">✎</button>
     <button id="delProjBtn" title="삭제">🗑</button>
     <span id="saveStatus" class="save-status">저장됨</span>
+  </div>
+  <div class="google-auth">
+    <button id="googleLoginBtn" onclick="googleLogin()">Google로 로그인</button>
+    <span id="driveStatus" class="save-status">로컬 저장</span>
   </div>
 </header>
 
@@ -35,5 +40,7 @@
 <script src="data.js"></script>
 <script src="gemini.js"></script>
 <script src="app.js"></script>
+<script src="google-drive.js"></script>
+<script>window.addEventListener("load", initGoogle);</script>
 </body>
 </html>
