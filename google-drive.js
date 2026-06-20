@@ -9,20 +9,11 @@ let gDriveFileId = null;
 
 /* ===== 초기화 ===== */
 function initGoogle() {
-  google.accounts.id.initialize({
-    client_id: GOOGLE_CLIENT_ID,
-    callback: onGoogleSignIn,
-    auto_select: true,
-  });
-
   gTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: DRIVE_SCOPE,
     callback: onTokenResponse,
   });
-
-  // 자동 로그인 시도
-  google.accounts.id.prompt();
 }
 
 function onGoogleSignIn(resp) {
@@ -33,10 +24,17 @@ function onGoogleSignIn(resp) {
   gTokenClient.requestAccessToken({ prompt: "" });
 }
 
-function onTokenResponse(resp) {
+async function onTokenResponse(resp) {
   if (resp.error) return;
   gAccessToken = resp.access_token;
   document.body.classList.add("logged-in");
+  // 사용자 정보 가져와 UI 갱신
+  try {
+    const u = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: "Bearer " + gAccessToken },
+    }).then(r => r.json());
+    updateUserUI(u.name || u.email, u.picture || "");
+  } catch (e) {}
   loadFromDrive();
 }
 
@@ -61,16 +59,9 @@ function signOut() {
 }
 
 function googleLogin() {
-  // One Tap이 차단되면 바로 OAuth 팝업으로 전환
-  try {
-    google.accounts.id.prompt((n) => {
-      if (!n || n.isNotDisplayed() || n.isSkippedMoment() || n.isDismissedMoment()) {
-        gTokenClient.requestAccessToken({ prompt: "select_account" });
-      }
-    });
-  } catch(e) {
-    gTokenClient.requestAccessToken({ prompt: "select_account" });
-  }
+  // 버튼 클릭 시 바로 OAuth 팝업 (One Tap prompt 콜백은 불안정하여 사용 안 함)
+  if (!gTokenClient) { alert("구글 로그인 준비 중입니다. 잠시 후 다시 시도해주세요."); return; }
+  gTokenClient.requestAccessToken({ prompt: "select_account" });
 }
 
 /* ===== 초기화 트리거 ===== */
@@ -85,7 +76,7 @@ function bindLoginButton() {
 // GSI 라이브러리(accounts.google.com/gsi/client)는 async/defer 로드되므로
 // google.accounts 객체가 준비될 때까지 폴링 후 초기화
 function waitForGsiAndInit() {
-  if (window.google && google.accounts && google.accounts.id) {
+  if (window.google && google.accounts && google.accounts.oauth2) {
     initGoogle();
   } else {
     setTimeout(waitForGsiAndInit, 200);
@@ -140,5 +131,4 @@ async function loadFromDrive() {
       render();
     }
     st.textContent = "☁️ 드라이브에서 불러옴";
-  } catch (e) {
-    st.textContent = 
+  } catch (e

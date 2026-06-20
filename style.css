@@ -87,23 +87,29 @@ textarea{resize:vertical;min-height:70px}
   padding:14px;margin-top:10px;white-space:pre-wrap;font-size:14px}
 .ai-box.empty{color:var(--muted);font-style:italic}
 .spinner{display:inline-block;width:14px;height:14px;border
+
 /* ===== 전체화면 로그인 오버레이 ===== */
 .login-overlay {
   position: fixed; inset: 0; z-index: 9999;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #f5f3ff, #eef2ff);
+  background: #f7f8fa;
 }
 .login-box {
-  text-align: center; padding: 48px 40px;
-  background: #fff; border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.12); max-width: 380px;
+  text-align: center; padding: 56px 48px;
+  background: #fff; border-radius: 18px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.08);
+  width: 360px; max-width: 90vw;
 }
-.login-box h1 { margin: 0 0 4px; font-size: 1.6em; }
-.login-box > p { margin: 4px 0; color: #666; }
-.login-box .login-desc { margin: 20px 0 28px; font-size: .9em; line-height: 1.6; color: #888; }
+.login-box .login-sub {
+  font-size: .85em; color: #9aa0a6; margin: 0 0 4px; letter-spacing: .02em;
+}
+.login-box h1 { margin: 0 0 32px; font-size: 1.7em; font-weight: 700; color: #202124; }
+.login-box h1 .lite { color: #7c6cff; }
+.login-box .login-desc { margin: 0 0 28px; font-size: .88em; line-height: 1.7; color: #80868b; }
 #overlayLoginBtn {
-  padding: 12px 28px; font-size: 1em; cursor: pointer;
-  background: #4285f4; color: #fff; border: none; border-radius: 8px;
+  width: 100%; padding: 15px 0; font-size: 1.02em; font-weight: 600; cursor: pointer;
+  background: #2b3a67; color: #fff; border: none; border-radius: 10px;
+  transition: background .15s;
 }
-#overlayLoginBtn:hover { background: #3367d6; }
+#overlayLoginBtn:hover { background: #1f2c52; }
 body.logged-in .login-overlay { display: none; }
