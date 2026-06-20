@@ -70,6 +70,10 @@ function googleLogin() {
   }
 }
 
+/* ===== 초기화 트리거 ===== */
+// GSI 라이브러리 로드 완료 시 자동 호출되는 콜백
+window.onGoogleLibraryLoad = () => { initGoogle(); };
+
 /* ===== Drive API ===== */
 async function driveRequest(method, url, body) {
   const r = await fetch(url, {
@@ -136,11 +140,4 @@ async function saveToDrive() {
 
   const r = await fetch(url, {
     method,
-    headers: {
-      Authorization: "Bearer " + gAccessToken,
-      "Content-Type": `multipart/related; boundary=${boundary}`,
-    },
-    body,
-  });
-  if (r.ok) {
-    con
+    header
