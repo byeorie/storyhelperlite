@@ -131,4 +131,39 @@ async function loadFromDrive() {
       render();
     }
     st.textContent = "☁️ 드라이브에서 불러옴";
-  } catch (e
+  } catch (e) {
+    st.textContent = "☁️ 드라이브 오류";
+  }
+}
+
+async function saveToDrive() {
+  if (!gAccessToken) return;
+  const content = JSON.stringify(DB);
+  const boundary = "-------StoryHelper";
+  const body =
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+    JSON.stringify({ name: DRIVE_FILE_NAME, parents: ["appDataFolder"] }) +
+    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+    content +
+    `\r\n--${boundary}--`;
+
+  const method = gDriveFileId ? "PATCH" : "POST";
+  const url = gDriveFileId
+    ? `https://www.googleapis.com/upload/drive/v3/files/${gDriveFileId}?uploadType=multipart`
+    : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+
+  const r = await fetch(url, {
+    method,
+    headers: {
+      Authorization: "Bearer " + gAccessToken,
+      "Content-Type": `multipart/related; boundary=${boundary}`,
+    },
+    body,
+  });
+  if (r.ok) {
+    const j = await r.json();
+    if (!gDriveFileId) gDriveFileId = j.id;
+    const st = document.getElementById("driveStatus");
+    if (st) { st.textContent = "☁️ 드라이브에 저장됨"; }
+  }
+}

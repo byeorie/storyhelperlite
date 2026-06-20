@@ -158,7 +158,6 @@ function rIdea(){
 }
 
 function formatSimilarResult(text){
-  // 텍스트를 그대로 표시하되 <pre> 스타일 유지
   return `<div style="white-space:pre-wrap;font-size:14px">${esc(text)}</div>`;
 }
 
@@ -301,3 +300,55 @@ function rExport(){
   app.appendChild(c);
   c.querySelector("#pdfBtn").onclick=()=>{ buildPreview(); window.print(); };
   c.querySelector("#jsonOut").onclick=exportJSON;
+  c.querySelector("#jsonIn").onchange=importJSON;
+  buildPreview();
+}
+function buildPreview(){
+  const pv=document.getElementById("preview"); if(!pv)return;
+  const chars=P.characters.map((ch,i)=>`
+    <p><b>인물 ${i+1}: ${esc(ch.name)||"-"}</b> (${esc(ch.role)})<br>
+    MBTI: ${esc(ch.mbti)||"-"} / 에니어그램: ${esc(ch.enneagram)||"-"}<br>
+    목표: ${esc(ch.goal)||"-"} / 결함: ${esc(ch.flaw)||"-"}<br>
+    아크: ${esc(ch.arc)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
+  const plot=HERO_STAGES.map((s,i)=>`<p><b>${i+1}. ${s.name}</b><br>${esc(P.plot[i])||"<i>(미작성)</i>"}</p>`).join("");
+  pv.innerHTML=`<h2 style="border-bottom:2px solid var(--accent);padding-bottom:8px">${esc(P.name)}</h2>
+    <p><b>로그라인:</b> ${esc(P.logline)||"-"}<br><b>장르:</b> ${P.genres.join(", ")||"-"}</p>
+    <div class="section-title">캐릭터</div>${chars}
+    <div class="section-title">세계관</div><p>${esc(P.world.summary)||"-"}<br>시대: ${esc(P.world.era)} / 장소: ${esc(P.world.place)}<br>규칙: ${esc(P.world.rules)}</p>
+    <div class="section-title">배경</div><p>사회: ${esc(P.background.social)}<br>분위기: ${esc(P.background.mood)}<br>${esc(P.background.detail)}</p>
+    <div class="section-title">사건</div><p>주요 사건: ${esc(P.event.main)}<br>갈등: ${esc(P.event.conflict)}<br>결말: ${esc(P.event.ending)}</p>
+    <div class="section-title">플롯 — 영웅의 여정</div>${plot}`;
+}
+function esc(s){return(s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
+
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(P,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=(P.name||"story")+".json"; a.click();
+}
+function importJSON(e){
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const obj=JSON.parse(rd.result);
+      if(!obj.plot||!obj.characters)throw 0;
+      obj.id=uid(); obj.name=(obj.name||"가져온 작품")+" (복원)";
+      DB.projects.push(obj); DB.current=obj.id; P=currentProject();
+      save(); refreshProjSelect(); render();
+      alert("불러오기 완료!");
+    }catch(_){ alert("올바른 백업 파일이 아닙니다."); }
+  };
+  rd.readAsText(f);
+}
+
+/* 정보 */
+document.getElementById("aboutLink").onclick=e=>{
+  e.preventDefault();
+  alert("글쓰기도우미 Lite\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
+};
+
+/* 초기 렌더 */
+refreshProjSelect();
+render();
+window.addEventListener("load",()=>{ if(typeof initGoogle==="function") initGoogle(); });

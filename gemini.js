@@ -31,3 +31,24 @@ function buildSimilarPrompt(p){
   const plotText = (p.plot||[]).map((t,i)=>t?`${i+1}.${HERO_STAGES[i].name}: ${t}`:"").filter(Boolean).join("\n");
   return `다음 작품 구상과 비슷한 분위기·구조·주제를 가진 기존 영화/만화/애니메이션을 3~5개 찾아 한국어로 소개해 주세요. 각 작품마다 제목, 매체(영화/만화/애니), 어떤 점이 비슷한지 1~2문장으로 설명하고, 마지막에 '차별화 포인트'로 학생 작품이 기존작과 달라질 수 있는 방향 2가지를 제안하세요.\n\n[로그라인] ${p.logline||"(미작성)"}\n[장르] ${(p.genres||[]).join(", ")}\n[세계관] ${p.world?.summary||""}\n[주요 사건] ${p.event?.main||""}\n[플롯]\n${plotText||"(미작성)"}`;
 }
+
+function buildIdeaSimilarPrompt(idea){
+  return `당신은 웹툰·영화·만화 전문가입니다. 아래 작품 구상과 유사한 기존 작품 3~5개를 분석해 주세요.
+
+[주인공 유형] ${idea.protagonistType||"(미지정)"}
+[주인공 MBTI] ${idea.protagonistMbti||"(미지정)"}
+[장르] ${idea.genre||"(미지정)"}
+[엔딩 형식] ${idea.endingType||"(미지정)"}
+[로그라인] ${idea.logline||"(미작성)"}
+
+각 작품마다 아래 형식으로 출력해 주세요:
+---
+제목: (작품명)
+매체: (영화/만화/애니메이션/소설)
+유사도: (0~100% — 주인공 유형, 장르, 엔딩, 분위기를 종합 평가)
+해당 작품 로그라인: (한 문장)
+유사한 이유: (1~2문장)
+---
+
+마지막에 "차별화 포인트" 섹션에서 이 구상이 기존작들과 달라질 수 있는 방향 2가지를 제안하세요.`;
+}
