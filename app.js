@@ -143,17 +143,59 @@ function render(){
 
 /* ===== 💡 아이디어 모음 ===== */
 let ideaFilterTags=[];
+let ideaPendingTags=[];
 
 function rIdea(){
   if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
+  const allTags=[...new Set(P.ideaBlocks.flatMap(b=>b.tags||[]))];
 
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
-    <input type="text" id="ideaNewInput" placeholder="아이디어를 작성해보세요  (예: 오늘 점심은 김치볶음밥 #오늘점심 #학식)">
+    <input type="text" id="ideaNewInput" placeholder="아이디어를 작성해보세요">
+    <div class="idea-compose-row">
+      <input type="text" id="ideaNewTagInput" placeholder="태그 입력 후 Enter">
+    </div>
+    <div class="idea-tag-row" id="ideaPendingTagRow"></div>
+    ${allTags.length?'<label>기존 태그에서 선택</label><div class="idea-tag-row" id="ideaExistingTagRow"></div>':""}
   </div>`;
   app.appendChild(c);
 
-  const allTags=[...new Set(P.ideaBlocks.flatMap(b=>b.tags||[]))];
+  const pendingRow=c.querySelector("#ideaPendingTagRow");
+  const existingRow=c.querySelector("#ideaExistingTagRow");
+  function renderPending(){
+    pendingRow.innerHTML="";
+    ideaPendingTags.forEach(t=>{
+      const tp=document.createElement("span"); tp.className="idea-tag";
+      tp.innerHTML=`${esc(t)} <span class="idea-tag-x">✕</span>`;
+      tp.querySelector(".idea-tag-x").onclick=()=>{ ideaPendingTags=ideaPendingTags.filter(x=>x!==t); renderPending(); renderExisting(); };
+      pendingRow.appendChild(tp);
+    });
+  }
+  function renderExisting(){
+    if(!existingRow)return;
+    existingRow.innerHTML="";
+    allTags.forEach(t=>{
+      const b=document.createElement("span");
+      b.className="idea-tag filter"+(ideaPendingTags.includes(t)?" on":"");
+      b.textContent=t;
+      b.onclick=()=>{
+        ideaPendingTags=ideaPendingTags.includes(t)?ideaPendingTags.filter(x=>x!==t):[...ideaPendingTags,t];
+        renderPending(); renderExisting();
+      };
+      existingRow.appendChild(b);
+    });
+  }
+  renderPending(); renderExisting();
+
+  const tagInput=c.querySelector("#ideaNewTagInput");
+  tagInput.onkeydown=e=>{
+    if(e.key==="Enter" && tagInput.value.trim()){
+      const t=tagInput.value.trim();
+      if(!ideaPendingTags.includes(t)) ideaPendingTags.push(t);
+      tagInput.value=""; renderPending(); renderExisting();
+    }
+  };
+
   ideaFilterTags=ideaFilterTags.filter(t=>allTags.includes(t));
   if(allTags.length){
     const fc=document.createElement("div"); fc.className="card idea-filter-card";
@@ -190,17 +232,12 @@ function rIdea(){
   const input=c.querySelector("#ideaNewInput");
   input.onkeydown=e=>{
     if(e.key==="Enter" && input.value.trim()){
-      addIdeaBlock(input.value.trim());
+      P.ideaBlocks.push({id:uid(), text:input.value.trim(), tags:[...ideaPendingTags]});
+      ideaPendingTags=[];
       input.value="";
+      save(); render();
     }
   };
-}
-
-function addIdeaBlock(raw){
-  const tags=[];
-  const text=raw.replace(/#([^\s#]+)/g,(m,t)=>{tags.push(t);return "";}).trim();
-  P.ideaBlocks.push({id:uid(),text:text||raw,tags});
-  save(); render();
 }
 
 function ideaBlockCard(b){

@@ -98,6 +98,9 @@ textarea{resize:vertical;min-height:70px}
 .stage .filled-dot{margin-left:auto;color:var(--ok);font-size:12px}
 
 /* 아이디어 모음 */
+.idea-compose-row{margin-top:10px}
+.idea-compose-row input{font-size:13px;padding:7px 10px}
+.idea-tag-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .idea-filter-card{padding:12px 22px;margin-bottom:14px}
 .idea-filter-bar{display:flex;flex-wrap:wrap;gap:6px}
 .idea-block-list{display:flex;flex-direction:column;gap:12px}
