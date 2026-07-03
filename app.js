@@ -4,9 +4,29 @@ let DB = load();
 let P = currentProject();
 
 function load(){
-  try{ const d=JSON.parse(localStorage.getItem(LS_KEY)); if(d&&d.projects) return d; }catch(e){}
+  try{
+    const d=JSON.parse(localStorage.getItem(LS_KEY));
+    if(d&&Array.isArray(d.projects)&&d.projects.length){
+      d.projects=d.projects.map(fillProject);
+      if(!d.projects.some(p=>p.id===d.current)) d.current=d.projects[0].id;
+      return d;
+    }
+  }catch(e){}
   const id=uid();
   return {current:id, projects:[blankProject(id,"내 첫 작품")]};
+}
+/* 예전 버전 데이터에 누락된 필드를 채워 오류를 방지 */
+function fillProject(p){
+  const b=blankProject(p.id||uid(), p.name||"제목 없음");
+  return Object.assign({}, b, p, {
+    idea: Object.assign({}, b.idea, p.idea||{}),
+    world: Object.assign({}, b.world, p.world||{}),
+    background: Object.assign({}, b.background, p.background||{}),
+    event: Object.assign({}, b.event, p.event||{}),
+    characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>Object.assign({},blankChar(),c)):b.characters,
+    plot: Array.isArray(p.plot)?Object.assign([...b.plot],p.plot):b.plot,
+    genres: Array.isArray(p.genres)?p.genres:b.genres,
+  });
 }
 function save(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
@@ -96,11 +116,27 @@ function optGroup(container, options, obj, key){
 /* ===== 렌더 ===== */
 const app=document.getElementById("app");
 function render(){
-  refreshProjSelect();
-  app.innerHTML="";
-  if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
-  ({idea:rIdea, character:rChar, world:rWorld, background:rBg,
-    event:rEvent, plot:rPlot, export:rExport}[activeTab])();
+  try{
+    refreshProjSelect();
+    app.innerHTML="";
+    if(!P) P=currentProject();
+    if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
+    const renderers={idea:rIdea, character:rChar, world:rWorld, background:rBg,
+      event:rEvent, plot:rPlot, export:rExport};
+    (renderers[activeTab]||rIdea)();
+  }catch(e){
+    console.error("렌더링 오류:", e);
+    app.innerHTML='<div class="card"><h2>문제가 발생했습니다</h2>'
+      +'<p class="hint">데이터를 불러오는 중 오류가 발생했습니다. 아래 버튼으로 저장 데이터를 초기화할 수 있습니다 (다른 작품은 유지됩니다).</p>'
+      +'<button class="btn danger" id="resetProjBtn">이 작품 초기화</button></div>';
+    const rb=document.getElementById("resetProjBtn");
+    if(rb) rb.onclick=()=>{
+      const i=DB.projects.findIndex(x=>x.id===P.id);
+      const fresh=blankProject(P.id,P.name);
+      if(i>=0) DB.projects[i]=fresh; else DB.projects.push(fresh);
+      P=fresh; save(); render();
+    };
+  }
 }
 
 /* ===== 💡 아이디어 탐색 ===== */
@@ -322,12 +358,4 @@ function importJSON(e){
 }
 
 /* 정보 */
-document.getElementById("aboutLink").onclick=e=>{
-  e.preventDefault();
-  alert("글쓰기도우미 Lite\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
-};
-
-/* 초기 렌더 */
-refreshProjSelect();
-render();
-window.addEventListener("load",()=>{ if(typeof initGoogle==="function") initGoogle(); });
+document.getElementById("aboutLink"

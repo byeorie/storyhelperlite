@@ -33,10 +33,13 @@ async function onTokenResponse(resp) {
   document.body.classList.add("logged-in");
   // 사용자 정보 가져와 UI 갱신
   try {
-    const u = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
       headers: { Authorization: "Bearer " + gAccessToken },
-    }).then(r => r.json());
-    updateUserUI(u.name || u.email, u.picture || "");
+    });
+    if (r.ok) {
+      const u = await r.json();
+      if (u && (u.name || u.email)) updateUserUI(u.name || u.email, u.picture || "");
+    }
   } catch (e) {}
   loadFromDrive();
 }
@@ -45,9 +48,14 @@ async function onTokenResponse(resp) {
 function updateUserUI(name, picture) {
   const btn = document.getElementById("googleLoginBtn");
   if (!btn) return;
-  btn.innerHTML = `<img src="${picture}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px">${name} <span style="opacity:.6;font-size:.8em">로그아웃</span>`;
+  const safeName = name || "사용자";
+  const img = picture
+    ? `<img src="${picture}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px" onerror="this.remove()">`
+    : "";
+  btn.innerHTML = `${img}${safeName} <span style="opacity:.6;font-size:.8em">로그아웃</span>`;
   btn.onclick = signOut;
-  document.getElementById("driveStatus").textContent = "☁️ 드라이브 연결 중…";
+  const st = document.getElementById("driveStatus");
+  if (st) st.textContent = "☁️ 드라이브 연결 중…";
 }
 
 function signOut() {
@@ -148,50 +156,3 @@ async function loadFromDrive() {
       { headers: { Authorization: "Bearer " + gAccessToken } }
     );
     const data = await r.json();
-    if (data && data.projects) {
-      DB = data;
-      P = currentProject();
-      render();
-    }
-    st.textContent = "☁️ 드라이브에서 불러옴";
-  } catch (e) {
-    st.textContent = "☁️ 드라이브 오류";
-  }
-}
-
-async function saveToDrive() {
-  if (!gAccessToken) return;
-  if (!gDriveFolderId) gDriveFolderId = await findOrCreateDriveFolder();
-  if (!gDriveFolderId) return;
-  const content = JSON.stringify(DB);
-  const boundary = "-------StoryHelper";
-  const metadata = gDriveFileId
-    ? { name: DRIVE_FILE_NAME }
-    : { name: DRIVE_FILE_NAME, parents: [gDriveFolderId] };
-  const body =
-    `--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
-    JSON.stringify(metadata) +
-    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
-    content +
-    `\r\n--${boundary}--`;
-
-  const method = gDriveFileId ? "PATCH" : "POST";
-  const url = gDriveFileId
-    ? `https://www.googleapis.com/upload/drive/v3/files/${gDriveFileId}?uploadType=multipart`
-    : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-
-  const r = await fetch(url, {
-    method,
-    headers: {
-      Authorization: "Bearer " + gAccessToken,
-      "Content-Type": `multipart/related; boundary=${boundary}`,
-    },
-    body,
-  });
-  if (r.ok) {
-    const j = await r.json();
-    if (!gDriveFileId) gDriveFileId = j.id;
-    const st = document.getElementById("driveStatus");
-    if (st) { st.textContent = "☁️ 드라이브에 저장됨"; }
-  }
-}
