@@ -1,7 +1,7 @@
 // Google OAuth + Drive API
 const GOOGLE_CLIENT_ID = "543063091602-injv9mjpavv1gobhrgmgbn7fr2u8jhge.apps.googleusercontent.com";
-// drive.file 스코프: 이 앱이 만든 파일에만 접근 (OAuth 심사 시 비민감 스코프, 무료)
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+// drive.file: 이 앱이 만든 파일에만 접근 / userinfo.profile,email: 로그인 버튼에 프로필 사진·이름 표시용
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email";
 const DRIVE_FILE_NAME = "storyhelper_data.json";
 const DRIVE_FOLDER_NAME = "이야기도우미";
 
@@ -22,7 +22,7 @@ function initGoogle() {
 function onGoogleSignIn(resp) {
   const payload = JSON.parse(atob(resp.credential.split(".")[1]));
   document.body.classList.add("logged-in");
-  updateUserUI(payload.name, payload.picture);
+  updateUserUI(payload.name, payload.picture, payload.email);
   // Drive 접근 토큰 요청
   gTokenClient.requestAccessToken({ prompt: "" });
 }
@@ -38,33 +38,58 @@ async function onTokenResponse(resp) {
     });
     if (r.ok) {
       const u = await r.json();
-      if (u && (u.name || u.email)) updateUserUI(u.name || u.email, u.picture || "");
+      if (u && (u.name || u.email)) updateUserUI(u.name || u.email, u.picture || "", u.email || "");
     }
   } catch (e) {}
   loadFromDrive();
 }
 
 /* ===== UI ===== */
-function updateUserUI(name, picture) {
+function updateUserUI(name, picture, email) {
   const btn = document.getElementById("googleLoginBtn");
   if (!btn) return;
   const safeName = name || "사용자";
-  const img = picture
-    ? `<img src="${picture}" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px" onerror="this.remove()">`
-    : "";
-  btn.innerHTML = `${img}${safeName} <span style="opacity:.6;font-size:.8em">로그아웃</span>`;
-  btn.onclick = signOut;
+  btn.innerHTML = picture
+    ? `<img src="${picture}" alt="${safeName}" onerror="this.parentElement.innerHTML='<span class=&quot;avatar-fallback&quot;>${safeName.charAt(0)}</span>'">`
+    : `<span class="avatar-fallback">${safeName.charAt(0)}</span>`;
+  btn.title = safeName;
+  btn.classList.add("avatar-btn");
+  btn.onclick = (e) => { e.stopPropagation(); toggleUserMenu(); };
+
+  const emailEl = document.getElementById("userMenuEmail");
+  if (emailEl) emailEl.textContent = email || safeName;
+
   const st = document.getElementById("driveStatus");
   if (st) st.textContent = "☁️ 드라이브 연결 중…";
 }
 
+function toggleUserMenu(forceHide) {
+  const menu = document.getElementById("userMenu");
+  if (!menu) return;
+  const hide = forceHide === true || !menu.hidden;
+  menu.hidden = hide;
+}
+
+document.addEventListener("click", (e) => {
+  const wrap = document.getElementById("googleLoginBtn")?.closest(".user-menu-wrap");
+  if (wrap && !wrap.contains(e.target)) toggleUserMenu(true);
+});
+
+function openSettings() {
+  toggleUserMenu(true);
+  alert("설정 기능은 준비 중입니다.");
+}
+
 function signOut() {
-  google.accounts.id.disableAutoSelect();
+  if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
   document.body.classList.remove("logged-in");
   gAccessToken = null;
   gDriveFileId = null;
   gDriveFolderId = null;
+  toggleUserMenu(true);
   const btn = document.getElementById("googleLoginBtn");
+  btn.classList.remove("avatar-btn");
+  btn.removeAttribute("title");
   btn.innerHTML = "Google로 로그인";
   btn.onclick = googleLogin;
   document.getElementById("driveStatus").textContent = "로컬 저장";
@@ -83,6 +108,10 @@ function bindLoginButton() {
   if (btn) btn.onclick = googleLogin;
   const ov = document.getElementById("overlayLoginBtn");
   if (ov) ov.onclick = googleLogin;
+  const settingsBtn = document.getElementById("menuSettingsBtn");
+  if (settingsBtn) settingsBtn.onclick = openSettings;
+  const logoutBtn = document.getElementById("menuLogoutBtn");
+  if (logoutBtn) logoutBtn.onclick = signOut;
 }
 
 // GSI 라이브러리(accounts.google.com/gsi/client)는 async/defer 로드되므로
