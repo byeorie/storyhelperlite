@@ -1,5 +1,5 @@
 // Google OAuth + Drive API
-const GOOGLE_CLIENT_ID = "612980273037-1sv5i8tgv9rduiq7hvg2h0u0d78r1kgp.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = "543063091602-injv9mjpavv1gobhrgmgbn7fr2u8jhge.apps.googleusercontent.com";
 // drive.file 스코프: 이 앱이 만든 파일에만 접근 (OAuth 심사 시 비민감 스코프, 무료)
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const DRIVE_FILE_NAME = "storyhelper_data.json";
