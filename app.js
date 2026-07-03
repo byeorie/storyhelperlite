@@ -106,7 +106,7 @@ function render(){
 /* ===== 💡 아이디어 탐색 ===== */
 const PROTAGONIST_TYPES=["영웅형","반영웅형","평범한 주인공","성장형","복수자","탐정/조사자","생존자","이상주의자","냉소주의자"];
 const ENDING_TYPES=["해피엔딩","새드엔딩","열린 결말","비극적 성장","권선징악","아이러닉 엔딩","순환 구조"];
-const IDEA_GENRES=["판타지","SF","로맨스","액션","미스터리","스릴러","공포","일상","스포츠","역사","학원","이세계"];
+const IDEA_GENRES=["판타지","SF","로맨스","액션","미스터리","스릴러","호러","일상","스포츠","역사","학원","이세계"];
 
 function rIdea(){
   if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
@@ -114,7 +114,7 @@ function rIdea(){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
     <h2>💡 아이디어 탐색</h2>
-    <p class="hint">장르를 선택하면 TMDB에서 유사 인기 영화를 찾아드립니다.</p>
+    <p class="hint">주인공과 이야기 방향을 설정하면 Gemini가 유사 작품을 분석해드립니다.</p>
 
     <label>주인공 유형</label>
     <div class="option-grid" id="typeGrid"></div>
@@ -132,10 +132,10 @@ function rIdea(){
     <textarea id="ideaLogline" placeholder="누가, 무엇을 원하지만, 어떤 장애물 때문에… 한 문장으로"></textarea>
 
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn" id="findSimilarBtn">🎞 유사 작품 찾기</button>
+      <button class="btn" id="findSimilarBtn">🎞 유사 작품 분석</button>
       <button class="btn ghost" id="clearIdeaBtn">초기화</button>
     </div>
-    <div class="ai-box empty" id="similarBox">장르를 선택하고 버튼을 누르면 TMDB에서 유사 작품을 검색합니다.</div>
+    <div class="ai-box empty" id="similarBox">버튼을 누르면 결과가 표시됩니다.</div>
   </div>`;
   app.appendChild(c);
 
@@ -147,12 +147,19 @@ function rIdea(){
 
   c.querySelector("#findSimilarBtn").onclick=async()=>{
     const box=c.querySelector("#similarBox");
-    await findSimilarMovies(id, box);
+    box.className="ai-box"; box.innerHTML=`<span class="spinner"></span> 유사 작품을 분석 중…`;
+    const r=await askGemini(buildIdeaSimilarPrompt(id));
+    box.innerHTML=r.text ? formatSimilarResult(r.text) : "결과를 받지 못했습니다.";
   };
   c.querySelector("#clearIdeaBtn").onclick=()=>{
     P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     save(); render();
   };
+}
+
+function formatSimilarResult(text){
+  // 텍스트를 그대로 표시하되 <pre> 스타일 유지
+  return `<div style="white-space:pre-wrap;font-size:14px">${esc(text)}</div>`;
 }
 
 /* ① 캐릭터 */
@@ -261,13 +268,22 @@ function rPlot(){
       <span class="stage-num">${i+1}</span>
       <div><div class="st-name">${s.name}</div><div class="st-desc">${s.desc}</div></div>
       <span class="filled-dot">${done?"● 작성됨":""}</span></div>
-      <div class="stage-body"><textarea data-stage="${i}" placeholder="이 단계에서 일어나는 일을 써보세요"></textarea></div>`;
+      <div class="stage-body"><textarea data-stage="${i}" placeholder="이 단계에서 일어나는 일을 써보세요"></textarea>
+      <button class="btn sm ghost" data-advice="${i}">💡 이 단계 AI 조언</button>
+      <div class="ai-box empty" data-advicebox="${i}">조언 버튼을 누르면 여기에 표시됩니다.</div></div>`;
     st.appendChild(wrap);
     wrap.querySelector(".stage-head").onclick=e=>{ if(e.target.closest("button"))return; wrap.classList.toggle("open"); };
     const ta=wrap.querySelector("textarea");
     ta.value=P.plot[i]||"";
     ta.oninput=()=>{P.plot[i]=ta.value;save();};
+    wrap.querySelector("[data-advice]").onclick=()=>doAdvice(i,wrap.querySelector("[data-advicebox]"));
   });
+}
+
+async function doAdvice(i,box){
+  box.className="ai-box"; box.innerHTML=`<span class="spinner"></span> 조언 생성 중…`;
+  const r=await askGemini(buildAdvicePrompt(P,i));
+  box.textContent=r.text;
 }
 
 /* 내보내기 */
@@ -336,3 +352,4 @@ document.getElementById("aboutLink").onclick=e=>{
 /* 초기 렌더 */
 refreshProjSelect();
 render();
+window.addEventListener("load",()=>{ if(typeof initGoogle==="function") initGoogle(); });

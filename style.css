@@ -71,16 +71,6 @@ textarea{resize:vertical;min-height:70px}
 .btn.sm{padding:5px 10px;font-size:12px}
 .btn.danger{background:#fff;color:#b3503a;border:1px solid #e3c3ba}
 
-/* 옵션 버튼 그룹 */
-.option-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
-.opt-btn{padding:5px 10px;border:1px solid var(--line);border-radius:20px;
-  background:#fff;cursor:pointer;font-size:13px;color:var(--ink)}
-.opt-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-
-/* 태그 */
-.tag{display:inline-block;padding:4px 10px;border-radius:20px;background:var(--accent2);
-  font-size:12px;margin:3px}
-
 /* 플롯 단계 */
 .stage{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden}
 .stage-head{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fbf8f3;cursor:pointer}
@@ -96,12 +86,7 @@ textarea{resize:vertical;min-height:70px}
 .ai-box{background:#fbf8f3;border:1px dashed var(--accent2);border-radius:10px;
   padding:14px;margin-top:10px;white-space:pre-wrap;font-size:14px}
 .ai-box.empty{color:var(--muted);font-style:italic}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--accent2);
-  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* 푸터 */
-.foot{text-align:center;padding:16px;font-size:12px;color:var(--muted)}
+.spinner{display:inline-block;width:14px;height:14px;border
 
 /* ===== 전체화면 로그인 오버레이 ===== */
 .login-overlay {
@@ -128,10 +113,3 @@ textarea{resize:vertical;min-height:70px}
 }
 #overlayLoginBtn:hover { background: #1f2c52; }
 body.logged-in .login-overlay { display: none; }
-
-/* 인쇄 */
-@media print{
-  .topbar,.sidebar,.foot,.btn,.ai-box,.stage-body button{display:none!important}
-  .layout{display:block}
-  .stage-body{display:block!important}
-}
