@@ -144,6 +144,7 @@ function render(){
 /* ===== 💡 아이디어 모음 ===== */
 let ideaFilterTags=[];
 let ideaPendingTags=[];
+let ideaTagPickerFor=null;
 
 function rIdea(){
   if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
@@ -227,7 +228,7 @@ function rIdea(){
     e.textContent=P.ideaBlocks.length?"이 태그에 해당하는 아이디어가 없습니다.":"위 입력창에 첫 아이디어를 적어보세요.";
     list.appendChild(e);
   }
-  shown.slice().reverse().forEach(b=>list.appendChild(ideaBlockCard(b)));
+  shown.slice().reverse().forEach(b=>list.appendChild(ideaBlockCard(b, allTags)));
 
   const input=c.querySelector("#ideaNewInput");
   input.onkeydown=e=>{
@@ -240,7 +241,7 @@ function rIdea(){
   };
 }
 
-function ideaBlockCard(b){
+function ideaBlockCard(b, allTags){
   const d=document.createElement("div"); d.className="idea-block";
   const head=document.createElement("div"); head.className="idea-block-text";
   head.contentEditable="true"; head.spellcheck=false; head.textContent=b.text;
@@ -259,12 +260,36 @@ function ideaBlockCard(b){
   });
   const addTag=document.createElement("span"); addTag.className="idea-tag add"; addTag.textContent="＋ 태그";
   addTag.onclick=()=>{
-    const t=prompt("태그 입력:"); if(!t||!t.trim())return;
-    b.tags=b.tags||[]; if(!b.tags.includes(t.trim())) b.tags.push(t.trim());
-    save(); render();
+    ideaTagPickerFor=(ideaTagPickerFor===b.id)?null:b.id;
+    render();
   };
   tagsWrap.appendChild(addTag);
   d.appendChild(del); d.appendChild(head); d.appendChild(tagsWrap);
+
+  if(ideaTagPickerFor===b.id){
+    const picker=document.createElement("div"); picker.className="idea-tag-picker";
+    const avail=(allTags||[]).filter(t=>!(b.tags||[]).includes(t));
+    avail.forEach(t=>{
+      const chip=document.createElement("span"); chip.className="idea-tag pick";
+      chip.textContent=t;
+      chip.onclick=()=>{
+        b.tags=b.tags||[]; if(!b.tags.includes(t)) b.tags.push(t);
+        ideaTagPickerFor=null; save(); render();
+      };
+      picker.appendChild(chip);
+    });
+    const newInput=document.createElement("input");
+    newInput.type="text"; newInput.placeholder="새 태그 입력 후 Enter";
+    newInput.onkeydown=e=>{
+      if(e.key==="Enter" && newInput.value.trim()){
+        const t=newInput.value.trim();
+        b.tags=b.tags||[]; if(!b.tags.includes(t)) b.tags.push(t);
+        ideaTagPickerFor=null; save(); render();
+      }
+    };
+    picker.appendChild(newInput);
+    d.appendChild(picker);
+  }
   return d;
 }
 
