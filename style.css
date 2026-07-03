@@ -106,4 +106,11 @@ textarea{resize:vertical;min-height:70px}
   font-size: .85em; color: #9aa0a6; margin: 0 0 4px; letter-spacing: .02em;
 }
 .login-box h1 { margin: 0 0 32px; font-size: 1.7em; font-weight: 700; color: #202124; }
-.login-box .login-desc { margin: 0 0 28px; font-size: .88em; line-height: 1.7; c
+.login-box .login-desc { margin: 0 0 28px; font-size: .88em; line-height: 1.7; color: #80868b; }
+#overlayLoginBtn {
+  width: 100%; padding: 15px 0; font-size: 1.02em; font-weight: 600; cursor: pointer;
+  background: #2b3a67; color: #fff; border: none; border-radius: 10px;
+  transition: background .15s;
+}
+#overlayLoginBtn:hover { background: #1f2c52; }
+body.logged-in .login-overlay { display: none; }

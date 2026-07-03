@@ -358,4 +358,12 @@ function importJSON(e){
 }
 
 /* 정보 */
-document.getElementById("aboutLink"
+document.getElementById("aboutLink").onclick=e=>{
+  e.preventDefault();
+  alert("글쓰기도우미\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
+};
+
+/* 초기 렌더 */
+refreshProjSelect();
+render();
+window.addEventListener("load",()=>{ if(typeof initGoogle==="function") initGoogle(); });
