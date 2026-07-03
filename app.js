@@ -26,6 +26,7 @@ function fillProject(p){
     characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>Object.assign({},blankChar(),c)):b.characters,
     plot: Array.isArray(p.plot)?Object.assign([...b.plot],p.plot):b.plot,
     genres: Array.isArray(p.genres)?p.genres:b.genres,
+    ideaBlocks: Array.isArray(p.ideaBlocks)?p.ideaBlocks.map(x=>Object.assign({id:uid(),text:"",tags:[]},x)):b.ideaBlocks,
   });
 }
 function save(){
@@ -42,7 +43,8 @@ function blankProject(id,name){
     world:{summary:"",rules:"",era:"",place:""},
     background:{social:"",mood:"",detail:""},
     event:{main:"",conflict:"",ending:""},
-    plot:Array(12).fill("")};
+    plot:Array(12).fill(""),
+    ideaBlocks:[]};
 }
 function blankChar(){
   return {name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:""};
@@ -139,50 +141,94 @@ function render(){
   }
 }
 
-/* ===== 💡 아이디어 탐색 ===== */
-const PROTAGONIST_TYPES=["영웅형","반영웅형","평범한 주인공","성장형","복수자","탐정/조사자","생존자","이상주의자","냉소주의자"];
-const ENDING_TYPES=["해피엔딩","새드엔딩","열린 결말","비극적 성장","권선징악","아이러닉 엔딩","순환 구조"];
-const IDEA_GENRES=["판타지","SF","로맨스","액션","미스터리","스릴러","호러","일상","스포츠","역사","학원","이세계"];
+/* ===== 💡 아이디어 모음 ===== */
+let ideaFilterTags=[];
 
 function rIdea(){
-  if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
-  const id=P.idea;
+  if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
+
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
-    <h2>💡 아이디어 탐색</h2>
-    <p class="hint">주인공과 이야기 방향을 설정해보세요.</p>
-
-    <label>주인공 유형</label>
-    <div class="option-grid" id="typeGrid"></div>
-
-    <label>주인공 MBTI (선택)</label>
-    <div class="option-grid" id="mbtiGrid"></div>
-
-    <label>장르</label>
-    <div class="option-grid" id="genreGrid"></div>
-
-    <label>엔딩 형식</label>
-    <div class="option-grid" id="endingGrid"></div>
-
-    <label>로그라인 (한 줄 요약)</label>
-    <textarea id="ideaLogline" placeholder="누가, 무엇을 원하지만, 어떤 장애물 때문에… 한 문장으로"></textarea>
-
-    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn ghost" id="clearIdeaBtn">초기화</button>
-    </div>
+    <input type="text" id="ideaNewInput" placeholder="아이디어를 작성해보세요  (예: 오늘 점심은 김치볶음밥 #오늘점심 #학식)">
   </div>`;
   app.appendChild(c);
 
-  optGroup(c.querySelector("#typeGrid"), PROTAGONIST_TYPES, id, "protagonistType");
-  optGroup(c.querySelector("#mbtiGrid"), MBTI_TYPES, id, "protagonistMbti");
-  optGroup(c.querySelector("#genreGrid"), IDEA_GENRES, id, "genre");
-  optGroup(c.querySelector("#endingGrid"), ENDING_TYPES, id, "endingType");
-  bind(c.querySelector("#ideaLogline"), id, "logline");
+  const allTags=[...new Set(P.ideaBlocks.flatMap(b=>b.tags||[]))];
+  ideaFilterTags=ideaFilterTags.filter(t=>allTags.includes(t));
+  if(allTags.length){
+    const fc=document.createElement("div"); fc.className="card idea-filter-card";
+    fc.innerHTML=`<div class="idea-filter-bar" id="ideaFilterBar"></div>`;
+    app.appendChild(fc);
+    const bar=fc.querySelector("#ideaFilterBar");
+    const allBtn=document.createElement("span");
+    allBtn.className="idea-tag filter"+(ideaFilterTags.length===0?" on":"");
+    allBtn.textContent="전체";
+    allBtn.onclick=()=>{ ideaFilterTags=[]; render(); };
+    bar.appendChild(allBtn);
+    allTags.forEach(t=>{
+      const b=document.createElement("span");
+      b.className="idea-tag filter"+(ideaFilterTags.includes(t)?" on":"");
+      b.textContent=t;
+      b.onclick=()=>{
+        ideaFilterTags=ideaFilterTags.includes(t)?ideaFilterTags.filter(x=>x!==t):[...ideaFilterTags,t];
+        render();
+      };
+      bar.appendChild(b);
+    });
+  }
 
-  c.querySelector("#clearIdeaBtn").onclick=()=>{
-    P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
+  const list=document.createElement("div"); list.className="idea-block-list";
+  app.appendChild(list);
+  const shown=P.ideaBlocks.filter(b=>ideaFilterTags.length===0||ideaFilterTags.some(t=>(b.tags||[]).includes(t)));
+  if(!shown.length){
+    const e=document.createElement("p"); e.className="hint";
+    e.textContent=P.ideaBlocks.length?"이 태그에 해당하는 아이디어가 없습니다.":"위 입력창에 첫 아이디어를 적어보세요.";
+    list.appendChild(e);
+  }
+  shown.slice().reverse().forEach(b=>list.appendChild(ideaBlockCard(b)));
+
+  const input=c.querySelector("#ideaNewInput");
+  input.onkeydown=e=>{
+    if(e.key==="Enter" && input.value.trim()){
+      addIdeaBlock(input.value.trim());
+      input.value="";
+    }
+  };
+}
+
+function addIdeaBlock(raw){
+  const tags=[];
+  const text=raw.replace(/#([^\s#]+)/g,(m,t)=>{tags.push(t);return "";}).trim();
+  P.ideaBlocks.push({id:uid(),text:text||raw,tags});
+  save(); render();
+}
+
+function ideaBlockCard(b){
+  const d=document.createElement("div"); d.className="idea-block";
+  const head=document.createElement("div"); head.className="idea-block-text";
+  head.contentEditable="true"; head.spellcheck=false; head.textContent=b.text;
+  head.oninput=()=>{ b.text=head.textContent; save(); };
+  const del=document.createElement("button"); del.className="idea-del"; del.textContent="✕"; del.title="삭제";
+  del.onclick=()=>{
+    if(!confirm("이 아이디어를 삭제할까요?"))return;
+    P.ideaBlocks=P.ideaBlocks.filter(x=>x.id!==b.id); save(); render();
+  };
+  const tagsWrap=document.createElement("div"); tagsWrap.className="idea-block-tags";
+  (b.tags||[]).forEach(t=>{
+    const tp=document.createElement("span"); tp.className="idea-tag";
+    tp.innerHTML=`${esc(t)} <span class="idea-tag-x">✕</span>`;
+    tp.querySelector(".idea-tag-x").onclick=()=>{ b.tags=b.tags.filter(x=>x!==t); save(); render(); };
+    tagsWrap.appendChild(tp);
+  });
+  const addTag=document.createElement("span"); addTag.className="idea-tag add"; addTag.textContent="＋ 태그";
+  addTag.onclick=()=>{
+    const t=prompt("태그 입력:"); if(!t||!t.trim())return;
+    b.tags=b.tags||[]; if(!b.tags.includes(t.trim())) b.tags.push(t.trim());
     save(); render();
   };
+  tagsWrap.appendChild(addTag);
+  d.appendChild(del); d.appendChild(head); d.appendChild(tagsWrap);
+  return d;
 }
 
 /* ① 캐릭터 */
