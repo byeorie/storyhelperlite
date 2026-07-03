@@ -65,14 +65,32 @@ function updateUserUI(name, picture, email) {
 
 function toggleUserMenu(forceHide) {
   const menu = document.getElementById("userMenu");
-  if (!menu) return;
+  const btn = document.getElementById("googleLoginBtn");
+  if (!menu || !btn) return;
   const hide = forceHide === true || !menu.hidden;
+  if (!hide) {
+    // 상단바가 overflow-x:auto라 position:absolute로는 메뉴가 잘려서
+    // 보이므로, 버튼 위치를 계산해 화면 기준(position:fixed)으로 띄운다
+    document.body.appendChild(menu); // 클리핑되는 상위 요소 밖으로 이동
+    const r = btn.getBoundingClientRect();
+    const menuWidth = 170;
+    let top = r.bottom + 8;
+    // 아래쪽 공간이 부족하면 버튼 위로 펼친다
+    if (top + 150 > window.innerHeight) top = r.top - 8 - 150;
+    menu.style.top = top + "px";
+    menu.style.right = (window.innerWidth - r.right) + "px";
+    menu.style.left = "auto";
+    menu.style.minWidth = menuWidth + "px";
+  }
   menu.hidden = hide;
 }
 
 document.addEventListener("click", (e) => {
-  const wrap = document.getElementById("googleLoginBtn")?.closest(".user-menu-wrap");
-  if (wrap && !wrap.contains(e.target)) toggleUserMenu(true);
+  const btn = document.getElementById("googleLoginBtn");
+  const menu = document.getElementById("userMenu");
+  const insideBtn = btn && btn.contains(e.target);
+  const insideMenu = menu && menu.contains(e.target);
+  if (!insideBtn && !insideMenu) toggleUserMenu(true);
 });
 
 function openSettings() {
