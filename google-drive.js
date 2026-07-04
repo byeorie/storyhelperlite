@@ -16,8 +16,16 @@ const SESSION_KEY = "shl_session";
 const ACTIVITY_KEY = "shl_last_activity";
 const INACTIVITY_LIMIT_MS = 60 * 60 * 1000; // 1시간
 
-function saveSession(name, email, picture) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ name, email, picture })); } catch (e) {}
+// access token 자체를 만료시각과 함께 저장해서, 새로고침 시 팝업 없이 즉시 복원한다.
+// (구글 OAuth 팝업은 브라우저가 "사용자 클릭 없는 자동 팝업"으로 간주해 차단하므로,
+//  새로고침 때 requestAccessToken()을 자동 호출하는 방식은 동작하지 않음 — 이전 방식의 문제였음)
+function saveSession(name, email, picture, token, expiresInSec) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      name, email, picture, token,
+      expiresAt: Date.now() + (Number(expiresInSec) || 3600) * 1000,
+    }));
+  } catch (e) {}
   touchActivity();
 }
 function getSession() {
@@ -54,12 +62,24 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-// 새로고침 시 최근 활동이 1시간 이내면 조용히 로그인 복원 시도(팝업 없이)
-function trySilentRestore() {
-  const session = getSession();
-  if (session && isSessionFresh() && gTokenClient) {
-    gTokenClient.requestAccessToken({ prompt: "" });
+// 새로고침 시: 저장된 토큰이 아직 만료 전이고 1시간 이내 활동이 있었다면
+// 팝업 없이 즉시 로그인 상태로 복원 (Drive 토큰이 유효하지 않으면 이후 401에서 자동 로그아웃됨)
+function restoreSessionIfFresh() {
+  const s = getSession();
+  if (s && s.token && s.expiresAt > Date.now() && isSessionFresh()) {
+    gAccessToken = s.token;
+    document.body.classList.add("logged-in");
+    updateUserUI(s.name, s.picture, s.email);
+    loadFromDrive();
+    return true;
   }
+  return false;
+}
+
+// Drive API가 401(토큰 만료/무효)을 돌려주면 로그인 세션을 정리
+function handleAuthExpired(status) {
+  if (status === 401) { signOut(); return true; }
+  return false;
 }
 
 /* ===== 초기화 ===== */
@@ -92,7 +112,7 @@ async function onTokenResponse(resp) {
       const u = await r.json();
       if (u && (u.name || u.email)) {
         updateUserUI(u.name || u.email, u.picture || "", u.email || "");
-        saveSession(u.name || u.email, u.email || "", u.picture || "");
+        saveSession(u.name || u.email, u.email || "", u.picture || "", gAccessToken, resp.expires_in);
       }
     }
   } catch (e) {}
@@ -193,7 +213,6 @@ function bindLoginButton() {
 function waitForGsiAndInit() {
   if (window.google && google.accounts && google.accounts.oauth2) {
     initGoogle();
-    trySilentRestore();
   } else {
     setTimeout(waitForGsiAndInit, 200);
   }
@@ -201,6 +220,7 @@ function waitForGsiAndInit() {
 
 document.addEventListener("DOMContentLoaded", () => {
   bindLoginButton();
+  restoreSessionIfFresh(); // 저장된 토큰으로 로그인 창 없이 즉시 복원 시도
   waitForGsiAndInit();
 });
 
@@ -214,6 +234,7 @@ async function driveRequest(method, url, body) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (handleAuthExpired(r.status)) return null;
   return r.ok ? r.json() : null;
 }
 
@@ -223,6 +244,7 @@ async function findOrCreateDriveFolder() {
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
     { headers: { Authorization: "Bearer " + gAccessToken } }
   );
+  if (handleAuthExpired(r.status)) return null;
   const j = await r.json();
   if (j.files && j.files.length) return j.files[0].id;
   // 폴더 없으면 새로 생성
@@ -239,6 +261,7 @@ async function findDriveFile() {
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
     { headers: { Authorization: "Bearer " + gAccessToken } }
   );
+  if (handleAuthExpired(r.status)) return null;
   const j = await r.json();
   return j.files && j.files.length ? j.files[0].id : null;
 }
@@ -259,6 +282,7 @@ async function loadFromDrive() {
       `https://www.googleapis.com/drive/v3/files/${gDriveFileId}?alt=media`,
       { headers: { Authorization: "Bearer " + gAccessToken } }
     );
+    if (handleAuthExpired(r.status)) return;
     const data = await r.json();
     if (data && Array.isArray(data.projects) && data.projects.length && typeof fillProject === "function") {
       data.projects = data.projects.map(fillProject);
@@ -302,6 +326,7 @@ async function saveToDrive() {
     },
     body,
   });
+  if (handleAuthExpired(r.status)) return;
   if (r.ok) {
     const j = await r.json();
     if (!gDriveFileId) gDriveFileId = j.id;
