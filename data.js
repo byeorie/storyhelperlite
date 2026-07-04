@@ -32,3 +32,15 @@ const HERO_STAGES = [
 
 const GENRES = ["판타지","SF","로맨스","액션","스릴러","미스터리","공포","드라마",
   "코미디","일상","역사","무협","스포츠","느와르","성장물"];
+
+// 아이디어 탐색 — 로그라인 8슬롯 (육하원칙 기반)
+const LOGLINE_SLOTS = [
+  {key:"protagonist", label:"주인공 특성", ph:"예: 소심한, 정의로운, 야망있는"},
+  {key:"era",         label:"시대",       ph:"예: 현대, 조선시대, 근미래"},
+  {key:"place",       label:"공간",       ph:"예: 학교, 왕궁, 우주선"},
+  {key:"eventType",   label:"사건 유형", ph:"예: 성장, 복수, 로맨스"},
+  {key:"crisisType",  label:"위기 유형", ph:"예: 배신, 오해, 재난"},
+  {key:"motive",      label:"원인·동기", ph:"예: 우정, 복수심, 생존"},
+  {key:"resolution",  label:"해결 방식", ph:"예: 대화, 대결, 협력"},
+  {key:"ending",      label:"결말",       ph:"예: 해피엔딩, 열린 결말, 새드엔딩"},
+];
