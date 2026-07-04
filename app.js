@@ -1,5 +1,21 @@
 /* ===== 상태 & 저장 ===== */
 const LS_KEY = "storyhelper_v1";
+const ADMIN_EMAIL = "studio.inknpen@gmail.com";
+function isAdmin(){ return typeof gUserEmail!=="undefined" && gUserEmail===ADMIN_EMAIL; }
+function refreshAdminTabVisibility(){
+  const grp=document.getElementById("adminNavGroup");
+  if(grp) grp.style.display=isAdmin()?"":"none";
+}
+function onAuthChanged(){
+  refreshAdminTabVisibility();
+  if(activeTab==="admin" && !isAdmin()){
+    activeTab="idea";
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    const ideaBtn=document.querySelector('.tab[data-tab="idea"]');
+    if(ideaBtn) ideaBtn.classList.add("active");
+  }
+  render();
+}
 let DB = load();
 let P = currentProject();
 
@@ -135,7 +151,12 @@ function render(){
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
     if(!DB.workDB) DB.workDB=fillWorkDB();
-    const renderers={idea:rIdea, explore:rExplore, character:rChar, world:rWorld, background:rBg,
+    if(activeTab==="admin" && !isAdmin()){
+      app.innerHTML='<div class="card"><h2>🔒 접근 권한이 없습니다</h2>'
+        +'<p class="hint">이 메뉴는 관리자 계정(studio.inknpen@gmail.com)으로 로그인해야 사용할 수 있습니다.</p></div>';
+      return;
+    }
+    const renderers={idea:rIdea, explore:rExplore, admin:rAdmin, character:rChar, world:rWorld, background:rBg,
       event:rEvent, plot:rPlot, export:rExport};
     (renderers[activeTab]||rIdea)();
   }catch(e){
@@ -380,19 +401,12 @@ function rExplore(){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
     <h2>🔎 아이디어 탐색</h2>
-    <p class="hint">슬롯을 선택해 로그라인을 조합하고, 업로드한 작품DB에서 비슷한 작품을 찾아봅니다.</p>
+    <p class="hint">슬롯을 선택해 로그라인을 조합하고, 등록된 작품DB에서 비슷한 작품을 찾아봅니다.</p>
     <div class="explore-dbstatus">${wdb.works.length
-      ?`📚 <b>${esc(wdb.fileName)}</b> — 작품 ${wdb.works.length}개 (${esc(wdb.uploadedAt)})`
-      :`아직 작품DB가 없습니다. 아래에서 파일을 업로드하세요.`}</div>
-    <label class="btn ghost" style="display:inline-block;margin-top:8px">📂 작품DB 업로드 (.md / .xlsx)
-      <input type="file" id="wdbIn" accept=".md,.txt,.xlsx,.xls" style="display:none"></label>
-    ${wdb.works.length?`<button class="btn sm danger" id="wdbClear" style="margin-left:8px">DB 비우기</button>`:""}
-    <p class="hint" style="margin-top:10px">파일 형식: 첫 행(헤더)에 <b>제목, 주인공 특성, 시대, 공간, 사건 유형, 위기 유형, 원인·동기, 해결 방식, 결말</b> 열을 두고, 한 칸에 키워드가 여러 개면 쉼표(,)로 구분하세요. (md는 표 형식, xlsx는 첫 시트 사용)</p>
+      ?`📚 작품DB에 ${wdb.works.length}개의 작품이 등록되어 있습니다.`
+      :`아직 등록된 작품DB가 없습니다. (작품DB 등록은 관리자만 가능합니다)`}</div>
   </div>`;
   app.appendChild(c);
-  c.querySelector("#wdbIn").onchange=e=>{ const f=e.target.files[0]; if(f) handleWorkDBFile(f); e.target.value=""; };
-  const clearBtn=c.querySelector("#wdbClear");
-  if(clearBtn) clearBtn.onclick=()=>{ if(confirm("업로드한 작품DB를 모두 삭제할까요?")){ DB.workDB=fillWorkDB(); save(); render(); } };
 
   const slotsCard=document.createElement("div"); slotsCard.className="card";
   slotsCard.innerHTML=`<h3>로그라인 슬롯 선택</h3>
@@ -458,6 +472,34 @@ function rExplore(){
       box.appendChild(d);
     });
   };
+}
+
+/* 🔐 관리자 — 작품DB 등록/관리 (studio.inknpen@gmail.com 전용) */
+function rAdmin(){
+  if(!DB.workDB) DB.workDB=fillWorkDB();
+  const wdb=DB.workDB;
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<h2>🔐 작품DB 관리</h2>
+    <p class="hint">관리자 계정(${esc(ADMIN_EMAIL)})으로 로그인된 상태입니다. 여기서 등록한 작품DB는 모든 학생의 "아이디어 탐색" 탭에서 공통으로 사용됩니다.</p>
+    <div class="explore-dbstatus">${wdb.works.length
+      ?`📚 <b>${esc(wdb.fileName)}</b> — 작품 ${wdb.works.length}개 (${esc(wdb.uploadedAt)})`
+      :`아직 작품DB가 없습니다. 아래에서 파일을 업로드하세요.`}</div>
+    <label class="btn ghost" style="display:inline-block;margin-top:8px">📂 작품DB 업로드 (.md / .xlsx)
+      <input type="file" id="wdbIn" accept=".md,.txt,.xlsx,.xls" style="display:none"></label>
+    ${wdb.works.length?`<button class="btn sm danger" id="wdbClear" style="margin-left:8px">DB 비우기</button>`:""}
+    <p class="hint" style="margin-top:10px">파일 형식: 첫 행(헤더)에 <b>제목, 주인공 특성, 시대, 공간, 사건 유형, 위기 유형, 원인·동기, 해결 방식, 결말</b> 열을 두고, 한 칸에 키워드가 여러 개면 쉼표(,)로 구분하세요. (md는 표 형식, xlsx는 첫 시트 사용)</p>
+    <div id="wdbList"></div>`;
+  app.appendChild(c);
+  c.querySelector("#wdbIn").onchange=e=>{ const f=e.target.files[0]; if(f) handleWorkDBFile(f); e.target.value=""; };
+  const clearBtn=c.querySelector("#wdbClear");
+  if(clearBtn) clearBtn.onclick=()=>{ if(confirm("업로드한 작품DB를 모두 삭제할까요?")){ DB.workDB=fillWorkDB(); save(); render(); } };
+  const listBox=c.querySelector("#wdbList");
+  if(wdb.works.length){
+    listBox.innerHTML=`<label style="margin-top:16px">등록된 작품 목록 (${wdb.works.length})</label>
+      <div class="hint" style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+        ${wdb.works.map(w=>esc(w.title)).join(", ")}
+      </div>`;
+  }
 }
 
 /* ① 캐릭터 */
@@ -640,5 +682,6 @@ document.getElementById("aboutLink").onclick=e=>{
 
 /* 초기 렌더 */
 refreshProjSelect();
+refreshAdminTabVisibility();
 render();
 window.addEventListener("load",()=>{ if(typeof initGoogle==="function") initGoogle(); });

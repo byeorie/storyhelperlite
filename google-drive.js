@@ -9,6 +9,7 @@ let gTokenClient = null;
 let gAccessToken = null;
 let gDriveFileId = null;
 let gDriveFolderId = null;
+let gUserEmail = null;
 
 /* ===== 로그인 유지 + 자동 로그아웃 ===== */
 // 새로고침해도 로그인 유지, 1시간 동안 입력(클릭/키/스크롤)이 없으면 자동 로그아웃
@@ -121,6 +122,8 @@ async function onTokenResponse(resp) {
 
 /* ===== UI ===== */
 function updateUserUI(name, picture, email) {
+  gUserEmail = email || null;
+  if (typeof onAuthChanged === "function") onAuthChanged();
   const btn = document.getElementById("googleLoginBtn");
   if (!btn) return;
   const safeName = name || "사용자";
@@ -179,6 +182,8 @@ function signOut() {
   gAccessToken = null;
   gDriveFileId = null;
   gDriveFolderId = null;
+  gUserEmail = null;
+  if (typeof onAuthChanged === "function") onAuthChanged();
   clearSession();
   toggleUserMenu(true);
   const btn = document.getElementById("googleLoginBtn");
