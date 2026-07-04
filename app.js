@@ -409,9 +409,6 @@ function rExplore(){
   c.innerHTML=`<div class="card">
     <h2>🔎 아이디어 탐색</h2>
     <p class="hint">슬롯을 선택해 로그라인을 조합하고, 등록된 작품DB에서 비슷한 작품을 찾아봅니다.</p>
-    <div class="explore-dbstatus">${wdb.works.length
-      ?`📚 작품DB에 ${wdb.works.length}개의 작품이 등록되어 있습니다.`
-      :`아직 등록된 작품DB가 없습니다. (작품DB 등록은 관리자만 가능합니다)`}</div>
   </div>`;
   app.appendChild(c);
 
