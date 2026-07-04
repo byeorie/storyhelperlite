@@ -10,6 +10,58 @@ let gAccessToken = null;
 let gDriveFileId = null;
 let gDriveFolderId = null;
 
+/* ===== 로그인 유지 + 자동 로그아웃 ===== */
+// 새로고침해도 로그인 유지, 1시간 동안 입력(클릭/키/스크롤)이 없으면 자동 로그아웃
+const SESSION_KEY = "shl_session";
+const ACTIVITY_KEY = "shl_last_activity";
+const INACTIVITY_LIMIT_MS = 60 * 60 * 1000; // 1시간
+
+function saveSession(name, email, picture) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ name, email, picture })); } catch (e) {}
+  touchActivity();
+}
+function getSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch (e) { return null; }
+}
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); localStorage.removeItem(ACTIVITY_KEY); } catch (e) {}
+}
+function touchActivity() {
+  try { localStorage.setItem(ACTIVITY_KEY, String(Date.now())); } catch (e) {}
+}
+function isSessionFresh() {
+  const t = Number(localStorage.getItem(ACTIVITY_KEY) || 0);
+  return t > 0 && (Date.now() - t < INACTIVITY_LIMIT_MS);
+}
+
+// 로그인된 상태에서만 활동 시각 기록 (너무 자주 쓰지 않도록 30초 간격으로 제한)
+let lastActivityWrite = 0;
+function onUserActivity() {
+  if (!document.body.classList.contains("logged-in")) return;
+  const now = Date.now();
+  if (now - lastActivityWrite < 30000) return;
+  lastActivityWrite = now;
+  touchActivity();
+}
+["click", "keydown", "mousemove", "scroll"].forEach((evt) => {
+  document.addEventListener(evt, onUserActivity, { passive: true });
+});
+
+// 1분마다 유휴 시간 체크 → 1시간 초과 시 자동 로그아웃
+setInterval(() => {
+  if (document.body.classList.contains("logged-in") && !isSessionFresh()) {
+    signOut();
+  }
+}, 60 * 1000);
+
+// 새로고침 시 최근 활동이 1시간 이내면 조용히 로그인 복원 시도(팝업 없이)
+function trySilentRestore() {
+  const session = getSession();
+  if (session && isSessionFresh() && gTokenClient) {
+    gTokenClient.requestAccessToken({ prompt: "" });
+  }
+}
+
 /* ===== 초기화 ===== */
 function initGoogle() {
   gTokenClient = google.accounts.oauth2.initTokenClient({
@@ -38,7 +90,10 @@ async function onTokenResponse(resp) {
     });
     if (r.ok) {
       const u = await r.json();
-      if (u && (u.name || u.email)) updateUserUI(u.name || u.email, u.picture || "", u.email || "");
+      if (u && (u.name || u.email)) {
+        updateUserUI(u.name || u.email, u.picture || "", u.email || "");
+        saveSession(u.name || u.email, u.email || "", u.picture || "");
+      }
     }
   } catch (e) {}
   loadFromDrive();
@@ -104,6 +159,7 @@ function signOut() {
   gAccessToken = null;
   gDriveFileId = null;
   gDriveFolderId = null;
+  clearSession();
   toggleUserMenu(true);
   const btn = document.getElementById("googleLoginBtn");
   btn.classList.remove("avatar-btn");
@@ -137,6 +193,7 @@ function bindLoginButton() {
 function waitForGsiAndInit() {
   if (window.google && google.accounts && google.accounts.oauth2) {
     initGoogle();
+    trySilentRestore();
   } else {
     setTimeout(waitForGsiAndInit, 200);
   }
