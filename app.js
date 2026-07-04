@@ -409,6 +409,9 @@ function rExplore(){
   c.innerHTML=`<div class="card">
     <h2>🔎 아이디어 탐색</h2>
     <p class="hint">슬롯을 선택해 로그라인을 조합하고, 등록된 작품DB에서 비슷한 작품을 찾아봅니다.</p>
+    <div class="explore-dbstatus">${wdb.works.length
+      ?`📚 작품DB에 ${wdb.works.length}개의 작품이 등록되어 있습니다.`
+      :`아직 등록된 작품DB가 없습니다. (작품DB 등록은 관리자만 가능합니다)`}</div>
   </div>`;
   app.appendChild(c);
 
@@ -416,4 +419,276 @@ function rExplore(){
   slotsCard.innerHTML=`<h3>로그라인 슬롯 선택</h3>
     <div class="explore-grid" id="slotGrid"></div>
     <div class="ai-box" id="loglinePreview"></div>
-    <button class="btn ghost" id="saveAsIdea" s
+    <button class="btn ghost" id="saveAsIdea" style="margin-top:10px">＋ 이 로그라인을 아이디어로 저장</button>`;
+  app.appendChild(slotsCard);
+  const grid=slotsCard.querySelector("#slotGrid");
+  function updatePreview(){
+    const pv=slotsCard.querySelector("#loglinePreview");
+    const sel=P.explore;
+    const has=LOGLINE_SLOTS.some(s=>sel[s.key]);
+    if(!has){ pv.className="ai-box empty"; pv.textContent="슬롯을 선택하면 로그라인 초안이 여기에 만들어집니다."; return; }
+    pv.className="ai-box";
+    pv.textContent=`${sel.era||"(시대 미정)"} ${sel.place||"(공간 미정)"}, ${sel.protagonist||"(특성 미정)"} 주인공이 `
+      +`${sel.eventType||"(사건 미정)"}(으)로 ${sel.crisisType||"(위기 미정)"}을 겪지만, `
+      +`${sel.motive||"(동기 미정)"} 때문에 ${sel.resolution||"(해결 미정)"}(으)로 맞서 결국 ${sel.ending||"(결말 미정)"}을 맞는다.`;
+  }
+  LOGLINE_SLOTS.forEach(s=>{
+    const opts=keywordOptions(s.key);
+    const wrap=document.createElement("div"); wrap.className="explore-slot";
+    wrap.innerHTML=`<label>${s.label}</label>
+      <select>${`<option value="">선택 안 함</option>`}${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("")}<option value="__custom__">직접 입력…</option></select>
+      <input type="text" placeholder="${s.ph}" style="display:none;margin-top:6px">`;
+    grid.appendChild(wrap);
+    const sel=wrap.querySelector("select"), custom=wrap.querySelector("input");
+    const cur=P.explore[s.key]||"";
+    if(cur && opts.includes(cur)) sel.value=cur;
+    else if(cur){ sel.value="__custom__"; custom.style.display="block"; custom.value=cur; }
+    sel.onchange=()=>{
+      if(sel.value==="__custom__"){ custom.style.display="block"; custom.focus(); }
+      else{ custom.style.display="none"; custom.value=""; P.explore[s.key]=sel.value; save(); updatePreview(); }
+    };
+    custom.oninput=()=>{ P.explore[s.key]=custom.value.trim(); save(); updatePreview(); };
+  });
+  updatePreview();
+  slotsCard.querySelector("#saveAsIdea").onclick=()=>{
+    const text=slotsCard.querySelector("#loglinePreview").textContent;
+    if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
+    P.ideaBlocks.push({id:uid(), text, tags:["탐색"]});
+    save(); alert("아이디어 수집에 저장했습니다.");
+  };
+
+  const resultCard=document.createElement("div"); resultCard.className="card";
+  resultCard.innerHTML=`<h3>비슷한 작품 찾기</h3>
+    <button class="btn" id="matchBtn">🔍 매칭 작품 찾기</button>
+    <div id="matchResults" class="explore-results"></div>`;
+  app.appendChild(resultCard);
+  resultCard.querySelector("#matchBtn").onclick=()=>{
+    const box=resultCard.querySelector("#matchResults");
+    if(!wdb.works.length){ box.innerHTML=`<p class="hint">먼저 작품DB를 업로드해주세요.</p>`; return; }
+    const results=matchWorks(P.explore);
+    if(!results.length){ box.innerHTML=`<p class="hint">일치하는 작품이 없습니다. 슬롯을 더 선택하거나 다르게 선택해보세요.</p>`; return; }
+    box.innerHTML="";
+    results.forEach(r=>{
+      const d=document.createElement("div"); d.className="match-card";
+      const pct=Math.round(r.score/LOGLINE_SLOTS.length*100);
+      d.innerHTML=`<div class="match-head"><b>${esc(r.work.title)}</b><span class="match-score">${r.score}/${LOGLINE_SLOTS.length} 일치 (${pct}%)</span></div>
+        <div class="match-tags">${r.matched.map(k=>{
+          const slot=LOGLINE_SLOTS.find(x=>x.key===k);
+          return `<span class="idea-tag">${esc(slot.label)}: ${esc(P.explore[k])}</span>`;
+        }).join("")}</div>`;
+      box.appendChild(d);
+    });
+  };
+}
+
+/* 🔐 관리자 — 작품DB 등록/관리 (studio.inknpen@gmail.com 전용) */
+function rAdmin(){
+  if(!DB.workDB) DB.workDB=fillWorkDB();
+  const wdb=DB.workDB;
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<h2>🔐 작품DB 관리</h2>
+    <p class="hint">관리자 계정(${esc(ADMIN_EMAIL)})으로 로그인된 상태입니다. 여기서 등록한 작품DB는 모든 학생의 "아이디어 탐색" 탭에서 공통으로 사용됩니다.</p>
+    <div class="explore-dbstatus">${wdb.works.length
+      ?`📚 <b>${esc(wdb.fileName)}</b> — 작품 ${wdb.works.length}개 (${esc(wdb.uploadedAt)})`
+      :`아직 작품DB가 없습니다. 아래에서 파일을 업로드하세요.`}</div>
+    <label class="btn ghost" style="display:inline-block;margin-top:8px">📂 작품DB 업로드 (.md / .xlsx)
+      <input type="file" id="wdbIn" accept=".md,.txt,.xlsx,.xls" style="display:none"></label>
+    ${wdb.works.length?`<button class="btn sm danger" id="wdbClear" style="margin-left:8px">DB 비우기</button>`:""}
+    <p class="hint" style="margin-top:10px">파일 형식: 첫 행(헤더)에 <b>제목, 주인공 특성, 시대, 공간, 사건 유형, 위기 유형, 원인·동기, 해결 방식, 결말</b> 열을 두고, 한 칸에 키워드가 여러 개면 쉼표(,)로 구분하세요. (md는 표 형식, xlsx는 첫 시트 사용)</p>
+    <div id="wdbList"></div>`;
+  app.appendChild(c);
+  c.querySelector("#wdbIn").onchange=e=>{ const f=e.target.files[0]; if(f) handleWorkDBFile(f); e.target.value=""; };
+  const clearBtn=c.querySelector("#wdbClear");
+  if(clearBtn) clearBtn.onclick=()=>{ if(confirm("업로드한 작품DB를 모두 삭제할까요?")){ DB.workDB=fillWorkDB(); save(); render(); } };
+  const listBox=c.querySelector("#wdbList");
+  if(wdb.works.length){
+    listBox.innerHTML=`<label style="margin-top:16px">등록된 작품 목록 (${wdb.works.length})</label>
+      <div class="hint" style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+        ${wdb.works.map(w=>esc(w.title)).join(", ")}
+      </div>`;
+  }
+}
+
+/* ① 캐릭터 */
+function rChar(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>👤 캐릭터 설정</h2>
+    <p class="hint">MBTI와 에니어그램으로 성격의 뼈대를 잡고, 목표·결함·변화를 채워보세요.</p>
+    <div class="charlist" id="charlist"></div>
+    <button class="btn ghost" id="addChar">＋ 캐릭터 추가</button></div>`;
+  app.appendChild(c);
+  const list=c.querySelector("#charlist");
+  P.characters.forEach((ch,i)=>list.appendChild(charCard(ch,i)));
+  c.querySelector("#addChar").onclick=()=>{P.characters.push(blankChar());save();render();};
+}
+function charCard(ch,i){
+  const d=document.createElement("div"); d.className="char-item";
+  const enOpts=ENNEAGRAM.map(e=>`<option value="${e.n}">${e.n} — ${e.d}</option>`).join("");
+  const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m}</option>`).join("");
+  d.innerHTML=`<div class="char-head"><h3>인물 ${i+1}</h3>
+    ${P.characters.length>1?`<button class="btn sm danger" data-del="${i}">삭제</button>`:""}</div>
+    <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
+    <div><label>역할</label><input type="text" data-k="role" placeholder="주인공/조력자/적대자"></div></div>
+    <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
+    <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
+    <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
+    <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
+    <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
+    <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투, 관계 등"></textarea>`;
+  d.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
+  const del=d.querySelector("[data-del]");
+  if(del)del.onclick=()=>{P.characters.splice(i,1);save();render();};
+  return d;
+}
+
+/* 세계관 */
+function rWorld(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>🌍 세계관 설정</h2>
+    <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기를 정합니다.</p>
+    <label>한 줄 요약</label><textarea id="w_summary" placeholder="이 세계는 어떤 곳인가"></textarea>
+    <div class="row"><div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
+    <div><label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…"></div></div>
+    <label>세계의 규칙 (마법·기술·금기 등)</label><textarea id="w_rules"></textarea></div>`;
+  app.appendChild(c);
+  bind(c.querySelector("#w_summary"),P.world,"summary");
+  bind(c.querySelector("#w_era"),P.world,"era");
+  bind(c.querySelector("#w_place"),P.world,"place");
+  bind(c.querySelector("#w_rules"),P.world,"rules");
+}
+
+/* 배경 */
+function rBg(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>🏙 배경 설정</h2>
+    <p class="hint">세계관 속에서 이야기가 시작되는 구체적 상황입니다.</p>
+    <label>사회·정치적 배경</label><textarea id="b_social"></textarea>
+    <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
+    <label>세부 묘사</label><textarea id="b_detail"></textarea></div>`;
+  app.appendChild(c);
+  bind(c.querySelector("#b_social"),P.background,"social");
+  bind(c.querySelector("#b_mood"),P.background,"mood");
+  bind(c.querySelector("#b_detail"),P.background,"detail");
+}
+
+/* 사건 */
+function rEvent(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>⚡ 사건 설정</h2>
+    <p class="hint">이야기를 굴러가게 하는 핵심 사건과 갈등, 결말 방향입니다.</p>
+    <label>주요 사건 (발단)</label><textarea id="e_main" placeholder="이야기를 시작시키는 사건"></textarea>
+    <label>핵심 갈등</label><textarea id="e_conflict" placeholder="주인공 vs 무엇/누구"></textarea>
+    <label>결말 방향</label><textarea id="e_ending" placeholder="어떻게 끝나는가 (열린 결말도 OK)"></textarea></div>`;
+  app.appendChild(c);
+  bind(c.querySelector("#e_main"),P.event,"main");
+  bind(c.querySelector("#e_conflict"),P.event,"conflict");
+  bind(c.querySelector("#e_ending"),P.event,"ending");
+}
+
+/* 플롯 */
+function rPlot(){
+  const filled=P.plot.filter(Boolean).length;
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>📖 플롯 — 영웅의 여정 12단계</h2>
+    <p class="hint">${filled}/12 단계 작성됨. 각 단계를 눌러 펼치고 내용을 채우세요.</p>
+    <label>🎬 로그라인 (한 문장 요약)</label>
+    <textarea id="logline" placeholder="누가, 무엇을 원하지만, 어떤 장애물 때문에…"></textarea>
+    <div class="row"><div><label>장르 (복수 선택)</label><div id="genreTags"></div></div></div>
+    </div>
+    <div id="stages"></div>`;
+  app.appendChild(c);
+  bind(c.querySelector("#logline"),P,"logline");
+  const gt=c.querySelector("#genreTags");
+  GENRES.forEach(g=>{
+    const on=P.genres.includes(g);
+    const b=document.createElement("span");
+    b.className="tag"; b.style.cursor="pointer";
+    b.style.opacity=on?1:.45; b.textContent=(on?"✓ ":"")+g;
+    b.onclick=()=>{ if(on)P.genres=P.genres.filter(x=>x!==g); else P.genres.push(g); save(); render(); };
+    gt.appendChild(b);
+  });
+  const st=c.querySelector("#stages");
+  HERO_STAGES.forEach((s,i)=>{
+    const wrap=document.createElement("div"); wrap.className="stage";
+    const done=!!P.plot[i];
+    wrap.innerHTML=`<div class="stage-head">
+      <span class="stage-num">${i+1}</span>
+      <div><div class="st-name">${s.name}</div><div class="st-desc">${s.desc}</div></div>
+      <span class="filled-dot">${done?"● 작성됨":""}</span></div>
+      <div class="stage-body"><textarea data-stage="${i}" placeholder="이 단계에서 일어나는 일을 써보세요"></textarea></div>`;
+    st.appendChild(wrap);
+    wrap.querySelector(".stage-head").onclick=e=>{ if(e.target.closest("button"))return; wrap.classList.toggle("open"); };
+    const ta=wrap.querySelector("textarea");
+    ta.value=P.plot[i]||"";
+    ta.oninput=()=>{P.plot[i]=ta.value;save();};
+  });
+}
+
+/* 내보내기 */
+function rExport(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>📤 내보내기 / 백업</h2>
+    <p class="hint">완성본을 PDF로 저장하거나, 데이터를 파일로 백업·복원할 수 있습니다.</p>
+    <button class="btn" id="pdfBtn">📄 PDF로 내보내기</button>
+    <button class="btn ghost" id="jsonOut">💾 백업 파일 내보내기 (.json)</button>
+    <label class="btn ghost" style="display:inline-block">📂 백업 불러오기
+      <input type="file" id="jsonIn" accept=".json" style="display:none"></label>
+    <p class="muted" style="margin-top:14px;font-size:12px;color:var(--muted)">※ PDF는 인쇄 창에서 '대상'을 'PDF로 저장'으로 선택하세요.</p>
+    </div>
+    <div id="preview" class="card"></div>`;
+  app.appendChild(c);
+  c.querySelector("#pdfBtn").onclick=()=>{ buildPreview(); window.print(); };
+  c.querySelector("#jsonOut").onclick=exportJSON;
+  c.querySelector("#jsonIn").onchange=importJSON;
+  buildPreview();
+}
+function buildPreview(){
+  const pv=document.getElementById("preview"); if(!pv)return;
+  const chars=P.characters.map((ch,i)=>`
+    <p><b>인물 ${i+1}: ${esc(ch.name)||"-"}</b> (${esc(ch.role)})<br>
+    MBTI: ${esc(ch.mbti)||"-"} / 에니어그램: ${esc(ch.enneagram)||"-"}<br>
+    목표: ${esc(ch.goal)||"-"} / 결함: ${esc(ch.flaw)||"-"}<br>
+    아크: ${esc(ch.arc)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
+  const plot=HERO_STAGES.map((s,i)=>`<p><b>${i+1}. ${s.name}</b><br>${esc(P.plot[i])||"<i>(미작성)</i>"}</p>`).join("");
+  pv.innerHTML=`<h2 style="border-bottom:2px solid var(--accent);padding-bottom:8px">${esc(P.name)}</h2>
+    <p><b>로그라인:</b> ${esc(P.logline)||"-"}<br><b>장르:</b> ${P.genres.join(", ")||"-"}</p>
+    <div class="section-title">캐릭터</div>${chars}
+    <div class="section-title">세계관</div><p>${esc(P.world.summary)||"-"}<br>시대: ${esc(P.world.era)} / 장소: ${esc(P.world.place)}<br>규칙: ${esc(P.world.rules)}</p>
+    <div class="section-title">배경</div><p>사회: ${esc(P.background.social)}<br>분위기: ${esc(P.background.mood)}<br>${esc(P.background.detail)}</p>
+    <div class="section-title">사건</div><p>주요 사건: ${esc(P.event.main)}<br>갈등: ${esc(P.event.conflict)}<br>결말: ${esc(P.event.ending)}</p>
+    <div class="section-title">플롯 — 영웅의 여정</div>${plot}`;
+}
+function esc(s){return(s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
+
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(P,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=(P.name||"story")+".json"; a.click();
+}
+function importJSON(e){
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const obj=JSON.parse(rd.result);
+      if(!obj.plot||!obj.characters)throw 0;
+      obj.id=uid(); obj.name=(obj.name||"가져온 작품")+" (복원)";
+      DB.projects.push(obj); DB.current=obj.id; P=currentProject();
+      save(); refreshProjSelect(); render();
+      alert("불러오기 완료!");
+    }catch(_){ alert("올바른 백업 파일이 아닙니다."); }
+  };
+  rd.readAsText(f);
+}
+
+/* 정보 */
+document.getElementById("aboutLink").onclick=e=>{
+  e.preventDefault();
+  alert("글쓰기도우미\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
+};
+
+/* 초기 렌더 */
+refreshProjSelect();
+refreshAdminTabVisibility();
+render();
+window.addEventListener("load",()=>{ if(typeof initGoogle==="function") initGoogle(); });
