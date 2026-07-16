@@ -243,8 +243,8 @@ textarea{resize:vertical;min-height:70px}
 .scene-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}
 .scene-handle{cursor:grab;color:var(--muted);font-size:14px;user-select:none}
 .scene-handle:active{cursor:grabbing}
-.scene-num{background:var(--accent);color:#fff;min-width:20px;height:20px;border-radius:50%;
-  display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 5px;flex-shrink:0}
+.scene-num{background:var(--ok);color:#fff;min-width:22px;height:20px;border-radius:5px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 6px;flex-shrink:0}
 .scene-spacer{flex:1}
 .scene-add-btn{background:#eef1ec;color:var(--ok);border:none;border-radius:6px;
   cursor:pointer;font-size:12px;font-weight:600;padding:4px 9px}
@@ -254,9 +254,9 @@ textarea{resize:vertical;min-height:70px}
 .scene-dlg-btn:hover{filter:brightness(.96)}
 .scene-del-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px}
 .scene-del-btn:hover{color:#b3503a}
-.scene-title{width:100%;font-size:13px;font-weight:800;color:var(--ink);
+.scene-title{width:100%;font-size:11px;font-weight:800;color:var(--ink);
   border:1px solid var(--line);border-radius:6px;
-  padding:7px 11px;margin-bottom:8px;background:#ece7dd;font-family:inherit;cursor:default}
+  padding:7px 11px;margin-bottom:8px;background:#e2dbca;font-family:inherit;cursor:default}
 .scene-title[readonly]::placeholder{color:var(--muted);font-weight:600}
 .scene-title:not([readonly]){border-color:var(--accent);background:#fff;cursor:text;box-shadow:0 0 0 2px var(--accent2)}
 .scene-title:focus{outline:none}
