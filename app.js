@@ -1130,6 +1130,7 @@ function rWrite(){
     renderPreviewInto(right);
   }
 
+  let writeBlockNo=0; // 섹션 구분 없이 전체 연속 번호
   pd.sections.forEach((sec,i)=>{
     const group=document.createElement("div"); group.className="write-group"; group.id="wsec-"+sec.id;
     const div=document.createElement("div"); div.className="write-divider";
@@ -1141,7 +1142,7 @@ function rWrite(){
     div.append(loadBtn, createBtn);
     group.appendChild(div);
     const list=document.createElement("div"); list.className="write-blocklist"; list.dataset.sec=sec.id;
-    blocksOfSection(sec.id).forEach(bl=>list.appendChild(sceneBlockCard(bl, main, liveRefresh)));
+    blocksOfSection(sec.id).forEach((bl)=>list.appendChild(sceneBlockCard(bl, main, liveRefresh, ++writeBlockNo)));
     group.appendChild(list);
     setupBlockDnD(list, main);
     main.appendChild(group);
@@ -1232,12 +1233,13 @@ function blockFirstText(bl){
 }
 
 /* 장면 블록 카드 */
-function sceneBlockCard(bl, main, liveRefresh){
+function sceneBlockCard(bl, main, liveRefresh, num){
   const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.id="wblk-"+bl.id; d.draggable=false;
   /* 블록 왼쪽 컬러 바 — 불러온 아이디어면 태그 색상, 아니면 기본색 */
   if(bl.fromIdea){ const idea=findIdea(bl.fromIdea); if(idea && idea.tags && idea.tags.length) d.style.borderLeftColor=getTagColor(idea.tags[0]); }
   const head=document.createElement("div"); head.className="scene-head";
   const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 블록 이동";
+  const numEl=document.createElement("span"); numEl.className="scene-num"; numEl.textContent=(num!=null?num:"");
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
@@ -1262,7 +1264,7 @@ function sceneBlockCard(bl, main, liveRefresh){
   dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
   const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.textContent="✕"; delBtn.title="블록 삭제";
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
-  head.append(handle, spacer, editBtn, addTextBtn, dlgBtn, delBtn);
+  head.append(handle, numEl, spacer, editBtn, addTextBtn, dlgBtn, delBtn);
   d.appendChild(head);
   d.appendChild(titleEl);
   if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.readOnly=false; titleEl.focus(); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
