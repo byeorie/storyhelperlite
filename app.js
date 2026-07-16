@@ -1248,14 +1248,13 @@ function sceneBlockCard(bl, main, liveRefresh, num){
     setTimeout(()=>d.classList.add("dragging"),0);
   });
   d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
-  const spacer=document.createElement("span"); spacer.className="scene-spacer";
-  /* 아이디어/제목 — 기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집. 아이디어 수집·플롯 원본과 독립 */
+  /* 플롯/제목 — 헤더 한 줄에 배치. 기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집 */
   const titleEl=document.createElement("input"); titleEl.className="scene-title"; titleEl.type="text"; titleEl.readOnly=true;
   titleEl.placeholder="플롯 / 제목 (✎ 수정 버튼으로 편집)";
   titleEl.value=bl.title||"";
   titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
   titleEl.onblur=()=>{ titleEl.readOnly=true; };
-  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn"; editBtn.textContent="✎ 수정"; editBtn.title="아이디어(제목) 수정";
+  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn"; editBtn.textContent="✎ 수정"; editBtn.title="플롯/제목 수정";
   editBtn.onclick=()=>{ titleEl.readOnly=false; titleEl.focus(); try{ titleEl.select(); }catch(e){} };
   const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn"; addTextBtn.textContent="＋ 본문";
   addTextBtn.title="본문 하위 블록 추가";
@@ -1264,9 +1263,8 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
   const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.textContent="✕"; delBtn.title="블록 삭제";
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
-  head.append(handle, numEl, spacer, editBtn, addTextBtn, dlgBtn, delBtn);
+  head.append(handle, numEl, titleEl, editBtn, addTextBtn, dlgBtn, delBtn);
   d.appendChild(head);
-  d.appendChild(titleEl);
   if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.readOnly=false; titleEl.focus(); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
 
   /* 하위 블록(본문/대사) */
