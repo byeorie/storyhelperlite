@@ -789,7 +789,7 @@ function rPlot(){
   const struct=PLOT_STRUCTURES[P.plotDoc.structure];
   const head=document.createElement("div"); head.className="card";
   head.innerHTML=`<h2>📖 플롯 생성</h2>
-    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 핸들(⠿)로 아이디어·섹션 순서를 바꿀 수 있습니다.</p>
+    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 핸들(⠿)로 순서를 바꿀 수 있습니다. 아이디어 텍스트를 클릭하거나 <b>✎</b> 버튼을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
     <div class="plot-toolbar">
       <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
@@ -1049,12 +1049,18 @@ function plotIdeaCard(b){
     });
     content.appendChild(tags);
   }
+  const editBtn=document.createElement("button"); editBtn.className="plot-idea-edit"; editBtn.textContent="✎"; editBtn.title="아이디어 수정 (원본과 별개)";
+  editBtn.onclick=()=>{
+    txt.focus();
+    try{ const r=document.createRange(); r.selectNodeContents(txt); r.collapse(false);
+      const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }catch(e){}
+  };
   const rm=document.createElement("button"); rm.className="plot-idea-rm"; rm.textContent="✕"; rm.title="이 섹션에서 빼기";
   rm.onclick=()=>{
     P.plotDoc.sections.forEach(s=>{ s.ideaIds=(s.ideaIds||[]).filter(x=>x!==b.id); });
     save(); render();
   };
-  d.appendChild(handle); d.appendChild(content); d.appendChild(rm);
+  d.appendChild(handle); d.appendChild(content); d.appendChild(editBtn); d.appendChild(rm);
   return d;
 }
 
@@ -1133,8 +1139,8 @@ function rWrite(){
     blocksOfSection(sec.id).forEach(bl=>list.appendChild(sceneBlockCard(bl, main, liveRefresh)));
     group.appendChild(list);
     setupBlockDnD(list, main);
-    const addBtn=document.createElement("button"); addBtn.className="write-add-block"; addBtn.textContent="＋ 장면 블록 추가";
-    addBtn.onclick=()=>{ P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:"", items:[]}); save(); render(); };
+    const addBtn=document.createElement("button"); addBtn.className="write-add-block"; addBtn.textContent="＋ 아이디어 생성";
+    addBtn.onclick=()=>{ const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]}; P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render(); };
     group.appendChild(addBtn);
     main.appendChild(group);
   });
@@ -1163,6 +1169,18 @@ function loadPlotIntoWrite(){
   });
   if(added){ save(); render(); alert(`플롯에서 ${added}개의 아이디어를 장면 블록으로 불러왔습니다.`); }
   else alert("새로 불러올 아이디어가 없습니다.\n(플롯 생성 탭에서 각 섹션에 아이디어를 배치해 주세요.)");
+}
+/* 특정 플롯 단계(섹션)의 배치 아이디어만 불러오기 */
+function loadSectionIdeas(sec){
+  const existing=new Set((P.writeDoc.blocks||[]).map(b=>b.fromIdea).filter(Boolean));
+  let added=0;
+  (sec.ideaIds||[]).forEach(id=>{
+    if(existing.has(id)) return;
+    P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[]});
+    existing.add(id); added++;
+  });
+  if(added){ save(); render(); }
+  else alert("이 단계에 새로 불러올 아이디어가 없습니다.\n(플롯 생성에서 이 단계에 아이디어를 배치해 주세요.)");
 }
 
 /* 좌측 플롯 목록 렌더 (글자수/% 실시간 갱신용으로 분리) */
@@ -1195,14 +1213,19 @@ function renderLeftInto(left){
       });
       item.appendChild(bl);
     }
-    /* 이 섹션에 아이디어(장면 블록) 추가 */
-    const addIdea=document.createElement("button"); addIdea.className="wpl-add"; addIdea.textContent="＋ 아이디어";
+    /* 이 단계에 아이디어 불러오기 / 생성 */
+    const btnRow=document.createElement("div"); btnRow.className="wpl-btnrow";
+    const loadIdea=document.createElement("button"); loadIdea.className="wpl-add wpl-load"; loadIdea.textContent="📥 아이디어 불러오기";
+    loadIdea.title="플롯 생성에서 이 단계에 배치한 아이디어를 불러옵니다";
+    loadIdea.onclick=(e)=>{ e.stopPropagation(); loadSectionIdeas(sec); };
+    const addIdea=document.createElement("button"); addIdea.className="wpl-add"; addIdea.textContent="＋ 아이디어 생성";
     addIdea.onclick=(e)=>{
       e.stopPropagation();
       const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]};
       P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render();
     };
-    item.appendChild(addIdea);
+    btnRow.append(loadIdea, addIdea);
+    item.appendChild(btnRow);
     left.appendChild(item);
   });
   /* 플롯 단계(섹션) 추가 */
@@ -1233,6 +1256,15 @@ function sceneBlockCard(bl, main, liveRefresh){
   });
   d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
   const spacer=document.createElement("span"); spacer.className="scene-spacer";
+  /* 아이디어/제목 — 기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집. 아이디어 수집·플롯 원본과 독립 */
+  const titleEl=document.createElement("input"); titleEl.className="scene-title"; titleEl.type="text"; titleEl.readOnly=true;
+  titleEl.placeholder="아이디어 / 제목 (✎ 수정 버튼으로 편집)";
+  titleEl.value=bl.title||"";
+  if(bl.fromIdea){ const idea=findIdea(bl.fromIdea); if(idea && idea.tags && idea.tags.length) titleEl.style.borderLeftColor=getTagColor(idea.tags[0]); }
+  titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
+  titleEl.onblur=()=>{ titleEl.readOnly=true; };
+  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn"; editBtn.textContent="✎ 수정"; editBtn.title="아이디어(제목) 수정";
+  editBtn.onclick=()=>{ titleEl.readOnly=false; titleEl.focus(); try{ titleEl.select(); }catch(e){} };
   const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn"; addTextBtn.textContent="＋ 본문";
   addTextBtn.title="본문 하위 블록 추가";
   addTextBtn.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
@@ -1240,17 +1272,10 @@ function sceneBlockCard(bl, main, liveRefresh){
   dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
   const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.textContent="✕"; delBtn.title="블록 삭제";
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
-  head.append(handle, spacer, addTextBtn, dlgBtn, delBtn);
+  head.append(handle, spacer, editBtn, addTextBtn, dlgBtn, delBtn);
   d.appendChild(head);
-
-  /* 아이디어/제목 — 글쓰기에서 자유롭게 수정 (아이디어 수집·플롯 생성 원본과 독립) */
-  const titleEl=document.createElement("input"); titleEl.className="scene-title"; titleEl.type="text";
-  titleEl.placeholder="아이디어 / 제목 (자유롭게 수정)";
-  titleEl.value=bl.title||"";
-  if(bl.fromIdea){ const idea=findIdea(bl.fromIdea); if(idea && idea.tags && idea.tags.length) titleEl.style.borderLeftColor=getTagColor(idea.tags[0]); }
-  titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
   d.appendChild(titleEl);
-  if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.focus(); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
+  if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.readOnly=false; titleEl.focus(); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
 
   /* 하위 블록(본문/대사) */
   const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
