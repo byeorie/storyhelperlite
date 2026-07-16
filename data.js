@@ -33,6 +33,13 @@ const HERO_STAGES = [
 const GENRES = ["판타지","SF","로맨스","액션","스릴러","미스터리","공포","드라마",
   "코미디","일상","역사","무협","스포츠","느와르","성장물"];
 
+// 플롯 생성 — 기본 구조 프리셋
+const PLOT_STRUCTURES = {
+  act3:  {label:"3막 구조",           sections:["1막","2막","3막"]},
+  part5: {label:"5부 구조",           sections:["발단","전개","위기","절정","결말"]},
+  hero12:{label:"영웅의 여정 12단계", sections:HERO_STAGES.map(s=>s.name)},
+};
+
 // 아이디어 탐색 — 로그라인 8슬롯 (육하원칙 기반)
 const LOGLINE_SLOTS = [
   {key:"protagonist", label:"주인공 특성", ph:"예: 소심한, 정의로운, 야망있는"},

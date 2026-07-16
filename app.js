@@ -53,6 +53,7 @@ function fillProject(p){
     genres: Array.isArray(p.genres)?p.genres:b.genres,
     ideaBlocks: Array.isArray(p.ideaBlocks)?p.ideaBlocks.map(x=>Object.assign({id:uid(),text:"",tags:[]},x)):b.ideaBlocks,
     tagColors: Object.assign({}, b.tagColors, p.tagColors||{}),
+    plotDoc: fillPlotDoc(p.plotDoc),
     explore: Object.assign({}, b.explore, p.explore||{}),
   });
 }
@@ -73,7 +74,19 @@ function blankProject(id,name){
     plot:Array(12).fill(""),
     ideaBlocks:[],
     tagColors:{},
+    plotDoc:{structure:"", sections:[]},
     explore:blankExplore()};
+}
+/* plotDoc 기본값 보정 (예전 데이터 안전 처리) */
+function fillPlotDoc(pd){
+  const b={structure:"", sections:[]};
+  if(!pd||typeof pd!=="object") return b;
+  return {
+    structure: pd.structure||"",
+    sections: Array.isArray(pd.sections)
+      ? pd.sections.map(s=>({id:s.id||uid(), name:s.name||"섹션", ideaIds:Array.isArray(s.ideaIds)?s.ideaIds.slice():[]}))
+      : [],
+  };
 }
 function blankChar(){
   return {name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:""};
@@ -699,43 +712,169 @@ function rEvent(){
   bind(c.querySelector("#e_ending"),P.event,"ending");
 }
 
-/* 플롯 */
+/* ===== 📖 플롯 생성 ===== */
+/* 아이디어 id로 블록 찾기 */
+function findIdea(id){ return (P.ideaBlocks||[]).find(b=>b.id===id); }
+/* 어느 섹션에도 배치되지 않은 아이디어 목록 */
+function unplacedIdeas(){
+  const placed=new Set();
+  (P.plotDoc.sections||[]).forEach(s=>(s.ideaIds||[]).forEach(id=>placed.add(id)));
+  return (P.ideaBlocks||[]).filter(b=>!placed.has(b.id));
+}
+/* 존재하지 않는 아이디어 참조 정리 */
+function cleanPlotRefs(){
+  const exist=new Set((P.ideaBlocks||[]).map(b=>b.id));
+  (P.plotDoc.sections||[]).forEach(s=>{ s.ideaIds=(s.ideaIds||[]).filter(id=>exist.has(id)); });
+}
+
 function rPlot(){
-  const filled=P.plot.filter(Boolean).length;
-  const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>📖 플롯 — 영웅의 여정 12단계</h2>
-    <p class="hint">${filled}/12 단계 작성됨. 각 단계를 눌러 펼치고 내용을 채우세요.</p>
-    <label>🎬 로그라인 (한 문장 요약)</label>
-    <textarea id="logline" placeholder="누가, 무엇을 원하지만, 어떤 장애물 때문에…"></textarea>
-    <div class="row"><div><label>장르 (복수 선택)</label><div id="genreTags"></div></div></div>
-    </div>
-    <div id="stages"></div>`;
-  app.appendChild(c);
-  bind(c.querySelector("#logline"),P,"logline");
-  const gt=c.querySelector("#genreTags");
-  GENRES.forEach(g=>{
-    const on=P.genres.includes(g);
-    const b=document.createElement("span");
-    b.className="tag"; b.style.cursor="pointer";
-    b.style.opacity=on?1:.45; b.textContent=(on?"✓ ":"")+g;
-    b.onclick=()=>{ if(on)P.genres=P.genres.filter(x=>x!==g); else P.genres.push(g); save(); render(); };
-    gt.appendChild(b);
+  if(!P.plotDoc) P.plotDoc={structure:"", sections:[]};
+  cleanPlotRefs();
+
+  /* 아직 구조를 고르지 않았으면 선택 화면 */
+  if(!P.plotDoc.structure){
+    const c=document.createElement("div"); c.className="card";
+    c.innerHTML=`<h2>📖 플롯 생성</h2>
+      <p class="hint">먼저 이야기의 뼈대가 될 플롯 구조를 선택하세요. 선택한 구조에 맞춰 기본 섹션이 만들어지고, 그 안에 <b>아이디어 수집</b>에서 모은 아이디어를 끌어다 배치할 수 있습니다.</p>
+      <div class="plot-structure-choices" id="structChoices"></div>`;
+    app.appendChild(c);
+    const box=c.querySelector("#structChoices");
+    Object.keys(PLOT_STRUCTURES).forEach(key=>{
+      const st=PLOT_STRUCTURES[key];
+      const b=document.createElement("button"); b.className="plot-struct-btn";
+      b.innerHTML=`<div class="ps-title">${st.label}</div>
+        <div class="ps-sub">${st.sections.join(" · ")}</div>`;
+      b.onclick=()=>{
+        P.plotDoc={structure:key, sections:st.sections.map(n=>({id:uid(), name:n, ideaIds:[]}))};
+        save(); render();
+      };
+      box.appendChild(b);
+    });
+    return;
+  }
+
+  /* 헤더 */
+  const struct=PLOT_STRUCTURES[P.plotDoc.structure];
+  const head=document.createElement("div"); head.className="card";
+  head.innerHTML=`<h2>📖 플롯 생성</h2>
+    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 아이디어를 섹션으로 끌어다 배치하고, 핸들(⠿)로 순서와 섹션을 바꿀 수 있습니다.</p>
+    <div class="plot-toolbar">
+      <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
+      <button class="btn danger sm" id="changeStruct">구조 변경</button>
+    </div>`;
+  app.appendChild(head);
+  head.querySelector("#addSection").onclick=()=>{
+    const name=prompt("새 섹션 이름:","새 섹션"); if(name===null)return;
+    P.plotDoc.sections.push({id:uid(), name:name||"새 섹션", ideaIds:[]});
+    save(); render();
+  };
+  head.querySelector("#changeStruct").onclick=()=>{
+    if(!confirm("구조를 변경하면 현재 섹션 구성이 초기화됩니다. (아이디어 원본은 아이디어 수집에 그대로 남습니다.) 계속할까요?"))return;
+    P.plotDoc={structure:"", sections:[]}; save(); render();
+  };
+
+  /* 미배치 아이디어 풀 */
+  const pool=unplacedIdeas();
+  const poolCard=document.createElement("div"); poolCard.className="card plot-pool-card";
+  poolCard.innerHTML=`<label>미배치 아이디어 (${pool.length})</label>
+    <p class="hint" style="margin:0 0 10px">여기 있는 아이디어를 아래 섹션으로 끌어다 놓으세요.</p>`;
+  const poolBox=document.createElement("div"); poolBox.className="plot-drop plot-pool"; poolBox.dataset.sec="__pool__";
+  if(!pool.length){ const e=document.createElement("p"); e.className="hint plot-empty"; e.textContent="모든 아이디어가 배치되었습니다."; poolBox.appendChild(e); }
+  pool.forEach(b=>poolBox.appendChild(plotIdeaCard(b)));
+  poolCard.appendChild(poolBox);
+  app.appendChild(poolCard);
+
+  /* 섹션들 */
+  const secWrap=document.createElement("div"); secWrap.className="plot-sections";
+  app.appendChild(secWrap);
+  P.plotDoc.sections.forEach((sec,idx)=>{
+    const card=document.createElement("div"); card.className="card plot-section";
+    const h=document.createElement("div"); h.className="plot-section-head";
+    const num=document.createElement("span"); num.className="plot-sec-num"; num.textContent=idx+1;
+    const nameEl=document.createElement("input"); nameEl.className="plot-sec-name"; nameEl.type="text"; nameEl.value=sec.name;
+    nameEl.onchange=()=>{ sec.name=nameEl.value||sec.name; save(); };
+    const cnt=document.createElement("span"); cnt.className="plot-sec-count"; cnt.textContent=`${(sec.ideaIds||[]).length}개`;
+    const delBtn=document.createElement("button"); delBtn.className="btn danger sm plot-sec-del"; delBtn.textContent="✕";
+    delBtn.title="섹션 삭제"; delBtn.onclick=()=>{
+      if((sec.ideaIds||[]).length && !confirm("이 섹션의 아이디어 배치가 해제됩니다. (원본은 유지) 삭제할까요?"))return;
+      P.plotDoc.sections=P.plotDoc.sections.filter(x=>x.id!==sec.id); save(); render();
+    };
+    h.appendChild(num); h.appendChild(nameEl); h.appendChild(cnt); h.appendChild(delBtn);
+    card.appendChild(h);
+    const body=document.createElement("div"); body.className="plot-drop plot-section-body"; body.dataset.sec=sec.id;
+    const ids=(sec.ideaIds||[]);
+    if(!ids.length){ const e=document.createElement("p"); e.className="hint plot-empty"; e.textContent="여기로 아이디어를 끌어다 놓으세요."; body.appendChild(e); }
+    ids.forEach(id=>{ const b=findIdea(id); if(b) body.appendChild(plotIdeaCard(b)); });
+    card.appendChild(body);
+    secWrap.appendChild(card);
   });
-  const st=c.querySelector("#stages");
-  HERO_STAGES.forEach((s,i)=>{
-    const wrap=document.createElement("div"); wrap.className="stage";
-    const done=!!P.plot[i];
-    wrap.innerHTML=`<div class="stage-head">
-      <span class="stage-num">${i+1}</span>
-      <div><div class="st-name">${s.name}</div><div class="st-desc">${s.desc}</div></div>
-      <span class="filled-dot">${done?"● 작성됨":""}</span></div>
-      <div class="stage-body"><textarea data-stage="${i}" placeholder="이 단계에서 일어나는 일을 써보세요"></textarea></div>`;
-    st.appendChild(wrap);
-    wrap.querySelector(".stage-head").onclick=e=>{ if(e.target.closest("button"))return; wrap.classList.toggle("open"); };
-    const ta=wrap.querySelector("textarea");
-    ta.value=P.plot[i]||"";
-    ta.oninput=()=>{P.plot[i]=ta.value;save();};
+
+  /* 드래그앤드롭 (풀 + 모든 섹션 공용) */
+  const drops=[poolBox, ...secWrap.querySelectorAll(".plot-drop")];
+  drops.forEach(zone=>{
+    zone.addEventListener("dragover", e=>{
+      e.preventDefault();
+      const dragging=document.querySelector(".plot-idea.dragging");
+      if(!dragging) return;
+      const after=getDragAfterElementV(zone, e.clientY);
+      if(after==null) zone.appendChild(dragging);
+      else zone.insertBefore(dragging, after);
+    });
+    zone.addEventListener("drop", e=>{
+      e.preventDefault();
+      rebuildPlotFromDOM(secWrap);
+      save(); render();
+    });
   });
+}
+/* 세로 목록용 삽입 위치 계산 (plot-idea 대상) */
+function getDragAfterElementV(container, y){
+  const els=[...container.querySelectorAll(".plot-idea:not(.dragging)")];
+  return els.reduce((closest, child)=>{
+    const box=child.getBoundingClientRect();
+    const offset=y-box.top-box.height/2;
+    if(offset<0 && offset>closest.offset) return {offset, element:child};
+    return closest;
+  }, {offset:-Infinity, element:null}).element;
+}
+/* 화면(DOM)의 배치 상태를 plotDoc.sections에 반영 (풀은 미배치=저장 안 함) */
+function rebuildPlotFromDOM(secWrap){
+  secWrap.querySelectorAll(".plot-section-body").forEach(body=>{
+    const secId=body.dataset.sec;
+    const sec=P.plotDoc.sections.find(s=>s.id===secId);
+    if(sec) sec.ideaIds=[...body.querySelectorAll(".plot-idea")].map(el=>el.dataset.id);
+  });
+}
+/* 플롯용 아이디어 미니 카드 (드래그 가능) */
+function plotIdeaCard(b){
+  const d=document.createElement("div"); d.className="plot-idea"; d.dataset.id=b.id; d.draggable=false;
+  const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
+  d.style.borderLeftColor=color;
+  const handle=document.createElement("span"); handle.className="plot-idea-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동";
+  handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
+  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
+  d.addEventListener("dragstart", e=>{
+    e.dataTransfer.effectAllowed="move";
+    e.dataTransfer.setData("text/plain", b.id);
+    setTimeout(()=>d.classList.add("dragging"),0);
+  });
+  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+  const content=document.createElement("div"); content.className="plot-idea-content";
+  const txt=document.createElement("div"); txt.className="plot-idea-text"; txt.textContent=b.text||"(빈 아이디어)";
+  content.appendChild(txt);
+  if((b.tags||[]).length){
+    const tags=document.createElement("div"); tags.className="plot-idea-tags";
+    (b.tags||[]).forEach(t=>{
+      const chip=document.createElement("span"); chip.className="plot-idea-tag";
+      const cc=getTagColor(t);
+      chip.style.background=hexToRgba(cc,0.14); chip.style.color=cc; chip.style.borderColor=hexToRgba(cc,0.5);
+      chip.textContent=t;
+      tags.appendChild(chip);
+    });
+    content.appendChild(tags);
+  }
+  d.appendChild(handle); d.appendChild(content);
+  return d;
 }
 
 /* 내보내기 */
@@ -763,14 +902,25 @@ function buildPreview(){
     MBTI: ${esc(ch.mbti)||"-"} / 에니어그램: ${esc(ch.enneagram)||"-"}<br>
     목표: ${esc(ch.goal)||"-"} / 결함: ${esc(ch.flaw)||"-"}<br>
     아크: ${esc(ch.arc)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
-  const plot=HERO_STAGES.map((s,i)=>`<p><b>${i+1}. ${s.name}</b><br>${esc(P.plot[i])||"<i>(미작성)</i>"}</p>`).join("");
+  let plot;
+  const pd=P.plotDoc;
+  if(pd && pd.structure && Array.isArray(pd.sections) && pd.sections.length){
+    const label=(PLOT_STRUCTURES[pd.structure]&&PLOT_STRUCTURES[pd.structure].label)||"사용자 구조";
+    plot=`<p class="muted" style="margin:0 0 8px">구조: ${esc(label)}</p>`+
+      pd.sections.map((s,i)=>{
+        const items=(s.ideaIds||[]).map(id=>{const b=(P.ideaBlocks||[]).find(x=>x.id===id);return b?`<li>${esc(b.text)}</li>`:"";}).join("");
+        return `<p><b>${i+1}. ${esc(s.name)}</b></p>${items?`<ul>${items}</ul>`:`<p><i>(배치된 아이디어 없음)</i></p>`}`;
+      }).join("");
+  }else{
+    plot=`<p><i>(아직 플롯이 생성되지 않았습니다. '플롯 생성' 메뉴에서 구조를 선택하세요.)</i></p>`;
+  }
   pv.innerHTML=`<h2 style="border-bottom:2px solid var(--accent);padding-bottom:8px">${esc(P.name)}</h2>
     <p><b>로그라인:</b> ${esc(P.logline)||"-"}<br><b>장르:</b> ${P.genres.join(", ")||"-"}</p>
     <div class="section-title">캐릭터</div>${chars}
     <div class="section-title">세계관</div><p>${esc(P.world.summary)||"-"}<br>시대: ${esc(P.world.era)} / 장소: ${esc(P.world.place)}<br>규칙: ${esc(P.world.rules)}</p>
     <div class="section-title">배경</div><p>사회: ${esc(P.background.social)}<br>분위기: ${esc(P.background.mood)}<br>${esc(P.background.detail)}</p>
     <div class="section-title">사건</div><p>주요 사건: ${esc(P.event.main)}<br>갈등: ${esc(P.event.conflict)}<br>결말: ${esc(P.event.ending)}</p>
-    <div class="section-title">플롯 — 영웅의 여정</div>${plot}`;
+    <div class="section-title">플롯</div>${plot}`;
 }
 function esc(s){return(s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
 

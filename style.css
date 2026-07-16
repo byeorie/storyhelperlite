@@ -127,6 +127,36 @@ textarea{resize:vertical;min-height:70px}
   color:var(--muted);font-size:13px;cursor:pointer;line-height:1;padding:2px}
 .idea-del:hover{color:#b3503a}
 
+/* 플롯 생성 */
+.plot-structure-choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.plot-struct-btn{text-align:left;border:1px solid var(--line);background:#fcfbf9;border-radius:10px;
+  padding:16px;cursor:pointer;transition:border-color .12s,background .12s}
+.plot-struct-btn:hover{border-color:var(--accent);background:var(--accent2)}
+.plot-struct-btn .ps-title{font-weight:700;font-size:15px;color:var(--ink);margin-bottom:4px}
+.plot-struct-btn .ps-sub{font-size:12px;color:var(--muted);line-height:1.5}
+.plot-toolbar{display:flex;gap:8px;flex-wrap:wrap}
+.plot-pool-card .plot-pool{min-height:52px}
+.plot-drop{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--line);
+  border-radius:8px;padding:8px;background:#faf8f4}
+.plot-empty{margin:0;padding:6px 4px;font-size:12px;text-align:center}
+.plot-sections{display:flex;flex-direction:column;gap:14px}
+.plot-section{padding:14px 16px}
+.plot-section-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.plot-sec-num{background:var(--accent);color:#fff;width:24px;height:24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.plot-sec-name{flex:1;font-weight:700;font-size:14px;padding:6px 8px}
+.plot-sec-count{font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0}
+.plot-sec-del{flex-shrink:0}
+.plot-idea{display:flex;align-items:flex-start;gap:8px;background:#fff;border:1px solid var(--line);
+  border-left:5px solid var(--line);border-radius:8px;padding:9px 11px;transition:opacity .15s}
+.plot-idea.dragging{opacity:.4}
+.plot-idea-handle{cursor:grab;color:var(--muted);font-size:14px;line-height:1.4;user-select:none;flex-shrink:0}
+.plot-idea-handle:active{cursor:grabbing}
+.plot-idea-content{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
+.plot-idea-text{font-size:13px;font-weight:600;white-space:pre-wrap;word-break:break-word}
+.plot-idea-tags{display:flex;flex-wrap:wrap;gap:4px}
+.plot-idea-tag{font-size:11px;font-weight:600;border:1px solid transparent;border-radius:999px;padding:1px 7px}
+
 /* 아이디어 탐색 */
 .explore-dbstatus{background:#fbf8f3;border:1px solid var(--line);border-radius:8px;
   padding:10px 12px;font-size:13px;color:var(--ink)}
