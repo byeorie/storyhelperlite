@@ -2,6 +2,14 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-16 (23차) · 아이디어 블록 드래그 정렬 + 태그별 색상 지정
+- **app.js** 수정 —
+  - 아이디어 블록(`ideaBlockCard`)에 드래그 핸들(⠿) 추가. 핸들을 누른 채 위/아래로 끌면 카드 순서를 바꿀 수 있음(HTML5 드래그앤드롭, `getDragAfterElement`/`reorderIdeaBlocks`로 화면 순서를 실제 저장 순서에 반영). PC 브라우저 기준 동작(모바일 터치 드래그는 브라우저 제약으로 제한적일 수 있음)
+  - 태그마다 색상을 지정할 수 있도록 `P.tagColors`(태그명→hex) 필드 추가, `blankProject`/`fillProject`에 반영. 색상 미지정 태그는 10색 팔레트에서 이름 기반으로 자동 배정(`getTagColor`), 태그 칩의 동그란 색상 점을 클릭하면 네이티브 컬러피커로 변경 가능(`openTagColorPicker`/`setTagColor`)
+  - 태그 칩 렌더링을 공통 함수 `makeTagChip()`으로 통합 (입력 중 태그, 기존 태그 선택, 필터 바, 블록 내 태그, 태그 추가 팝오버 전부 동일 로직 사용)
+  - 아이디어 블록 왼쪽에 표시되던 색상 테두리를 해당 블록의 첫 번째 태그 색상으로 표시하고, 두께를 4px→9px로 키우고 옅은 배경 틴트를 추가해 색상이 더 잘 보이도록 개선
+- **style.css** 수정 — `.idea-block` 테두리/패딩 조정, `.idea-handle`, `.tag-color-dot`, `.idea-block.dragging` 스타일 추가
+
 ## 2026-07-16 (22차) · Cloudflare D1 실제 연동 + 로그인/회원가입 폼 표시 버그 수정
 - **Cloudflare 대시보드 작업** (브라우저 자동화로 진행) — D1 데이터베이스 `storyhelperlite-db` 생성, `schema.sql` 콘솔에서 실행(users/sessions/user_data 테이블 + 관리자 계정 `profh` 시드 확인), Pages 프로젝트(storyhelperlite, Production)에 변수명 `DB`로 바인딩 후 재배포 완료
 - **style.css** 버그 수정 — `.auth-panel { display:flex }` 규칙이 `[hidden]` 속성보다 우선 적용되어, 로그인 화면에서 회원가입/찾기 폼이 로그인 폼과 함께 그대로 노출되던 문제 발견(실제 배포 사이트에서 확인). `.auth-panel[hidden] { display: none; }` 규칙 추가로 수정

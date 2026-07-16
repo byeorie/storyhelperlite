@@ -52,6 +52,7 @@ function fillProject(p){
     plot: Array.isArray(p.plot)?Object.assign([...b.plot],p.plot):b.plot,
     genres: Array.isArray(p.genres)?p.genres:b.genres,
     ideaBlocks: Array.isArray(p.ideaBlocks)?p.ideaBlocks.map(x=>Object.assign({id:uid(),text:"",tags:[]},x)):b.ideaBlocks,
+    tagColors: Object.assign({}, b.tagColors, p.tagColors||{}),
     explore: Object.assign({}, b.explore, p.explore||{}),
   });
 }
@@ -71,6 +72,7 @@ function blankProject(id,name){
     event:{main:"",conflict:"",ending:""},
     plot:Array(12).fill(""),
     ideaBlocks:[],
+    tagColors:{},
     explore:blankExplore()};
 }
 function blankChar(){
@@ -180,6 +182,90 @@ let ideaFilterTags=[];
 let ideaPendingTags=[];
 let ideaTagPickerFor=null;
 
+/* 태그 색상 팔레트 & 유틸 */
+const TAG_PALETTE=["#c4654a","#5a8f6b","#4a7fc4","#c4a34a","#8a4ac4","#c44a91","#3fada0","#c47a4a","#6a6ac4","#a0a842"];
+function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))|0; } return Math.abs(h); }
+function getTagColor(tag){
+  if(!P.tagColors) P.tagColors={};
+  if(P.tagColors[tag]) return P.tagColors[tag];
+  return TAG_PALETTE[hashStr(tag)%TAG_PALETTE.length];
+}
+function setTagColor(tag,color){
+  if(!P.tagColors) P.tagColors={};
+  P.tagColors[tag]=color; save(); render();
+}
+function hexToRgba(hex, alpha){
+  let h=(hex||"#999999").replace("#","");
+  if(h.length===3) h=h.split("").map(c=>c+c).join("");
+  const n=parseInt(h,16);
+  const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+/* 색상 점을 클릭하면 네이티브 컬러피커를 띄워 태그 색을 바꿈 */
+function openTagColorPicker(tag){
+  const inp=document.createElement("input");
+  inp.type="color";
+  inp.value=getTagColor(tag);
+  inp.style.position="fixed"; inp.style.opacity="0"; inp.style.pointerEvents="none"; inp.style.left="-100px"; inp.style.top="0";
+  document.body.appendChild(inp);
+  inp.onchange=()=>{ setTagColor(tag, inp.value); inp.remove(); };
+  inp.onblur=()=>{ setTimeout(()=>{ if(inp.parentNode) inp.remove(); },300); };
+  setTimeout(()=>inp.click(),0);
+}
+/* 태그 칩 하나 생성 (색상 점 + 라벨 [+ 삭제버튼]) */
+function makeTagChip(tag, opts){
+  opts=opts||{};
+  const wrap=document.createElement("span");
+  let cls="idea-tag";
+  if(opts.filterStyle) cls+=" filter";
+  if(opts.pickStyle) cls+=" pick";
+  if(opts.active) cls+=" on";
+  wrap.className=cls;
+  const color=getTagColor(tag);
+  if(opts.active){
+    wrap.style.background=color; wrap.style.borderColor=color; wrap.style.color="#fff";
+  }else{
+    wrap.style.background=hexToRgba(color,0.14);
+    wrap.style.borderColor=hexToRgba(color,0.55);
+    wrap.style.color=color;
+  }
+  const dot=document.createElement("span"); dot.className="tag-color-dot";
+  dot.style.background=color; dot.title="태그 색상 변경";
+  dot.onclick=(e)=>{ e.stopPropagation(); openTagColorPicker(tag); };
+  wrap.appendChild(dot);
+  const label=document.createElement("span"); label.textContent=tag;
+  wrap.appendChild(label);
+  if(opts.onClick) wrap.onclick=opts.onClick;
+  if(opts.removable){
+    const x=document.createElement("span"); x.className="idea-tag-x"; x.textContent="✕";
+    x.onclick=(e)=>{ e.stopPropagation(); opts.onRemove&&opts.onRemove(); };
+    wrap.appendChild(x);
+  }
+  return wrap;
+}
+/* 드래그 정렬: 마우스 y좌표 기준으로 삽입 위치 계산 */
+function getDragAfterElement(container, y){
+  const els=[...container.querySelectorAll(".idea-block:not(.dragging)")];
+  return els.reduce((closest, child)=>{
+    const box=child.getBoundingClientRect();
+    const offset=y-box.top-box.height/2;
+    if(offset<0 && offset>closest.offset) return {offset, element:child};
+    return closest;
+  }, {offset:-Infinity, element:null}).element;
+}
+/* 드롭 후 화면에 보이던 순서를 실제 저장 순서(P.ideaBlocks)에 반영 */
+function reorderIdeaBlocks(orderedIdsTopToBottom){
+  const idToBlock={};
+  P.ideaBlocks.forEach(b=>idToBlock[b.id]=b);
+  const shownIds=new Set(orderedIdsTopToBottom);
+  const newShownStorageOrder=orderedIdsTopToBottom.slice().reverse();
+  let si=0;
+  P.ideaBlocks=P.ideaBlocks.map(b=> shownIds.has(b.id) ? idToBlock[newShownStorageOrder[si++]] : b);
+}
+document.addEventListener("mouseup", ()=>{
+  document.querySelectorAll(".idea-block[draggable=true]").forEach(el=>el.draggable=false);
+});
+
 function rIdea(){
   if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
   const allTags=[...new Set(P.ideaBlocks.flatMap(b=>b.tags||[]))];
@@ -200,24 +286,24 @@ function rIdea(){
   function renderPending(){
     pendingRow.innerHTML="";
     ideaPendingTags.forEach(t=>{
-      const tp=document.createElement("span"); tp.className="idea-tag";
-      tp.innerHTML=`${esc(t)} <span class="idea-tag-x">✕</span>`;
-      tp.querySelector(".idea-tag-x").onclick=()=>{ ideaPendingTags=ideaPendingTags.filter(x=>x!==t); renderPending(); renderExisting(); };
-      pendingRow.appendChild(tp);
+      pendingRow.appendChild(makeTagChip(t,{
+        removable:true,
+        onRemove:()=>{ ideaPendingTags=ideaPendingTags.filter(x=>x!==t); renderPending(); renderExisting(); }
+      }));
     });
   }
   function renderExisting(){
     if(!existingRow)return;
     existingRow.innerHTML="";
     allTags.forEach(t=>{
-      const b=document.createElement("span");
-      b.className="idea-tag filter"+(ideaPendingTags.includes(t)?" on":"");
-      b.textContent=t;
-      b.onclick=()=>{
-        ideaPendingTags=ideaPendingTags.includes(t)?ideaPendingTags.filter(x=>x!==t):[...ideaPendingTags,t];
-        renderPending(); renderExisting();
-      };
-      existingRow.appendChild(b);
+      existingRow.appendChild(makeTagChip(t,{
+        filterStyle:true,
+        active:ideaPendingTags.includes(t),
+        onClick:()=>{
+          ideaPendingTags=ideaPendingTags.includes(t)?ideaPendingTags.filter(x=>x!==t):[...ideaPendingTags,t];
+          renderPending(); renderExisting();
+        }
+      }));
     });
   }
   renderPending(); renderExisting();
@@ -243,14 +329,14 @@ function rIdea(){
     allBtn.onclick=()=>{ ideaFilterTags=[]; render(); };
     bar.appendChild(allBtn);
     allTags.forEach(t=>{
-      const b=document.createElement("span");
-      b.className="idea-tag filter"+(ideaFilterTags.includes(t)?" on":"");
-      b.textContent=t;
-      b.onclick=()=>{
-        ideaFilterTags=ideaFilterTags.includes(t)?ideaFilterTags.filter(x=>x!==t):[...ideaFilterTags,t];
-        render();
-      };
-      bar.appendChild(b);
+      bar.appendChild(makeTagChip(t,{
+        filterStyle:true,
+        active:ideaFilterTags.includes(t),
+        onClick:()=>{
+          ideaFilterTags=ideaFilterTags.includes(t)?ideaFilterTags.filter(x=>x!==t):[...ideaFilterTags,t];
+          render();
+        }
+      }));
     });
   }
 
@@ -264,6 +350,24 @@ function rIdea(){
   }
   shown.slice().reverse().forEach(b=>list.appendChild(ideaBlockCard(b, allTags)));
 
+  /* 드래그로 순서 변경 */
+  list.addEventListener("dragover", e=>{
+    e.preventDefault();
+    const dragging=list.querySelector(".idea-block.dragging");
+    if(!dragging) return;
+    const after=getDragAfterElement(list, e.clientY);
+    if(after==null) list.appendChild(dragging);
+    else list.insertBefore(dragging, after);
+  });
+  list.addEventListener("drop", e=>{
+    e.preventDefault();
+    const dragging=list.querySelector(".idea-block.dragging");
+    if(!dragging) return;
+    const ids=[...list.querySelectorAll(".idea-block")].map(el=>el.dataset.id);
+    reorderIdeaBlocks(ids);
+    save(); render();
+  });
+
   const input=c.querySelector("#ideaNewInput");
   input.onkeydown=e=>{
     if(e.key==="Enter" && input.value.trim()){
@@ -276,7 +380,26 @@ function rIdea(){
 }
 
 function ideaBlockCard(b, allTags){
-  const d=document.createElement("div"); d.className="idea-block";
+  const d=document.createElement("div"); d.className="idea-block"; d.dataset.id=b.id;
+  d.draggable=false;
+
+  const primaryColor=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):null;
+  if(primaryColor){
+    d.style.borderLeftColor=primaryColor;
+    d.style.background=hexToRgba(primaryColor,0.06);
+  }
+
+  const handle=document.createElement("span"); handle.className="idea-handle";
+  handle.textContent="⠿"; handle.title="드래그해서 순서 변경";
+  handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
+  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
+  d.addEventListener("dragstart", e=>{
+    e.dataTransfer.effectAllowed="move";
+    e.dataTransfer.setData("text/plain", b.id);
+    setTimeout(()=>d.classList.add("dragging"),0);
+  });
+  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+
   const head=document.createElement("div"); head.className="idea-block-text";
   head.contentEditable="true"; head.spellcheck=false; head.textContent=b.text;
   head.oninput=()=>{ b.text=head.textContent; save(); };
@@ -287,10 +410,10 @@ function ideaBlockCard(b, allTags){
   };
   const tagsWrap=document.createElement("div"); tagsWrap.className="idea-block-tags";
   (b.tags||[]).forEach(t=>{
-    const tp=document.createElement("span"); tp.className="idea-tag";
-    tp.innerHTML=`${esc(t)} <span class="idea-tag-x">✕</span>`;
-    tp.querySelector(".idea-tag-x").onclick=()=>{ b.tags=b.tags.filter(x=>x!==t); save(); render(); };
-    tagsWrap.appendChild(tp);
+    tagsWrap.appendChild(makeTagChip(t,{
+      removable:true,
+      onRemove:()=>{ b.tags=b.tags.filter(x=>x!==t); save(); render(); }
+    }));
   });
   const addTag=document.createElement("span"); addTag.className="idea-tag add"; addTag.textContent="＋ 태그";
   addTag.onclick=()=>{
@@ -298,19 +421,19 @@ function ideaBlockCard(b, allTags){
     render();
   };
   tagsWrap.appendChild(addTag);
-  d.appendChild(del); d.appendChild(head); d.appendChild(tagsWrap);
+  d.appendChild(handle); d.appendChild(del); d.appendChild(head); d.appendChild(tagsWrap);
 
   if(ideaTagPickerFor===b.id){
     const picker=document.createElement("div"); picker.className="idea-tag-picker";
     const avail=(allTags||[]).filter(t=>!(b.tags||[]).includes(t));
     avail.forEach(t=>{
-      const chip=document.createElement("span"); chip.className="idea-tag pick";
-      chip.textContent=t;
-      chip.onclick=()=>{
-        b.tags=b.tags||[]; if(!b.tags.includes(t)) b.tags.push(t);
-        ideaTagPickerFor=null; save(); render();
-      };
-      picker.appendChild(chip);
+      picker.appendChild(makeTagChip(t,{
+        pickStyle:true,
+        onClick:()=>{
+          b.tags=b.tags||[]; if(!b.tags.includes(t)) b.tags.push(t);
+          ideaTagPickerFor=null; save(); render();
+        }
+      }));
     });
     const newInput=document.createElement("input");
     newInput.type="text"; newInput.placeholder="새 태그 입력 후 Enter";
