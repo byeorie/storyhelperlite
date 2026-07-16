@@ -2,6 +2,17 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-16 (38차) · 드래그 순서변경이 미리보기에 반영 안 되는 문제 수정 (전 영역 공통 버그)
+- 증상: 본문(글쓰기)에서 플롯 블록 순서를 드래그로 바꿨는데 미리보기에 반영되지 않음
+- **원인 규명**: 드래그 재정렬은 `dragover`에서 DOM만 실시간으로 옮기고, 실제 데이터 반영(`save()`+`render()`)은 `drop` 이벤트에서만 수행하고 있었음. 그런데 중첩된 드롭존(예: 장면 블록 안의 대사/본문 영역, 아이디어 추가 박스 등) 위에서 마우스를 놓으면 브라우저에 따라 `drop` 이벤트가 안정적으로 발생하지 않을 수 있음 — 이 경우 화면상 블록은 이미 옮겨진 것처럼 보이지만(드래그 중 실시간 DOM 이동 때문) 실제 데이터(`P.writeDoc`/`P.plotDoc`/`P.ideaBlocks`)는 갱신되지 않아, 다시 렌더링되는 미리보기·좌측 목록에는 예전 순서가 그대로 남는 불일치가 발생. jsdom으로 "drop 없이 dragend만 발생"하는 상황을 직접 재현해 실제로 이 불일치가 나타남을 확인
+- **app.js** 수정 — 드래그 하나당 처리 여부를 추적하는 전역 플래그 `dndDropHandled` 신설(각 `dragstart`에서 false로 초기화, 해당 `drop` 처리 시 true로 표시). 모든 드래그 정렬 로직에 **`dragend`에서의 안전장치**를 추가해, `drop`이 끝내 발생하지 않았을 경우 `dragend` 시점에 한 번 더 같은 반영 로직을 실행하도록 함:
+  - 아이디어 수집: `commitIdeaOrder(list)` 신설(`ideaBlockCard`에 `list` 인자 추가)
+  - 플롯 생성 — 섹션 순서: `commitSectionOrder(secWrap)` 신설
+  - 플롯 생성 — 섹션 내 아이디어 배치: `commitPlotIdeaOrder(secWrap)` 신설(`plotIdeaCard`에 `secWrap` 인자 추가)
+  - 글쓰기 — 장면 블록 순서: `commitWriteBlockOrder(main)` 신설
+  - 글쓰기 — 하위 블록(본문/대사) 순서: `commitWriteItemOrder(main)` 신설(`subBlockEl`에 `main` 인자 추가)
+- 검증: jsdom으로 "핸들 mousedown→dragstart→(dragover로 인한 DOM 재배치를 수동 시뮬레이션)→**drop 이벤트 없이** dragend만 발생" 시나리오를 5개 영역 전부에서 재현 — 아이디어 수집·플롯 섹션·플롯 아이디어·글쓰기 본문/대사·글쓰기 장면블록 전부 정상적으로 데이터와 화면(미리보기 포함)에 반영됨을 확인
+
 ## 2026-07-16 (37차) · 글쓰기 블록 왼쪽 컬러 바를 플롯 단계(섹션) 기준으로 통일
 - 요청: 글쓰기 본문의 플롯 블록 왼쪽 색이 아이디어 태그 색이라 섹션 안에서도 블록마다 색이 달랐음 → 같은 플롯 단계면 항상 같은 색으로
 - **app.js** 수정 — `getSectionColor(secId)`(섹션 id 해시 기반, `TAG_PALETTE` 재사용) 추가. `sceneBlockCard`의 왼쪽 컬러 바를 (아이디어 태그 대신) `getSectionColor(bl.sectionId)`로 통일 — 같은 섹션의 모든 블록이 동일한 색을 가짐, 다른 섹션은 다른 색

@@ -210,6 +210,11 @@ function render(){
 }
 
 /* ===== 💡 아이디어 모음 ===== */
+/* 드래그앤드롭 안전장치: 브라우저에 따라 'drop' 이벤트가 안정적으로 발생하지 않는 경우가 있어
+   (특히 중첩된 드롭존 위에서 놓았을 때) 'dragend'에서 한 번 더 확인해 반영을 보장한다.
+   드래그 하나당 하나씩만 처리되도록 dragstart에서 false로 초기화, drop에서 true로 표시 */
+let dndDropHandled=false;
+
 let ideaFilterTags=[];
 let ideaPendingTags=[];
 let ideaTagPickerFor=null;
@@ -380,7 +385,7 @@ function rIdea(){
     e.textContent=P.ideaBlocks.length?"이 태그에 해당하는 아이디어가 없습니다.":"위 입력창에 첫 아이디어를 적어보세요.";
     list.appendChild(e);
   }
-  shown.slice().reverse().forEach(b=>list.appendChild(ideaBlockCard(b, allTags)));
+  shown.slice().reverse().forEach(b=>list.appendChild(ideaBlockCard(b, allTags, list)));
 
   /* 드래그로 순서 변경 */
   list.addEventListener("dragover", e=>{
@@ -393,11 +398,8 @@ function rIdea(){
   });
   list.addEventListener("drop", e=>{
     e.preventDefault();
-    const dragging=list.querySelector(".idea-block.dragging");
-    if(!dragging) return;
-    const ids=[...list.querySelectorAll(".idea-block")].map(el=>el.dataset.id);
-    reorderIdeaBlocks(ids);
-    save(); render();
+    if(!list.querySelector(".idea-block.dragging")) return;
+    commitIdeaOrder(list);
   });
 
   const input=c.querySelector("#ideaNewInput");
@@ -411,7 +413,15 @@ function rIdea(){
   };
 }
 
-function ideaBlockCard(b, allTags){
+/* 아이디어 블록 순서를 화면(DOM) 순서대로 실제 저장 순서에 반영 */
+function commitIdeaOrder(list){
+  const ids=[...list.querySelectorAll(".idea-block")].map(el=>el.dataset.id);
+  reorderIdeaBlocks(ids);
+  dndDropHandled=true;
+  save(); render();
+}
+
+function ideaBlockCard(b, allTags, list){
   const d=document.createElement("div"); d.className="idea-block"; d.dataset.id=b.id;
   d.draggable=false;
 
@@ -426,11 +436,16 @@ function ideaBlockCard(b, allTags){
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
+    dndDropHandled=false;
     e.dataTransfer.effectAllowed="move";
     e.dataTransfer.setData("text/plain", b.id);
     setTimeout(()=>d.classList.add("dragging"),0);
   });
-  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+  d.addEventListener("dragend", ()=>{
+    d.draggable=false; d.classList.remove("dragging");
+    /* 'drop' 이벤트가 발생하지 않은 경우를 대비한 안전장치 */
+    if(!dndDropHandled && list && list.isConnected) commitIdeaOrder(list);
+  });
 
   const head=document.createElement("div"); head.className="idea-block-text";
   head.contentEditable="true"; head.spellcheck=false; head.textContent=b.text;
@@ -826,9 +841,7 @@ function rPlot(){
   secWrap.addEventListener("drop", e=>{
     if(!secWrap.querySelector(".plot-section.sec-dragging")) return;
     e.preventDefault();
-    const order=[...secWrap.querySelectorAll(".plot-section")].map(el=>el.dataset.secid);
-    P.plotDoc.sections.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
-    save(); render();
+    commitSectionOrder(secWrap);
   });
 
   /* 아이디어 선택 팝업 (열려 있을 때만) */
@@ -837,6 +850,14 @@ function rPlot(){
     if(sec) app.appendChild(plotPickerModal(sec));
     else plotPickerFor=null;
   }
+}
+
+/* 화면(DOM) 순서대로 plotDoc.sections 배열 자체를 재정렬 */
+function commitSectionOrder(secWrap){
+  const order=[...secWrap.querySelectorAll(".plot-section")].map(el=>el.dataset.secid);
+  P.plotDoc.sections.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+  dndDropHandled=true;
+  save(); render();
 }
 
 /* 섹션 카드 하나 렌더 */
@@ -864,10 +885,14 @@ function plotSectionCard(sec, idx, secWrap){
   moveBtn.addEventListener("touchstart", ()=>{ card.draggable=true; }, {passive:true});
   card.addEventListener("dragstart", e=>{
     if(!card.draggable) return;
+    dndDropHandled=false;
     e.dataTransfer.effectAllowed="move";
     setTimeout(()=>card.classList.add("sec-dragging"),0);
   });
-  card.addEventListener("dragend", ()=>{ card.draggable=false; card.classList.remove("sec-dragging"); });
+  card.addEventListener("dragend", ()=>{
+    card.draggable=false; card.classList.remove("sec-dragging");
+    if(!dndDropHandled && secWrap && secWrap.isConnected) commitSectionOrder(secWrap);
+  });
   // 접기/펼치기
   const collBtn=iconBtn(collapsed?"▸":"▾", collapsed?"펼치기":"접기", ()=>{
     if(collapsed) plotCollapsed.delete(sec.id); else plotCollapsed.add(sec.id);
@@ -890,7 +915,7 @@ function plotSectionCard(sec, idx, secWrap){
   /* 배치된 아이디어 (드롭존) */
   const body=document.createElement("div"); body.className="plot-drop plot-section-body"; body.dataset.sec=sec.id;
   const ids=(sec.ideaIds||[]);
-  ids.forEach(id=>{ const b=findIdea(id); if(b) body.appendChild(plotIdeaCard(b)); });
+  ids.forEach(id=>{ const b=findIdea(id); if(b) body.appendChild(plotIdeaCard(b, secWrap)); });
   card.appendChild(body);
   // 아이디어 카드 드래그(섹션 간 이동/정렬)
   body.addEventListener("dragover", e=>{
@@ -904,8 +929,7 @@ function plotSectionCard(sec, idx, secWrap){
   body.addEventListener("drop", e=>{
     if(!document.querySelector(".plot-idea.dragging")) return;
     e.preventDefault();
-    rebuildPlotFromDOM(secWrap);
-    save(); render();
+    commitPlotIdeaOrder(secWrap);
   });
 
   /* ＋ 아이디어 추가 박스 (드래그로 이 섹션에 떨어뜨리는 것도 가능) */
@@ -922,7 +946,7 @@ function plotSectionCard(sec, idx, secWrap){
   addBox.addEventListener("drop", e=>{
     if(!document.querySelector(".plot-idea.dragging")) return;
     e.preventDefault();
-    rebuildPlotFromDOM(secWrap); save(); render();
+    commitPlotIdeaOrder(secWrap);
   });
   card.appendChild(addBox);
 
@@ -1020,8 +1044,13 @@ function rebuildPlotFromDOM(secWrap){
     if(sec) sec.ideaIds=[...body.querySelectorAll(".plot-idea")].map(el=>el.dataset.id);
   });
 }
+function commitPlotIdeaOrder(secWrap){
+  rebuildPlotFromDOM(secWrap);
+  dndDropHandled=true;
+  save(); render();
+}
 /* 플롯용 아이디어 미니 카드 (드래그 가능, × 로 배치 해제) */
-function plotIdeaCard(b){
+function plotIdeaCard(b, secWrap){
   const d=document.createElement("div"); d.className="plot-idea"; d.dataset.id=b.id; d.draggable=false;
   const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
   d.style.borderLeftColor=color;
@@ -1029,11 +1058,15 @@ function plotIdeaCard(b){
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
+    dndDropHandled=false;
     e.dataTransfer.effectAllowed="move";
     e.dataTransfer.setData("text/plain", b.id);
     setTimeout(()=>d.classList.add("dragging"),0);
   });
-  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+  d.addEventListener("dragend", ()=>{
+    d.draggable=false; d.classList.remove("dragging");
+    if(!dndDropHandled && secWrap && secWrap.isConnected) commitPlotIdeaOrder(secWrap);
+  });
   const content=document.createElement("div"); content.className="plot-idea-content";
   const txt=document.createElement("div"); txt.className="plot-idea-text";
   txt.contentEditable="true"; txt.spellcheck=false; txt.dataset.ph="아이디어 내용";
@@ -1260,10 +1293,14 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
     if(!d.draggable) return;
+    dndDropHandled=false;
     e.dataTransfer.effectAllowed="move";
     setTimeout(()=>d.classList.add("dragging"),0);
   });
-  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+  d.addEventListener("dragend", ()=>{
+    d.draggable=false; d.classList.remove("dragging");
+    if(!dndDropHandled && main && main.isConnected) commitWriteBlockOrder(main);
+  });
   /* 플롯/제목 — 헤더 한 줄에 배치. 길면 이 칸만 줄바꿈되어 늘어나고, 핸들·번호·버튼은 위치 고정.
      기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집 */
   const titleEl=document.createElement("div"); titleEl.className="scene-title"; titleEl.contentEditable="false";
@@ -1285,20 +1322,23 @@ function sceneBlockCard(bl, main, liveRefresh, num){
 
   /* 하위 블록(본문/대사) */
   const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
-  (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh)));
+  (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh, main)));
   setupItemDnD(itemsEl, main);
   d.appendChild(itemsEl);
   return d;
 }
 
 /* 하위 블록 하나 (본문 type=text / 대사 type=line) */
-function subBlockEl(bl, it, liveRefresh){
+function subBlockEl(bl, it, liveRefresh, main){
   const d=document.createElement("div"); d.className="sub-block "+(it.type==="line"?"sub-line":"sub-text"); d.dataset.id=it.id; d.draggable=false;
   const handle=document.createElement("span"); handle.className="sub-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동(다른 블록으로도)";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
-  d.addEventListener("dragstart", e=>{ if(!d.draggable) return; e.dataTransfer.effectAllowed="move"; setTimeout(()=>d.classList.add("dragging"),0); });
-  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+  d.addEventListener("dragstart", e=>{ if(!d.draggable) return; dndDropHandled=false; e.dataTransfer.effectAllowed="move"; setTimeout(()=>d.classList.add("dragging"),0); });
+  d.addEventListener("dragend", ()=>{
+    d.draggable=false; d.classList.remove("dragging");
+    if(!dndDropHandled && main && main.isConnected) commitWriteItemOrder(main);
+  });
 
   const del=document.createElement("button"); del.className="sub-del"; del.textContent="✕"; del.title="삭제";
   del.onclick=()=>{ bl.items=(bl.items||[]).filter(x=>x.id!==it.id); save(); render(); };
@@ -1328,7 +1368,7 @@ function setupBlockDnD(list, main){
   list.addEventListener("drop", e=>{
     if(!main.querySelector(".scene-block.dragging")) return;
     e.preventDefault();
-    rebuildWriteFromDOM(main); save(); render();
+    commitWriteBlockOrder(main);
   });
 }
 function rebuildWriteFromDOM(main){
@@ -1340,6 +1380,11 @@ function rebuildWriteFromDOM(main){
   });
   (P.writeDoc.blocks||[]).forEach(b=>{ if(arr.indexOf(b)<0) arr.push(b); });
   P.writeDoc.blocks=arr;
+}
+function commitWriteBlockOrder(main){
+  rebuildWriteFromDOM(main);
+  dndDropHandled=true;
+  save(); render();
 }
 
 /* 하위 블록 드래그앤드롭 (블록 내부 정렬 + 다른 블록으로 이동) */
@@ -1355,7 +1400,7 @@ function setupItemDnD(container, main){
   container.addEventListener("drop", e=>{
     if(!document.querySelector(".sub-block.dragging")) return;
     e.preventDefault();
-    rebuildItemsFromDOM(main); save(); render();
+    commitWriteItemOrder(main);
   });
 }
 function rebuildItemsFromDOM(main){
@@ -1364,6 +1409,11 @@ function rebuildItemsFromDOM(main){
     const b=(P.writeDoc.blocks||[]).find(x=>x.id===cont.dataset.block);
     if(b) b.items=[...cont.querySelectorAll(".sub-block")].map(el=>map[el.dataset.id]).filter(Boolean);
   });
+}
+function commitWriteItemOrder(main){
+  rebuildItemsFromDOM(main);
+  dndDropHandled=true;
+  save(); render();
 }
 
 /* 대사 추가 팝업 */
