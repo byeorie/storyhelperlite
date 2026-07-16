@@ -54,6 +54,7 @@ function fillProject(p){
     ideaBlocks: Array.isArray(p.ideaBlocks)?p.ideaBlocks.map(x=>Object.assign({id:uid(),text:"",tags:[]},x)):b.ideaBlocks,
     tagColors: Object.assign({}, b.tagColors, p.tagColors||{}),
     plotDoc: fillPlotDoc(p.plotDoc),
+    writeDoc: fillWriteDoc(p.writeDoc),
     explore: Object.assign({}, b.explore, p.explore||{}),
   });
 }
@@ -75,7 +76,17 @@ function blankProject(id,name){
     ideaBlocks:[],
     tagColors:{},
     plotDoc:{structure:"", sections:[]},
+    writeDoc:{blocks:[]},
     explore:blankExplore()};
+}
+/* writeDoc 기본값 보정 */
+function fillWriteDoc(wd){
+  const b={blocks:[]};
+  if(!wd||typeof wd!=="object") return b;
+  return {blocks: Array.isArray(wd.blocks) ? wd.blocks.map(x=>({
+    id:x.id||uid(), sectionId:x.sectionId||"", text:x.text||"",
+    lines: Array.isArray(x.lines) ? x.lines.map(l=>({id:l.id||uid(), char:l.char||"", text:l.text||""})) : [],
+  })) : []};
 }
 /* plotDoc 기본값 보정 (예전 데이터 안전 처리) */
 function fillPlotDoc(pd){
@@ -163,6 +174,7 @@ function render(){
   try{
     refreshProjSelect();
     app.innerHTML="";
+    app.classList.toggle("wide", activeTab==="write");
     if(!P) P=currentProject();
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
@@ -173,7 +185,7 @@ function render(){
       return;
     }
     const renderers={idea:rIdea, explore:rExplore, admin:rAdmin, character:rChar, world:rWorld, background:rBg,
-      event:rEvent, plot:rPlot, export:rExport};
+      event:rEvent, plot:rPlot, write:rWrite, export:rExport};
     (renderers[activeTab]||rIdea)();
   }catch(e){
     console.error("렌더링 오류:", e);
@@ -1024,6 +1036,304 @@ function plotIdeaCard(b){
   };
   d.appendChild(handle); d.appendChild(content); d.appendChild(rm);
   return d;
+}
+
+/* ===== ✍️ 글쓰기 ===== */
+let writePreviewOn=false;   // 미리보기 표시 여부
+let writeDlgFor=null;       // 대사 추가 팝업이 열린 블록 id
+
+/* 섹션에 속한 장면 블록(배열 순서 유지) */
+function blocksOfSection(secId){ return (P.writeDoc.blocks||[]).filter(b=>b.sectionId===secId); }
+/* 블록 글자수 (장면 텍스트 + 대사 텍스트) */
+function blockChars(bl){
+  let n=(bl.text||"").length;
+  (bl.lines||[]).forEach(l=>{ n+=(l.text||"").length; });
+  return n;
+}
+/* 섹션별/전체 글자수 */
+function sectionCharCounts(){
+  const bySection={}; let total=0;
+  (P.plotDoc.sections||[]).forEach(s=>{ bySection[s.id]=0; });
+  (P.writeDoc.blocks||[]).forEach(b=>{
+    const n=blockChars(b);
+    if(bySection[b.sectionId]!=null) bySection[b.sectionId]+=n;
+    total+=n;
+  });
+  return {bySection, total};
+}
+
+function rWrite(){
+  if(!P.writeDoc) P.writeDoc={blocks:[]};
+  const pd=P.plotDoc;
+  if(!pd || !pd.structure || !pd.sections.length){
+    const c=document.createElement("div"); c.className="card";
+    c.innerHTML=`<h2>✍️ 글쓰기</h2><p class="hint">먼저 <b>플롯 생성</b>에서 플롯 구조를 만들어 주세요. 플롯 섹션이 글쓰기의 틀이 됩니다.</p>`;
+    app.appendChild(c);
+    return;
+  }
+  /* 구조에 없는(고아) 블록은 첫 섹션으로 회수 */
+  const secIds=new Set(pd.sections.map(s=>s.id));
+  let fixed=false;
+  (P.writeDoc.blocks||[]).forEach(b=>{ if(!secIds.has(b.sectionId)){ b.sectionId=pd.sections[0].id; fixed=true; } });
+  if(fixed) save();
+
+  const layout=document.createElement("div"); layout.className="write-layout"+(writePreviewOn?" preview-on":"");
+  app.appendChild(layout);
+
+  /* 좌: 플롯 목록 + 글자수/% */
+  const left=document.createElement("div"); left.className="write-plotlist";
+  renderLeftInto(left);
+  layout.appendChild(left);
+
+  /* 중앙: 장면 블록 */
+  const main=document.createElement("div"); main.className="write-main";
+  const bar=document.createElement("div"); bar.className="write-toolbar";
+  const prevBtn=document.createElement("button"); prevBtn.className="btn ghost sm";
+  prevBtn.textContent=writePreviewOn?"미리보기 끄기":"📄 미리보기";
+  bar.appendChild(prevBtn);
+  main.appendChild(bar);
+
+  /* 우: 미리보기 (토글 시) */
+  let right=null;
+  if(writePreviewOn){ right=document.createElement("div"); right.className="write-preview"; }
+
+  function liveRefresh(){
+    renderLeftInto(left);
+    if(writePreviewOn && right) renderPreviewInto(right);
+  }
+  prevBtn.onclick=()=>{ writePreviewOn=!writePreviewOn; render(); };
+
+  pd.sections.forEach((sec,i)=>{
+    const group=document.createElement("div"); group.className="write-group"; group.id="wsec-"+sec.id;
+    const div=document.createElement("div"); div.className="write-divider";
+    div.innerHTML=`<span class="wd-num">${i+1}</span><span class="wd-name">${esc(sec.name)}</span>`;
+    group.appendChild(div);
+    const list=document.createElement("div"); list.className="write-blocklist"; list.dataset.sec=sec.id;
+    blocksOfSection(sec.id).forEach(bl=>list.appendChild(sceneBlockCard(bl, main, liveRefresh)));
+    group.appendChild(list);
+    setupBlockDnD(list, main);
+    const addBtn=document.createElement("button"); addBtn.className="write-add-block"; addBtn.textContent="＋ 장면 블록 추가";
+    addBtn.onclick=()=>{ P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, text:"", lines:[]}); save(); render(); };
+    group.appendChild(addBtn);
+    main.appendChild(group);
+  });
+  layout.appendChild(main);
+
+  if(writePreviewOn){
+    renderPreviewInto(right);
+    layout.appendChild(right);
+  }
+
+  /* 대사 추가 팝업 */
+  if(writeDlgFor){
+    const bl=(P.writeDoc.blocks||[]).find(b=>b.id===writeDlgFor);
+    if(bl) app.appendChild(dialogueModal(bl));
+    else writeDlgFor=null;
+  }
+}
+
+/* 좌측 플롯 목록 렌더 (글자수/% 실시간 갱신용으로 분리) */
+function renderLeftInto(left){
+  left.innerHTML="";
+  const counts=sectionCharCounts();
+  const total=counts.total;
+  const head=document.createElement("div"); head.className="wpl-head";
+  head.innerHTML=`<span>플롯 단계</span><span class="wpl-total">${total}자</span>`;
+  left.appendChild(head);
+  (P.plotDoc.sections||[]).forEach((sec,i)=>{
+    const cc=counts.bySection[sec.id]||0;
+    const pct= total ? Math.round(cc/total*100) : 0;
+    const item=document.createElement("div"); item.className="wpl-item";
+    item.innerHTML=`<div class="wpl-name">${i+1}. ${esc(sec.name)}</div>
+      <div class="wpl-meta"><span>${cc}자</span><span class="wpl-pct">${pct}%</span></div>
+      <div class="wpl-bar"><div class="wpl-bar-fill" style="width:${pct}%"></div></div>`;
+    item.onclick=()=>{ const el=document.getElementById("wsec-"+sec.id); if(el) el.scrollIntoView({behavior:"smooth", block:"start"}); };
+    left.appendChild(item);
+  });
+}
+
+/* 장면 블록 카드 */
+function sceneBlockCard(bl, main, liveRefresh){
+  const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.draggable=false;
+  const head=document.createElement("div"); head.className="scene-head";
+  const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동";
+  handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
+  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
+  d.addEventListener("dragstart", e=>{
+    if(!d.draggable) return;
+    e.dataTransfer.effectAllowed="move";
+    setTimeout(()=>d.classList.add("dragging"),0);
+  });
+  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+  const spacer=document.createElement("span"); spacer.className="scene-spacer";
+  const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn"; dlgBtn.textContent="💬 대사 추가";
+  dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
+  const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.textContent="✕"; delBtn.title="블록 삭제";
+  delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
+  head.append(handle, spacer, dlgBtn, delBtn);
+  d.appendChild(head);
+
+  const ta=document.createElement("textarea"); ta.className="scene-text"; ta.placeholder="이 장면의 내용을 써보세요"; ta.value=bl.text||"";
+  ta.oninput=()=>{ bl.text=ta.value; save(); liveRefresh&&liveRefresh(); };
+  d.appendChild(ta);
+
+  if((bl.lines||[]).length){
+    const linesEl=document.createElement("div"); linesEl.className="dlg-lines"; linesEl.dataset.block=bl.id;
+    bl.lines.forEach(l=>linesEl.appendChild(lineRow(bl, l)));
+    setupLineDnD(linesEl, main);
+    d.appendChild(linesEl);
+  }
+  return d;
+}
+
+/* 대사 한 줄 */
+function lineRow(bl, l){
+  const d=document.createElement("div"); d.className="dlg-line"; d.dataset.id=l.id; d.draggable=false;
+  const handle=document.createElement("span"); handle.className="dlg-handle"; handle.textContent="⠿"; handle.title="드래그해서 순서 변경";
+  handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
+  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
+  d.addEventListener("dragstart", e=>{ e.dataTransfer.effectAllowed="move"; setTimeout(()=>d.classList.add("dragging"),0); });
+  d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
+  const who=document.createElement("span"); who.className="dlg-who"; who.textContent=l.char||"(미지정)";
+  const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=l.text;
+  const del=document.createElement("button"); del.className="dlg-del"; del.textContent="✕"; del.title="대사 삭제";
+  del.onclick=()=>{ bl.lines=(bl.lines||[]).filter(x=>x.id!==l.id); save(); render(); };
+  d.append(handle, who, tx, del);
+  return d;
+}
+
+/* 장면 블록 드래그앤드롭 (섹션 간 이동/정렬) */
+function setupBlockDnD(list, main){
+  list.addEventListener("dragover", e=>{
+    const dragging=main.querySelector(".scene-block.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const after=getDragAfterEl(list, e.clientY, ".scene-block:not(.dragging)");
+    if(after==null) list.appendChild(dragging);
+    else list.insertBefore(dragging, after);
+  });
+  list.addEventListener("drop", e=>{
+    if(!main.querySelector(".scene-block.dragging")) return;
+    e.preventDefault();
+    rebuildWriteFromDOM(main); save(); render();
+  });
+}
+function rebuildWriteFromDOM(main){
+  const map={}; (P.writeDoc.blocks||[]).forEach(b=>map[b.id]=b);
+  const arr=[];
+  main.querySelectorAll(".write-blocklist").forEach(list=>{
+    const secId=list.dataset.sec;
+    list.querySelectorAll(".scene-block").forEach(el=>{ const b=map[el.dataset.id]; if(b){ b.sectionId=secId; arr.push(b); } });
+  });
+  (P.writeDoc.blocks||[]).forEach(b=>{ if(arr.indexOf(b)<0) arr.push(b); });
+  P.writeDoc.blocks=arr;
+}
+
+/* 대사 줄 드래그앤드롭 */
+function setupLineDnD(linesEl, main){
+  linesEl.addEventListener("dragover", e=>{
+    const dragging=document.querySelector(".dlg-line.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const after=getDragAfterEl(linesEl, e.clientY, ".dlg-line:not(.dragging)");
+    if(after==null) linesEl.appendChild(dragging);
+    else linesEl.insertBefore(dragging, after);
+  });
+  linesEl.addEventListener("drop", e=>{
+    if(!document.querySelector(".dlg-line.dragging")) return;
+    e.preventDefault();
+    rebuildLinesFromDOM(main); save(); render();
+  });
+}
+function rebuildLinesFromDOM(main){
+  const map={}; (P.writeDoc.blocks||[]).forEach(b=>(b.lines||[]).forEach(l=>map[l.id]=l));
+  main.querySelectorAll(".dlg-lines").forEach(cont=>{
+    const b=(P.writeDoc.blocks||[]).find(x=>x.id===cont.dataset.block);
+    if(b) b.lines=[...cont.querySelectorAll(".dlg-line")].map(el=>map[el.dataset.id]).filter(Boolean);
+  });
+}
+
+/* 대사 추가 팝업 */
+function dialogueModal(bl){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay){ writeDlgFor=null; render(); } };
+  const box=document.createElement("div"); box.className="plot-modal dlg-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="대사 추가";
+  const closeBtn=iconBtn("✕","닫기",()=>{ writeDlgFor=null; render(); });
+  top.append(ttl, closeBtn);
+  box.appendChild(top);
+
+  const chars=(P.characters||[]).filter(c=>c.name && c.name.trim());
+  const lbl1=document.createElement("label"); lbl1.textContent="캐릭터";
+  box.appendChild(lbl1);
+  let charInput;
+  if(chars.length){
+    charInput=document.createElement("select");
+    charInput.innerHTML=`<option value="">(미지정)</option>`+chars.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}${c.role?` (${esc(c.role)})`:""}</option>`).join("");
+  }else{
+    charInput=document.createElement("input"); charInput.type="text"; charInput.placeholder="캐릭터 이름 (캐릭터 설정에서 미리 등록하면 목록으로 선택됩니다)";
+  }
+  box.appendChild(charInput);
+
+  const lbl2=document.createElement("label"); lbl2.textContent="대사"; box.appendChild(lbl2);
+  const ta=document.createElement("textarea"); ta.className="dlg-input-text"; ta.placeholder="대사를 입력하세요"; box.appendChild(ta);
+
+  const actions=document.createElement("div"); actions.className="dlg-modal-actions";
+  const addBtn=document.createElement("button"); addBtn.className="btn"; addBtn.textContent="추가";
+  const addMore=document.createElement("button"); addMore.className="btn ghost"; addMore.textContent="추가하고 계속";
+  function doAdd(keepOpen){
+    const text=ta.value.trim(); if(!text){ ta.focus(); return; }
+    const char=charInput.value.trim();
+    bl.lines=bl.lines||[]; bl.lines.push({id:uid(), char, text});
+    save();
+    if(keepOpen){ ta.value=""; ta.focus(); /* 팝업 유지 */ render(); setTimeout(()=>{ const m=document.querySelector(".dlg-modal .dlg-input-text"); if(m) m.focus(); },0); }
+    else { writeDlgFor=null; render(); }
+  }
+  addBtn.onclick=()=>doAdd(false);
+  addMore.onclick=()=>doAdd(true);
+  actions.append(addMore, addBtn);
+  box.appendChild(actions);
+
+  overlay.appendChild(box);
+  setTimeout(()=>{ ta.focus(); },0);
+  return overlay;
+}
+
+/* 미리보기 (A4 페이지, 가로선으로 페이지 구분) */
+function renderPreviewInto(right){
+  right.innerHTML="";
+  const page=document.createElement("div"); page.className="wp-page";
+  const inner=document.createElement("div"); inner.className="wp-inner";
+  let any=false;
+  (P.plotDoc.sections||[]).forEach(sec=>{
+    blocksOfSection(sec.id).forEach(bl=>{
+      const blk=document.createElement("div"); blk.className="wp-block";
+      if(bl.text){ const p=document.createElement("p"); p.className="wp-text"; p.textContent=bl.text; blk.appendChild(p); any=true; }
+      (bl.lines||[]).forEach(l=>{
+        const dp=document.createElement("p"); dp.className="wp-line";
+        dp.innerHTML=(l.char?`<b>${esc(l.char)}</b>: `:"")+esc(l.text);
+        blk.appendChild(dp); any=true;
+      });
+      if(blk.children.length) inner.appendChild(blk);
+    });
+  });
+  if(!any){ const e=document.createElement("p"); e.className="hint"; e.textContent="작성한 내용이 여기에 문서 형태로 표시됩니다."; inner.appendChild(e); }
+  page.appendChild(inner);
+  right.appendChild(page);
+  /* 페이지 구분선 */
+  requestAnimationFrame(()=>paginatePreview(right));
+}
+function paginatePreview(right){
+  const inner=right.querySelector(".wp-inner"); if(!inner) return;
+  inner.querySelectorAll(".wp-pagebreak").forEach(x=>x.remove());
+  const w=inner.clientWidth; if(!w) return;
+  const pageH=w*1.414; // A4 세로 비율(297/210)
+  const totalH=inner.scrollHeight;
+  for(let y=pageH; y<totalH; y+=pageH){
+    const hr=document.createElement("div"); hr.className="wp-pagebreak"; hr.style.top=y+"px";
+    inner.appendChild(hr);
+  }
 }
 
 /* 내보내기 */
