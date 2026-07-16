@@ -1137,7 +1137,7 @@ function rWrite(){
     div.innerHTML=`<span class="wd-num">${i+1}</span><span class="wd-name">${esc(sec.name)}</span><span class="wd-spacer"></span>`;
     const loadBtn=document.createElement("button"); loadBtn.className="wd-icon"; loadBtn.textContent="📥"; loadBtn.title="아이디어 불러오기";
     loadBtn.onclick=()=>loadSectionIdeas(sec);
-    const createBtn=document.createElement("button"); createBtn.className="wd-icon"; createBtn.textContent="＋"; createBtn.title="아이디어 생성";
+    const createBtn=document.createElement("button"); createBtn.className="wd-icon"; createBtn.textContent="＋"; createBtn.title="블럭 생성";
     createBtn.onclick=()=>{ const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]}; P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render(); };
     div.append(loadBtn, createBtn);
     group.appendChild(div);
