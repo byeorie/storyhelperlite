@@ -190,8 +190,8 @@ textarea{resize:vertical;min-height:70px}
 
 /* ===== ✍️ 글쓰기 ===== */
 #app.wide{max-width:none}
-.write-layout{display:flex;gap:14px;align-items:flex-start}
-.write-plotlist{flex:0 0 19%;min-width:150px;position:sticky;top:70px;
+.write-layout{display:flex;gap:14px;align-items:flex-start;max-width:1120px;margin:0 auto}
+.write-plotlist{flex:0 0 200px;min-width:160px;position:sticky;top:70px;
   background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;
   max-height:calc(100vh - 90px);overflow-y:auto}
 .wpl-head{display:flex;justify-content:space-between;align-items:baseline;
@@ -204,8 +204,12 @@ textarea{resize:vertical;min-height:70px}
 .wpl-pct{font-weight:700;color:var(--accent)}
 .wpl-bar{height:4px;background:var(--line);border-radius:999px;margin-top:5px;overflow:hidden}
 .wpl-bar-fill{height:100%;background:var(--accent);border-radius:999px;transition:width .2s}
+.wpl-blocks{margin:6px 0 2px;padding-left:6px;border-left:2px solid var(--accent2);display:flex;flex-direction:column;gap:2px}
+.wpl-block{font-size:11px;color:var(--muted);line-height:1.5;cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 4px;border-radius:4px}
+.wpl-block:hover{background:var(--bg);color:var(--ink)}
 
-.write-main{flex:1;min-width:0}
+.write-main{flex:1 1 auto;min-width:0;max-width:800px}
 .write-toolbar{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px}
 .write-group{margin-bottom:18px}
 .write-divider{display:flex;align-items:center;gap:8px;margin:6px 0 10px;
@@ -256,7 +260,7 @@ textarea{resize:vertical;min-height:70px}
 .dlg-modal .dlg-input-text{width:100%;min-height:80px;resize:vertical}
 .dlg-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 /* 미리보기 */
-.write-preview{flex:0 0 44%;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow-y:auto}
+.write-preview{flex:0 0 33.33%;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow-y:auto}
 .write-layout.preview-on .write-main{flex:1 1 auto}
 .wp-page{background:#e9e6df;padding:14px;border-radius:10px}
 .wp-inner{position:relative;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.1);

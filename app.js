@@ -1172,13 +1172,31 @@ function renderLeftInto(left){
       <div class="wpl-meta"><span>${cc}자</span><span class="wpl-pct">${pct}%</span></div>
       <div class="wpl-bar"><div class="wpl-bar-fill" style="width:${pct}%"></div></div>`;
     item.onclick=()=>{ const el=document.getElementById("wsec-"+sec.id); if(el) el.scrollIntoView({behavior:"smooth", block:"start"}); };
+    /* 섹션에 속한 장면 블록(아이디어)을 순서대로 표시 */
+    const blocks=blocksOfSection(sec.id);
+    if(blocks.length){
+      const bl=document.createElement("div"); bl.className="wpl-blocks";
+      blocks.forEach((b,bi)=>{
+        const idea=b.fromIdea?findIdea(b.fromIdea):null;
+        const label=idea? (idea.text||"(빈 아이디어)") : (blockFirstText(b)||"(빈 블록)");
+        const li=document.createElement("div"); li.className="wpl-block"; li.textContent=`${bi+1}. ${label}`; li.title=label;
+        li.onclick=(e)=>{ e.stopPropagation(); const el=document.getElementById("wblk-"+b.id); if(el) el.scrollIntoView({behavior:"smooth", block:"center"}); };
+        bl.appendChild(li);
+      });
+      item.appendChild(bl);
+    }
     left.appendChild(item);
   });
+}
+/* 블록의 첫 텍스트(본문/대사) 미리보기용 */
+function blockFirstText(bl){
+  const it=(bl.items||[]).find(x=>(x.text||"").trim());
+  return it? it.text.trim() : "";
 }
 
 /* 장면 블록 카드 */
 function sceneBlockCard(bl, main, liveRefresh){
-  const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.draggable=false;
+  const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.id="wblk-"+bl.id; d.draggable=false;
   const head=document.createElement("div"); head.className="scene-head";
   const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 블록 이동";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
