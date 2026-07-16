@@ -172,14 +172,16 @@ textarea{resize:vertical;min-height:70px}
   background:#faf8f4;color:var(--muted);font-size:13px;font-weight:600;transition:border-color .12s,color .12s}
 .plot-add-box:hover,.plot-add-box.drop-hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
 .plot-add-plus{font-size:16px;line-height:1}
-/* 아이디어 선택 피커 */
-.plot-picker{margin-top:10px;border:1px solid var(--accent2);border-radius:10px;
-  padding:10px 12px;background:#fbf8f3}
-.plot-picker-top{display:flex;align-items:center;margin-bottom:8px}
-.plot-picker-title{flex:1;font-size:13px;font-weight:700;color:var(--accent)}
-.plot-picker-filter{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;
-  padding-bottom:10px;border-bottom:1px dashed var(--line)}
-.plot-picker-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}
+/* 아이디어 선택 팝업 */
+.plot-modal-overlay{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.4);
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.plot-modal{background:var(--card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.25);
+  width:520px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;padding:16px 18px}
+.plot-picker-top{display:flex;align-items:center;margin-bottom:12px}
+.plot-picker-title{flex:1;font-size:15px;font-weight:700;color:var(--accent)}
+.plot-picker-filter{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;
+  padding-bottom:12px;border-bottom:1px dashed var(--line)}
+.plot-picker-list{display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1}
 .plot-pick-item{display:flex;align-items:center;flex-wrap:wrap;gap:6px;background:#fff;
   border:1px solid var(--line);border-left:4px solid var(--line);border-radius:7px;
   padding:7px 10px;cursor:pointer;transition:background .1s,border-color .1s}

@@ -799,6 +799,13 @@ function rPlot(){
     P.plotDoc.sections.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
     save(); render();
   });
+
+  /* 아이디어 선택 팝업 (열려 있을 때만) */
+  if(plotPickerFor){
+    const sec=P.plotDoc.sections.find(s=>s.id===plotPickerFor);
+    if(sec) app.appendChild(plotPickerModal(sec));
+    else plotPickerFor=null;
+  }
 }
 
 /* 섹션 카드 하나 렌더 */
@@ -888,9 +895,6 @@ function plotSectionCard(sec, idx, secWrap){
   });
   card.appendChild(addBox);
 
-  /* 피커 (열려 있을 때만) */
-  if(plotPickerFor===sec.id) card.appendChild(plotPicker(sec));
-
   return card;
 }
 
@@ -906,15 +910,17 @@ function togglePicker(sec){
   else { plotPickerFor=sec.id; plotPickerFilter=[]; }
   render();
 }
-/* 아이디어 선택 피커 (미배치 아이디어 + 태그 필터) */
-function plotPicker(sec){
-  const box=document.createElement("div"); box.className="plot-picker";
+/* 아이디어 선택 팝업 (미배치 아이디어 + 태그 필터) */
+function plotPickerModal(sec){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay){ plotPickerFor=null; render(); } };
+  const box=document.createElement("div"); box.className="plot-modal";
   const avail=unplacedIdeas();
   const tags=[...new Set(avail.flatMap(b=>b.tags||[]))];
   plotPickerFilter=plotPickerFilter.filter(t=>tags.includes(t));
 
   const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="아이디어 선택";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`아이디어 선택 · ${sec.name}`;
   const closeBtn=iconBtn("✕","닫기",()=>{ plotPickerFor=null; render(); });
   top.append(ttl, closeBtn);
   box.appendChild(top);
@@ -962,7 +968,8 @@ function plotPicker(sec){
     list.appendChild(it);
   });
   box.appendChild(list);
-  return box;
+  overlay.appendChild(box);
+  return overlay;
 }
 /* 삽입 위치 계산 (selector로 대상 지정) */
 function getDragAfterEl(container, y, selector){
