@@ -2,6 +2,18 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-16 (36차) · 본문 블록 여백 제거(자동높이) + 제목 줄바꿈 지원
+- 요청 ①: 본문 하위블록 아래 빈 여백이 안 없어짐 → 원인은 textarea `min-height:44px`+`resize:vertical`. 자동 높이 조절로 교체
+- 요청 ②: 플롯/제목이 블록 폭보다 길면 한 줄 내려가도록(줄바꿈). 단, 제목 칸만 늘어나고 핸들·번호·버튼 위치는 고정
+- **app.js** 수정 —
+  - `autoGrowTextarea(ta)` 추가 — `scrollHeight`에 맞춰 실시간으로 높이 조절. `sub-textarea`에 `rows=1` 부여, `oninput`/최초 렌더 후(`requestAnimationFrame`) 호출 → 내용 길이만큼만 높이 차지, 빈 여백·리사이즈 손잡이 제거
+  - **제목을 `<input>`→`contenteditable div`로 변경**: 길면 자연스럽게 줄바꿈됨(`white-space:pre-wrap`). 기본 `contentEditable=false`(잠금), `✎ 수정` 클릭 시 `true`+포커스+전체선택(`selectAllEditable` 신설), blur 시 다시 잠금. 새 블록 생성 시에도 동일하게 편집 상태로 시작
+- **style.css** 수정 —
+  - `.scene-head`를 `align-items:flex-start`로 바꾸고 핸들/번호/아이콘버튼에 `margin-top`을 줘서 **제목이 여러 줄이 되어도 버튼들은 첫 줄 위치에 고정**
+  - `.scene-title`을 div 전용 스타일로 정리(줄바꿈, `:empty:before`로 placeholder, `[contenteditable=true]`로 편집 상태 표시) — 더 이상 전역 `input[type=text]` 규칙과 충돌하지 않음
+  - `.sub-textarea` `resize:none`+`overflow:hidden`+자동높이로 변경, 본문/대사 폰트 10→**11px**로 재조정(사용자 요청)
+- 검증: jsdom — 제목이 DIV로 렌더, 기본 잠금(false)→✎ 클릭 후 편집(true), 텍스트 유지, 본문 textarea rows=1·값 정상 확인
+
 ## 2026-07-16 (35차) · 아이디어 제목 필드 스타일 + 블록 전체 연속 번호
 - 요청: ③은 바깥 블록이 아니라 안쪽 "아이디어/제목" 필드 대상 — 폰트 유지(13px/800)하고 배경을 살짝 어둡게 해 아이디어 블록임을 명확히. + 큰 블록마다 이동 핸들 옆에 순서 번호(섹션 구분 없이 전체 연속)
 - **app.js** 수정 — `sceneBlockCard(bl, main, liveRefresh, num)`에 번호 배지(`.scene-num`)를 핸들 옆에 추가. `rWrite`에서 `writeBlockNo` 전역 카운터로 **섹션 구분 없이 1,2,3… 연속 번호** 부여(재정렬 시 자동 갱신)

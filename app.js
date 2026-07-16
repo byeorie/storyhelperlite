@@ -1150,6 +1150,7 @@ function rWrite(){
   layout.appendChild(main);
   renderPreviewInto(right);
   layout.appendChild(right);
+  requestAnimationFrame(()=>{ main.querySelectorAll(".sub-textarea").forEach(autoGrowTextarea); });
 
   /* 대사 추가 팝업 */
   if(writeDlgFor){
@@ -1232,6 +1233,19 @@ function blockFirstText(bl){
   return it? it.text.trim() : "";
 }
 
+/* contenteditable 요소의 내용을 전체 선택 */
+function selectAllEditable(el){
+  try{
+    const r=document.createRange(); r.selectNodeContents(el);
+    const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }catch(e){}
+}
+/* textarea 높이를 내용에 맞춰 자동 조절 (빈 여백 제거) */
+function autoGrowTextarea(ta){
+  ta.style.height="auto";
+  ta.style.height=ta.scrollHeight+"px";
+}
+
 /* 장면 블록 카드 */
 function sceneBlockCard(bl, main, liveRefresh, num){
   const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.id="wblk-"+bl.id; d.draggable=false;
@@ -1248,14 +1262,15 @@ function sceneBlockCard(bl, main, liveRefresh, num){
     setTimeout(()=>d.classList.add("dragging"),0);
   });
   d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
-  /* 플롯/제목 — 헤더 한 줄에 배치. 기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집 */
-  const titleEl=document.createElement("input"); titleEl.className="scene-title"; titleEl.type="text"; titleEl.readOnly=true;
-  titleEl.placeholder="플롯 / 제목 (✎ 수정 버튼으로 편집)";
-  titleEl.value=bl.title||"";
-  titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
-  titleEl.onblur=()=>{ titleEl.readOnly=true; };
+  /* 플롯/제목 — 헤더 한 줄에 배치. 길면 이 칸만 줄바꿈되어 늘어나고, 핸들·번호·버튼은 위치 고정.
+     기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집 */
+  const titleEl=document.createElement("div"); titleEl.className="scene-title"; titleEl.contentEditable="false";
+  titleEl.spellcheck=false; titleEl.dataset.ph="플롯 / 제목 (✎ 수정 버튼으로 편집)";
+  titleEl.textContent=bl.title||"";
+  titleEl.oninput=()=>{ bl.title=titleEl.textContent; save(); liveRefresh&&liveRefresh(); };
+  titleEl.addEventListener("blur", ()=>{ titleEl.contentEditable="false"; });
   const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn scene-hicon"; editBtn.textContent="✎"; editBtn.title="수정";
-  editBtn.onclick=()=>{ titleEl.readOnly=false; titleEl.focus(); try{ titleEl.select(); }catch(e){} };
+  editBtn.onclick=()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); };
   const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn scene-hicon"; addTextBtn.textContent="＋"; addTextBtn.title="본문 추가";
   addTextBtn.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
   const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn scene-hicon"; dlgBtn.textContent="💬"; dlgBtn.title="대사 추가";
@@ -1264,7 +1279,7 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
   head.append(handle, numEl, titleEl, editBtn, addTextBtn, dlgBtn, delBtn);
   d.appendChild(head);
-  if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.readOnly=false; titleEl.focus(); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
+  if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
 
   /* 하위 블록(본문/대사) */
   const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
@@ -1291,8 +1306,8 @@ function subBlockEl(bl, it, liveRefresh){
     const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=it.text;
     d.append(handle, who, tx, del);
   }else{
-    const ta=document.createElement("textarea"); ta.className="sub-textarea"; ta.placeholder="본문을 써보세요"; ta.value=it.text||"";
-    ta.oninput=()=>{ it.text=ta.value; save(); liveRefresh&&liveRefresh(); };
+    const ta=document.createElement("textarea"); ta.className="sub-textarea"; ta.placeholder="본문을 써보세요"; ta.rows=1; ta.value=it.text||"";
+    ta.oninput=()=>{ it.text=ta.value; save(); autoGrowTextarea(ta); liveRefresh&&liveRefresh(); };
     d.append(handle, ta, del);
   }
   return d;
