@@ -84,7 +84,7 @@ function fillWriteDoc(wd){
   const b={blocks:[]};
   if(!wd||typeof wd!=="object") return b;
   return {blocks: Array.isArray(wd.blocks) ? wd.blocks.map(x=>({
-    id:x.id||uid(), sectionId:x.sectionId||"", text:x.text||"",
+    id:x.id||uid(), sectionId:x.sectionId||"", text:x.text||"", fromIdea:x.fromIdea||"",
     lines: Array.isArray(x.lines) ? x.lines.map(l=>({id:l.id||uid(), char:l.char||"", text:l.text||""})) : [],
   })) : []};
 }
@@ -1088,9 +1088,13 @@ function rWrite(){
   /* 중앙: 장면 블록 */
   const main=document.createElement("div"); main.className="write-main";
   const bar=document.createElement("div"); bar.className="write-toolbar";
+  const loadBtn=document.createElement("button"); loadBtn.className="btn ghost sm";
+  loadBtn.textContent="📥 플롯 불러오기";
+  loadBtn.title="플롯 생성에서 각 섹션에 배치한 아이디어를 장면 블록으로 불러옵니다";
+  loadBtn.onclick=loadPlotIntoWrite;
   const prevBtn=document.createElement("button"); prevBtn.className="btn ghost sm";
   prevBtn.textContent=writePreviewOn?"미리보기 끄기":"📄 미리보기";
-  bar.appendChild(prevBtn);
+  bar.append(loadBtn, prevBtn);
   main.appendChild(bar);
 
   /* 우: 미리보기 (토글 시) */
@@ -1130,6 +1134,22 @@ function rWrite(){
     if(bl) app.appendChild(dialogueModal(bl));
     else writeDlgFor=null;
   }
+}
+
+/* 플롯 생성에서 배치한 아이디어를 장면 블록으로 불러오기 (이미 불러온 아이디어는 건너뜀) */
+function loadPlotIntoWrite(){
+  const existing=new Set((P.writeDoc.blocks||[]).map(b=>b.fromIdea).filter(Boolean));
+  let added=0;
+  (P.plotDoc.sections||[]).forEach(sec=>{
+    (sec.ideaIds||[]).forEach(id=>{
+      if(existing.has(id)) return;
+      const idea=findIdea(id);
+      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, text:"", fromIdea:id, lines:[]});
+      existing.add(id); added++;
+    });
+  });
+  if(added){ save(); render(); alert(`플롯에서 ${added}개의 아이디어를 장면 블록으로 불러왔습니다.`); }
+  else alert("새로 불러올 아이디어가 없습니다.\n(플롯 생성 탭에서 각 섹션에 아이디어를 배치해 주세요.)");
 }
 
 /* 좌측 플롯 목록 렌더 (글자수/% 실시간 갱신용으로 분리) */
@@ -1172,6 +1192,20 @@ function sceneBlockCard(bl, main, liveRefresh){
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
   head.append(handle, spacer, dlgBtn, delBtn);
   d.appendChild(head);
+
+  /* 플롯에서 불러온 블록이면 원본 아이디어를 참고 라벨로 표시 */
+  if(bl.fromIdea){
+    const idea=findIdea(bl.fromIdea);
+    const ref=document.createElement("div"); ref.className="scene-ref";
+    if(idea){
+      const color=(idea.tags&&idea.tags.length)?getTagColor(idea.tags[0]):"var(--line)";
+      ref.style.borderLeftColor=color;
+      ref.textContent="💡 "+(idea.text||"(빈 아이디어)");
+    }else{
+      ref.classList.add("gone"); ref.textContent="💡 (원본 아이디어가 삭제됨)";
+    }
+    d.appendChild(ref);
+  }
 
   const ta=document.createElement("textarea"); ta.className="scene-text"; ta.placeholder="이 장면의 내용을 써보세요"; ta.value=bl.text||"";
   ta.oninput=()=>{ bl.text=ta.value; save(); liveRefresh&&liveRefresh(); };

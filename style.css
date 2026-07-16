@@ -206,7 +206,7 @@ textarea{resize:vertical;min-height:70px}
 .wpl-bar-fill{height:100%;background:var(--accent);border-radius:999px;transition:width .2s}
 
 .write-main{flex:1;min-width:0}
-.write-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
+.write-toolbar{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px}
 .write-group{margin-bottom:18px}
 .write-divider{display:flex;align-items:center;gap:8px;margin:6px 0 10px;
   padding-bottom:6px;border-bottom:2px solid var(--accent2)}
@@ -225,6 +225,9 @@ textarea{resize:vertical;min-height:70px}
 .scene-dlg-btn:hover{filter:brightness(.96)}
 .scene-del-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px}
 .scene-del-btn:hover{color:#b3503a}
+.scene-ref{font-size:12px;color:var(--muted);background:#faf8f4;border-left:3px solid var(--line);
+  border-radius:4px;padding:5px 9px;margin-bottom:7px;white-space:pre-wrap;word-break:break-word}
+.scene-ref.gone{font-style:italic;opacity:.7}
 .scene-text{width:100%;min-height:60px;border:1px solid var(--line);border-radius:8px;
   padding:8px 10px;font:inherit;resize:vertical;background:#fff;color:var(--ink)}
 /* 대사 블록 */
