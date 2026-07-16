@@ -747,6 +747,8 @@ function setPlotIdeaText(id, text){
   if(!P.plotDoc.ideaOverrides) P.plotDoc.ideaOverrides={};
   P.plotDoc.ideaOverrides[id]=text; save();
 }
+/* 플롯 단계(섹션)별 고정 색상 — 같은 섹션이면 항상 같은 색 (id 해시 기반) */
+function getSectionColor(secId){ return TAG_PALETTE[hashStr(secId)%TAG_PALETTE.length]; }
 /* 어느 섹션에도 배치되지 않은 아이디어 목록 */
 function unplacedIdeas(){
   const placed=new Set();
@@ -1249,8 +1251,8 @@ function autoGrowTextarea(ta){
 /* 장면 블록 카드 */
 function sceneBlockCard(bl, main, liveRefresh, num){
   const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.id="wblk-"+bl.id; d.draggable=false;
-  /* 블록 왼쪽 컬러 바 — 불러온 아이디어면 태그 색상, 아니면 기본색 */
-  if(bl.fromIdea){ const idea=findIdea(bl.fromIdea); if(idea && idea.tags && idea.tags.length) d.style.borderLeftColor=getTagColor(idea.tags[0]); }
+  /* 블록 왼쪽 컬러 바 — 같은 플롯 단계(섹션)에 속한 블록은 모두 같은 색 */
+  d.style.borderLeftColor=getSectionColor(bl.sectionId);
   const head=document.createElement("div"); head.className="scene-head";
   const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 블록 이동";
   const numEl=document.createElement("span"); numEl.className="scene-num"; numEl.textContent=(num!=null?num:"");
