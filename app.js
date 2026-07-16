@@ -1251,7 +1251,7 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   const spacer=document.createElement("span"); spacer.className="scene-spacer";
   /* 아이디어/제목 — 기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집. 아이디어 수집·플롯 원본과 독립 */
   const titleEl=document.createElement("input"); titleEl.className="scene-title"; titleEl.type="text"; titleEl.readOnly=true;
-  titleEl.placeholder="아이디어 / 제목 (✎ 수정 버튼으로 편집)";
+  titleEl.placeholder="플롯 / 제목 (✎ 수정 버튼으로 편집)";
   titleEl.value=bl.title||"";
   titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
   titleEl.onblur=()=>{ titleEl.readOnly=true; };
