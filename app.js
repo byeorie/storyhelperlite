@@ -1045,7 +1045,6 @@ function plotIdeaCard(b){
 }
 
 /* ===== ✍️ 글쓰기 ===== */
-let writePreviewOn=false;   // 미리보기 표시 여부
 let writeDlgFor=null;       // 대사 추가 팝업이 열린 블록 id
 
 /* 섹션에 속한 장면 블록(배열 순서 유지) */
@@ -1082,7 +1081,7 @@ function rWrite(){
   (P.writeDoc.blocks||[]).forEach(b=>{ if(!secIds.has(b.sectionId)){ b.sectionId=pd.sections[0].id; fixed=true; } });
   if(fixed) save();
 
-  const layout=document.createElement("div"); layout.className="write-layout"+(writePreviewOn?" preview-on":"");
+  const layout=document.createElement("div"); layout.className="write-layout";
   app.appendChild(layout);
 
   /* 좌: 플롯 목록 + 글자수/% */
@@ -1097,20 +1096,16 @@ function rWrite(){
   loadBtn.textContent="📥 플롯 불러오기";
   loadBtn.title="플롯 생성에서 각 섹션에 배치한 아이디어를 장면 블록으로 불러옵니다";
   loadBtn.onclick=loadPlotIntoWrite;
-  const prevBtn=document.createElement("button"); prevBtn.className="btn ghost sm";
-  prevBtn.textContent=writePreviewOn?"미리보기 끄기":"📄 미리보기";
-  bar.append(loadBtn, prevBtn);
+  bar.append(loadBtn);
   main.appendChild(bar);
 
-  /* 우: 미리보기 (토글 시) */
-  let right=null;
-  if(writePreviewOn){ right=document.createElement("div"); right.className="write-preview"; }
+  /* 우: 미리보기 (넓은 화면에서 상시 표시, 좁으면 CSS로 숨김) */
+  const right=document.createElement("div"); right.className="write-preview";
 
   function liveRefresh(){
     renderLeftInto(left);
-    if(writePreviewOn && right) renderPreviewInto(right);
+    renderPreviewInto(right);
   }
-  prevBtn.onclick=()=>{ writePreviewOn=!writePreviewOn; render(); };
 
   pd.sections.forEach((sec,i)=>{
     const group=document.createElement("div"); group.className="write-group"; group.id="wsec-"+sec.id;
@@ -1127,11 +1122,8 @@ function rWrite(){
     main.appendChild(group);
   });
   layout.appendChild(main);
-
-  if(writePreviewOn){
-    renderPreviewInto(right);
-    layout.appendChild(right);
-  }
+  renderPreviewInto(right);
+  layout.appendChild(right);
 
   /* 대사 추가 팝업 */
   if(writeDlgFor){

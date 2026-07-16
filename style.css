@@ -190,7 +190,7 @@ textarea{resize:vertical;min-height:70px}
 
 /* ===== ✍️ 글쓰기 ===== */
 #app.wide{max-width:none}
-.write-layout{display:flex;gap:14px;align-items:flex-start;max-width:1120px;margin:0 auto}
+.write-layout{display:flex;gap:14px;align-items:flex-start}
 .write-plotlist{flex:0 0 200px;min-width:160px;position:sticky;top:70px;
   background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;
   max-height:calc(100vh - 90px);overflow-y:auto}
@@ -209,7 +209,7 @@ textarea{resize:vertical;min-height:70px}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 4px;border-radius:4px}
 .wpl-block:hover{background:var(--bg);color:var(--ink)}
 
-.write-main{flex:1 1 auto;min-width:0;max-width:800px}
+.write-main{flex:0 1 800px;min-width:0}
 .write-toolbar{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px}
 .write-group{margin-bottom:18px}
 .write-divider{display:flex;align-items:center;gap:8px;margin:6px 0 10px;
@@ -260,8 +260,7 @@ textarea{resize:vertical;min-height:70px}
 .dlg-modal .dlg-input-text{width:100%;min-height:80px;resize:vertical}
 .dlg-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 /* 미리보기 */
-.write-preview{flex:0 0 33.33%;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow-y:auto}
-.write-layout.preview-on .write-main{flex:1 1 auto}
+.write-preview{flex:1 1 0;min-width:300px;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow-y:auto}
 .wp-page{background:#e9e6df;padding:14px;border-radius:10px}
 .wp-inner{position:relative;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.1);
   padding:40px 48px;font-size:13px;line-height:1.9;color:#222}
@@ -269,9 +268,15 @@ textarea{resize:vertical;min-height:70px}
 .wp-text{margin:0 0 8px;white-space:pre-wrap}
 .wp-line{margin:0 0 4px}
 .wp-pagebreak{position:absolute;left:0;right:0;border-top:1px dashed #c0392b;pointer-events:none}
+/* 화면이 좁으면 미리보기 숨김 (중앙 본문이 남은 폭 사용) */
+@media(max-width:1023px){
+  .write-preview{display:none}
+  .write-main{flex:1 1 auto}
+}
+/* 더 좁으면 좌측 플롯 목록을 위로 */
 @media(max-width:820px){
   .write-layout{flex-direction:column}
-  .write-plotlist,.write-preview{position:static;flex-basis:auto;width:100%;max-height:none}
+  .write-plotlist{position:static;flex-basis:auto;width:100%;max-height:none}
 }
 
 /* 아이디어 탐색 */
