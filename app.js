@@ -1269,10 +1269,6 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   /* 하위 블록(본문/대사) */
   const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
   (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh)));
-  if(!(bl.items||[]).length){
-    const e=document.createElement("p"); e.className="sub-empty"; e.textContent="＋본문 또는 💬대사로 내용을 추가하세요 (다른 블록에서 끌어와도 됩니다)";
-    itemsEl.appendChild(e);
-  }
   setupItemDnD(itemsEl, main);
   d.appendChild(itemsEl);
   return d;

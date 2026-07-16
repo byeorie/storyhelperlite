@@ -265,7 +265,8 @@ input.scene-title{flex:1 1 auto;min-width:0;font-size:11px;font-weight:800;color
   border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 9px}
 .scene-edit-btn:hover{border-color:var(--accent);color:var(--accent)}
 /* 하위 블록(본문/대사) */
-.scene-items{display:flex;flex-direction:column;gap:6px;min-height:14px}
+.scene-items{display:flex;flex-direction:column;gap:6px}
+.scene-items:empty{display:none}
 .sub-empty{margin:0;padding:8px;font-size:12px;color:var(--muted);text-align:center;
   border:1px dashed var(--line);border-radius:7px}
 .sub-block{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--line);
