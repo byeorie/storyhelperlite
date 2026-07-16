@@ -79,14 +79,20 @@ function blankProject(id,name){
     writeDoc:{blocks:[]},
     explore:blankExplore()};
 }
-/* writeDoc 기본값 보정 */
+/* writeDoc 기본값 보정 (본문/대사를 공통 하위블록 items로 통합) */
 function fillWriteDoc(wd){
   const b={blocks:[]};
   if(!wd||typeof wd!=="object") return b;
-  return {blocks: Array.isArray(wd.blocks) ? wd.blocks.map(x=>({
-    id:x.id||uid(), sectionId:x.sectionId||"", text:x.text||"", fromIdea:x.fromIdea||"",
-    lines: Array.isArray(x.lines) ? x.lines.map(l=>({id:l.id||uid(), char:l.char||"", text:l.text||""})) : [],
-  })) : []};
+  return {blocks: Array.isArray(wd.blocks) ? wd.blocks.map(x=>{
+    let items=[];
+    if(Array.isArray(x.items)){
+      items=x.items.map(it=>({id:it.id||uid(), type:(it.type==="line"?"line":"text"), char:it.char||"", text:it.text||""}));
+    }else{ /* 구버전(text + lines) 마이그레이션 */
+      if(x.text) items.push({id:uid(), type:"text", char:"", text:x.text});
+      if(Array.isArray(x.lines)) x.lines.forEach(l=>items.push({id:l.id||uid(), type:"line", char:l.char||"", text:l.text||""}));
+    }
+    return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", items};
+  }) : []};
 }
 /* plotDoc 기본값 보정 (예전 데이터 안전 처리) */
 function fillPlotDoc(pd){
@@ -288,7 +294,7 @@ function reorderIdeaBlocks(orderedIdsTopToBottom){
   P.ideaBlocks=P.ideaBlocks.map(b=> shownIds.has(b.id) ? idToBlock[newShownStorageOrder[si++]] : b);
 }
 document.addEventListener("mouseup", ()=>{
-  document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true]").forEach(el=>el.draggable=false);
+  document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true], .scene-block[draggable=true], .sub-block[draggable=true]").forEach(el=>el.draggable=false);
 });
 
 function rIdea(){
@@ -1044,10 +1050,9 @@ let writeDlgFor=null;       // 대사 추가 팝업이 열린 블록 id
 
 /* 섹션에 속한 장면 블록(배열 순서 유지) */
 function blocksOfSection(secId){ return (P.writeDoc.blocks||[]).filter(b=>b.sectionId===secId); }
-/* 블록 글자수 (장면 텍스트 + 대사 텍스트) */
+/* 블록 글자수 (모든 하위블록 텍스트 합) */
 function blockChars(bl){
-  let n=(bl.text||"").length;
-  (bl.lines||[]).forEach(l=>{ n+=(l.text||"").length; });
+  let n=0; (bl.items||[]).forEach(it=>{ n+=(it.text||"").length; });
   return n;
 }
 /* 섹션별/전체 글자수 */
@@ -1117,7 +1122,7 @@ function rWrite(){
     group.appendChild(list);
     setupBlockDnD(list, main);
     const addBtn=document.createElement("button"); addBtn.className="write-add-block"; addBtn.textContent="＋ 장면 블록 추가";
-    addBtn.onclick=()=>{ P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, text:"", lines:[]}); save(); render(); };
+    addBtn.onclick=()=>{ P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:"", items:[]}); save(); render(); };
     group.appendChild(addBtn);
     main.appendChild(group);
   });
@@ -1143,8 +1148,7 @@ function loadPlotIntoWrite(){
   (P.plotDoc.sections||[]).forEach(sec=>{
     (sec.ideaIds||[]).forEach(id=>{
       if(existing.has(id)) return;
-      const idea=findIdea(id);
-      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, text:"", fromIdea:id, lines:[]});
+      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, items:[]});
       existing.add(id); added++;
     });
   });
@@ -1176,7 +1180,7 @@ function renderLeftInto(left){
 function sceneBlockCard(bl, main, liveRefresh){
   const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.draggable=false;
   const head=document.createElement("div"); head.className="scene-head";
-  const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동";
+  const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 블록 이동";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
@@ -1186,11 +1190,14 @@ function sceneBlockCard(bl, main, liveRefresh){
   });
   d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
   const spacer=document.createElement("span"); spacer.className="scene-spacer";
+  const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn"; addTextBtn.textContent="＋ 본문";
+  addTextBtn.title="본문 하위 블록 추가";
+  addTextBtn.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
   const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn"; dlgBtn.textContent="💬 대사 추가";
   dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
   const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.textContent="✕"; delBtn.title="블록 삭제";
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
-  head.append(handle, spacer, dlgBtn, delBtn);
+  head.append(handle, spacer, addTextBtn, dlgBtn, delBtn);
   d.appendChild(head);
 
   /* 플롯에서 불러온 블록이면 원본 아이디어를 참고 라벨로 표시 */
@@ -1200,39 +1207,46 @@ function sceneBlockCard(bl, main, liveRefresh){
     if(idea){
       const color=(idea.tags&&idea.tags.length)?getTagColor(idea.tags[0]):"var(--line)";
       ref.style.borderLeftColor=color;
-      ref.textContent="💡 "+(idea.text||"(빈 아이디어)");
+      ref.textContent=idea.text||"(빈 아이디어)";
     }else{
-      ref.classList.add("gone"); ref.textContent="💡 (원본 아이디어가 삭제됨)";
+      ref.classList.add("gone"); ref.textContent="(원본 아이디어가 삭제됨)";
     }
     d.appendChild(ref);
   }
 
-  const ta=document.createElement("textarea"); ta.className="scene-text"; ta.placeholder="이 장면의 내용을 써보세요"; ta.value=bl.text||"";
-  ta.oninput=()=>{ bl.text=ta.value; save(); liveRefresh&&liveRefresh(); };
-  d.appendChild(ta);
-
-  if((bl.lines||[]).length){
-    const linesEl=document.createElement("div"); linesEl.className="dlg-lines"; linesEl.dataset.block=bl.id;
-    bl.lines.forEach(l=>linesEl.appendChild(lineRow(bl, l)));
-    setupLineDnD(linesEl, main);
-    d.appendChild(linesEl);
+  /* 하위 블록(본문/대사) */
+  const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
+  (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh)));
+  if(!(bl.items||[]).length){
+    const e=document.createElement("p"); e.className="sub-empty"; e.textContent="＋본문 또는 💬대사로 내용을 추가하세요 (다른 블록에서 끌어와도 됩니다)";
+    itemsEl.appendChild(e);
   }
+  setupItemDnD(itemsEl, main);
+  d.appendChild(itemsEl);
   return d;
 }
 
-/* 대사 한 줄 */
-function lineRow(bl, l){
-  const d=document.createElement("div"); d.className="dlg-line"; d.dataset.id=l.id; d.draggable=false;
-  const handle=document.createElement("span"); handle.className="dlg-handle"; handle.textContent="⠿"; handle.title="드래그해서 순서 변경";
+/* 하위 블록 하나 (본문 type=text / 대사 type=line) */
+function subBlockEl(bl, it, liveRefresh){
+  const d=document.createElement("div"); d.className="sub-block "+(it.type==="line"?"sub-line":"sub-text"); d.dataset.id=it.id; d.draggable=false;
+  const handle=document.createElement("span"); handle.className="sub-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동(다른 블록으로도)";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
-  d.addEventListener("dragstart", e=>{ e.dataTransfer.effectAllowed="move"; setTimeout(()=>d.classList.add("dragging"),0); });
+  d.addEventListener("dragstart", e=>{ if(!d.draggable) return; e.dataTransfer.effectAllowed="move"; setTimeout(()=>d.classList.add("dragging"),0); });
   d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
-  const who=document.createElement("span"); who.className="dlg-who"; who.textContent=l.char||"(미지정)";
-  const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=l.text;
-  const del=document.createElement("button"); del.className="dlg-del"; del.textContent="✕"; del.title="대사 삭제";
-  del.onclick=()=>{ bl.lines=(bl.lines||[]).filter(x=>x.id!==l.id); save(); render(); };
-  d.append(handle, who, tx, del);
+
+  const del=document.createElement("button"); del.className="sub-del"; del.textContent="✕"; del.title="삭제";
+  del.onclick=()=>{ bl.items=(bl.items||[]).filter(x=>x.id!==it.id); save(); render(); };
+
+  if(it.type==="line"){
+    const who=document.createElement("span"); who.className="dlg-who"; who.textContent=it.char||"(미지정)";
+    const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=it.text;
+    d.append(handle, who, tx, del);
+  }else{
+    const ta=document.createElement("textarea"); ta.className="sub-textarea"; ta.placeholder="본문을 써보세요"; ta.value=it.text||"";
+    ta.oninput=()=>{ it.text=ta.value; save(); liveRefresh&&liveRefresh(); };
+    d.append(handle, ta, del);
+  }
   return d;
 }
 
@@ -1263,27 +1277,27 @@ function rebuildWriteFromDOM(main){
   P.writeDoc.blocks=arr;
 }
 
-/* 대사 줄 드래그앤드롭 */
-function setupLineDnD(linesEl, main){
-  linesEl.addEventListener("dragover", e=>{
-    const dragging=document.querySelector(".dlg-line.dragging");
+/* 하위 블록 드래그앤드롭 (블록 내부 정렬 + 다른 블록으로 이동) */
+function setupItemDnD(container, main){
+  container.addEventListener("dragover", e=>{
+    const dragging=document.querySelector(".sub-block.dragging");
     if(!dragging) return;
     e.preventDefault();
-    const after=getDragAfterEl(linesEl, e.clientY, ".dlg-line:not(.dragging)");
-    if(after==null) linesEl.appendChild(dragging);
-    else linesEl.insertBefore(dragging, after);
+    const after=getDragAfterEl(container, e.clientY, ".sub-block:not(.dragging)");
+    if(after==null) container.appendChild(dragging);
+    else container.insertBefore(dragging, after);
   });
-  linesEl.addEventListener("drop", e=>{
-    if(!document.querySelector(".dlg-line.dragging")) return;
+  container.addEventListener("drop", e=>{
+    if(!document.querySelector(".sub-block.dragging")) return;
     e.preventDefault();
-    rebuildLinesFromDOM(main); save(); render();
+    rebuildItemsFromDOM(main); save(); render();
   });
 }
-function rebuildLinesFromDOM(main){
-  const map={}; (P.writeDoc.blocks||[]).forEach(b=>(b.lines||[]).forEach(l=>map[l.id]=l));
-  main.querySelectorAll(".dlg-lines").forEach(cont=>{
+function rebuildItemsFromDOM(main){
+  const map={}; (P.writeDoc.blocks||[]).forEach(b=>(b.items||[]).forEach(it=>map[it.id]=it));
+  main.querySelectorAll(".scene-items").forEach(cont=>{
     const b=(P.writeDoc.blocks||[]).find(x=>x.id===cont.dataset.block);
-    if(b) b.lines=[...cont.querySelectorAll(".dlg-line")].map(el=>map[el.dataset.id]).filter(Boolean);
+    if(b) b.items=[...cont.querySelectorAll(".sub-block")].map(el=>map[el.dataset.id]).filter(Boolean);
   });
 }
 
@@ -1319,7 +1333,7 @@ function dialogueModal(bl){
   function doAdd(keepOpen){
     const text=ta.value.trim(); if(!text){ ta.focus(); return; }
     const char=charInput.value.trim();
-    bl.lines=bl.lines||[]; bl.lines.push({id:uid(), char, text});
+    bl.items=bl.items||[]; bl.items.push({id:uid(), type:"line", char, text});
     save();
     if(keepOpen){ ta.value=""; ta.focus(); /* 팝업 유지 */ render(); setTimeout(()=>{ const m=document.querySelector(".dlg-modal .dlg-input-text"); if(m) m.focus(); },0); }
     else { writeDlgFor=null; render(); }
@@ -1343,11 +1357,15 @@ function renderPreviewInto(right){
   (P.plotDoc.sections||[]).forEach(sec=>{
     blocksOfSection(sec.id).forEach(bl=>{
       const blk=document.createElement("div"); blk.className="wp-block";
-      if(bl.text){ const p=document.createElement("p"); p.className="wp-text"; p.textContent=bl.text; blk.appendChild(p); any=true; }
-      (bl.lines||[]).forEach(l=>{
-        const dp=document.createElement("p"); dp.className="wp-line";
-        dp.innerHTML=(l.char?`<b>${esc(l.char)}</b>: `:"")+esc(l.text);
-        blk.appendChild(dp); any=true;
+      (bl.items||[]).forEach(it=>{
+        if(!(it.text||"").length && it.type!=="line") return;
+        if(it.type==="line"){
+          const dp=document.createElement("p"); dp.className="wp-line";
+          dp.innerHTML=(it.char?`<b>${esc(it.char)}</b>: `:"")+esc(it.text);
+          blk.appendChild(dp); any=true;
+        }else{
+          const p=document.createElement("p"); p.className="wp-text"; p.textContent=it.text; blk.appendChild(p); any=true;
+        }
       });
       if(blk.children.length) inner.appendChild(blk);
     });

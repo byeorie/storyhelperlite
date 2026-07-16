@@ -220,26 +220,34 @@ textarea{resize:vertical;min-height:70px}
 .scene-handle{cursor:grab;color:var(--muted);font-size:14px;user-select:none}
 .scene-handle:active{cursor:grabbing}
 .scene-spacer{flex:1}
+.scene-add-btn{background:#eef1ec;color:var(--ok);border:none;border-radius:6px;
+  cursor:pointer;font-size:12px;font-weight:600;padding:4px 9px}
+.scene-add-btn:hover{filter:brightness(.96)}
 .scene-dlg-btn{background:var(--accent2);color:var(--accent);border:none;border-radius:6px;
   cursor:pointer;font-size:12px;font-weight:600;padding:4px 9px}
 .scene-dlg-btn:hover{filter:brightness(.96)}
 .scene-del-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px}
 .scene-del-btn:hover{color:#b3503a}
-.scene-ref{font-size:12px;color:var(--muted);background:#faf8f4;border-left:3px solid var(--line);
-  border-radius:4px;padding:5px 9px;margin-bottom:7px;white-space:pre-wrap;word-break:break-word}
-.scene-ref.gone{font-style:italic;opacity:.7}
-.scene-text{width:100%;min-height:60px;border:1px solid var(--line);border-radius:8px;
-  padding:8px 10px;font:inherit;resize:vertical;background:#fff;color:var(--ink)}
-/* 대사 블록 */
-.dlg-lines{display:flex;flex-direction:column;gap:5px;margin-top:8px;padding-left:6px;border-left:3px solid var(--accent2)}
-.dlg-line{display:flex;align-items:center;gap:8px;background:#fbf8f3;border:1px solid var(--line);
-  border-radius:7px;padding:5px 9px;transition:opacity .15s}
-.dlg-line.dragging{opacity:.4}
-.dlg-handle{cursor:grab;color:var(--muted);font-size:12px;user-select:none;flex-shrink:0}
-.dlg-who{font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0;white-space:nowrap}
-.dlg-text{flex:1;font-size:13px;min-width:0;word-break:break-word}
-.dlg-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;flex-shrink:0}
-.dlg-del:hover{color:#b3503a}
+.scene-ref{font-size:14px;color:var(--ink);background:#faf8f4;border-left:3px solid var(--line);
+  border-radius:4px;padding:7px 11px;margin-bottom:8px;white-space:pre-wrap;word-break:break-word}
+.scene-ref.gone{font-style:italic;color:var(--muted)}
+/* 하위 블록(본문/대사) */
+.scene-items{display:flex;flex-direction:column;gap:6px;min-height:14px}
+.sub-empty{margin:0;padding:8px;font-size:12px;color:var(--muted);text-align:center;
+  border:1px dashed var(--line);border-radius:7px}
+.sub-block{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--line);
+  border-radius:7px;padding:7px 9px;transition:opacity .15s;background:#fff}
+.sub-block.dragging{opacity:.4}
+.sub-block.sub-line{background:#fbf8f3}
+.sub-handle{cursor:grab;color:var(--muted);font-size:13px;user-select:none;flex-shrink:0;padding-top:2px}
+.sub-handle:active{cursor:grabbing}
+.sub-textarea{flex:1;min-width:0;min-height:44px;border:none;background:transparent;
+  font:inherit;resize:vertical;color:var(--ink);padding:2px 0}
+.sub-textarea:focus{outline:none}
+.sub-line .dlg-who{font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0;white-space:nowrap;padding-top:1px}
+.sub-line .dlg-text{flex:1;font-size:13px;min-width:0;word-break:break-word;padding-top:1px}
+.sub-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;flex-shrink:0}
+.sub-del:hover{color:#b3503a}
 .write-add-block{width:100%;margin-top:10px;background:transparent;border:1px dashed var(--line);
   border-radius:8px;padding:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600}
 .write-add-block:hover{border-color:var(--accent);color:var(--accent)}

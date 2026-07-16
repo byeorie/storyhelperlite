@@ -2,6 +2,17 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-16 (29차) · 글쓰기 본문도 하위블록化 + 하위블록 블록 간 이동, 참고 라벨 개선
+- 요청 ①: 원본 아이디어 참고 라벨에서 💡 아이콘 제거 + 폰트 확대(12→14px, 색을 진하게)해 가독성 개선
+- 요청 ②: 장면 블록의 본문도 대사처럼 하위 블록으로 만들고, 하위 블록을 다른 장면 블록으로 이동 가능하게
+- **app.js** 수정 —
+  - **데이터 모델 통합**: 블록의 `text`+`lines`를 하나의 `items` 배열로 통합. 각 항목 `{id, type:"text"|"line", char, text}`(text=본문, line=대사). `fillWriteDoc`에 **구버전 자동 마이그레이션**(기존 text→본문 항목, lines→대사 항목) 포함
+  - `sceneBlockCard`: 헤더에 `＋ 본문` 버튼 추가(본문 하위블록 생성), 기존 `💬 대사 추가` 유지. 본문/대사를 공통 `subBlockEl()`로 렌더(본문=인라인 textarea, 대사=캐릭터+대사 표시). 비어있으면 안내 placeholder
+  - **하위 블록 드래그**: `setupItemDnD`/`rebuildItemsFromDOM`으로 블록 내 정렬 + **다른 장면 블록으로 이동** 지원(모든 `.scene-items` 컨테이너 공용, 드롭 시 전체 재구성). 블록 순서 드래그(`.scene-block`)와 이벤트 가드로 충돌 방지
+  - `blockChars`(items 합산), `dialogueModal`(items에 line push), `renderPreviewInto`(items 순회: text→본문 문단, line→대사 문단), `loadPlotIntoWrite`(빈 items 블록 생성) 반영. 전역 mouseup 리셋에 `.scene-block`/`.sub-block` 추가
+- **style.css** 수정 — `.scene-ref` 14px·진한 색, `.scene-add-btn`, `.scene-items`, `.sub-block`(본문/대사 공통, 드래그), `.sub-textarea`, `.sub-empty` 추가. 기존 `.dlg-lines`/`.scene-text` 정리
+- 검증: jsdom — 구버전 마이그레이션(본문+대사 2항목), 하위블록 렌더(본문1·대사1), ＋본문 버튼, 참고 라벨 이모지 제거·텍스트, 글자수 합산, **블록 간 하위블록 이동**(b1→b2) 정상, 미리보기 반영 확인
+
 ## 2026-07-16 (28차) · [글쓰기]에서 플롯 불러오기
 - **app.js** 수정 —
   - `fillWriteDoc`/블록 모델에 `fromIdea`(출처 아이디어 id) 추가
