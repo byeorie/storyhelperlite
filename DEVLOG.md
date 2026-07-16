@@ -2,6 +2,11 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-16 (22차) · Cloudflare D1 실제 연동 + 로그인/회원가입 폼 표시 버그 수정
+- **Cloudflare 대시보드 작업** (브라우저 자동화로 진행) — D1 데이터베이스 `storyhelperlite-db` 생성, `schema.sql` 콘솔에서 실행(users/sessions/user_data 테이블 + 관리자 계정 `profh` 시드 확인), Pages 프로젝트(storyhelperlite, Production)에 변수명 `DB`로 바인딩 후 재배포 완료
+- **style.css** 버그 수정 — `.auth-panel { display:flex }` 규칙이 `[hidden]` 속성보다 우선 적용되어, 로그인 화면에서 회원가입/찾기 폼이 로그인 폼과 함께 그대로 노출되던 문제 발견(실제 배포 사이트에서 확인). `.auth-panel[hidden] { display: none; }` 규칙 추가로 수정
+- 검증: storyhelperlite.pages.dev 실제 접속하여 로그인/회원가입 탭 전환 정상 동작 확인 예정(다음 접속 시 확인)
+
 ## 2026-07-16 (21차) · Google 로그인/Drive 연동 제거 → 자체 회원가입·로그인 + 서버(D1) 저장으로 전환
 - **google-drive.js** 삭제, **docs/oauth-consent-screen-draft.md, docs/drive-integration-design.md, docs/privacy-policy-draft.md** 삭제 (Google 연동 관련 문서 전부 제거)
 - **auth.js** 신규 생성 — 자체 로그인/회원가입/로그아웃, 세션 토큰(localStorage) 관리, 서버 데이터 불러오기(`loadFromServer`)/저장(`saveToServer`, 600ms 디바운스) 구현

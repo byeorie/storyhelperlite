@@ -169,6 +169,7 @@ body.logged-in .login-overlay { display: none; }
 
 /* 로그인/회원가입 폼 */
 .auth-panel { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.auth-panel[hidden] { display: none; }
 .auth-panel input {
   width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px;
   font-size: .92em; background: #fbfbfa;
