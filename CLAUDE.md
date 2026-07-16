@@ -33,7 +33,7 @@
 ## 프로젝트 정보
 - GitHub: https://github.com/byeorie/storyhelperlite
 - 배포: Cloudflare Pages (main 브랜치 push 시 자동 재배포)
-- PAT: Claude 메모리에 저장됨 (GitHub push protection으로 CLAUDE.md에 직접 저장 불가)
+- PAT: 프로젝트 폴더의 `.github-pat` 파일에 저장됨 (git 추적 대상 아님, `.gitignore`에 등록됨). 푸시 작업 시작 전 이 파일을 Read 툴로 읽어서 사용할 것 (GitHub push protection으로 CLAUDE.md에 직접 저장 불가하며, "Claude 메모리"는 세션 간 보장되지 않아 이 방식으로 변경함 — 2026-07-16)
 
 ## 파일 수정 규칙
 - 파일 생성/수정/삭제 시 DEVLOG.md 업데이트

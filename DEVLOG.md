@@ -2,6 +2,32 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-16 (21차) · Google 로그인/Drive 연동 제거 → 자체 회원가입·로그인 + 서버(D1) 저장으로 전환
+- **google-drive.js** 삭제, **docs/oauth-consent-screen-draft.md, docs/drive-integration-design.md, docs/privacy-policy-draft.md** 삭제 (Google 연동 관련 문서 전부 제거)
+- **auth.js** 신규 생성 — 자체 로그인/회원가입/로그아웃, 세션 토큰(localStorage) 관리, 서버 데이터 불러오기(`loadFromServer`)/저장(`saveToServer`, 600ms 디바운스) 구현
+- **index.html** 수정 — Google GSI 스크립트 태그 제거. 로그인 오버레이를 로그인/회원가입/아이디·비번 찾기 3개 탭 폼으로 재구성:
+  - 로그인: 아이디, 비밀번호
+  - 회원가입: 소속학교, 이름, 아이디, 비밀번호, 비밀번호 확인, 이메일(찾기용) — 클라이언트에서 비밀번호 일치·6자 이상 검증
+  - 찾기: 이메일 입력 → 서버에 계정 존재 여부만 확인(실제 이메일 발송 기능은 미구현, 안내 문구로 대체)
+  - 상단바 `google-auth` 블록을 `user-auth`로 교체, `googleLoginBtn`→`userMenuBtn`, `driveStatus`→`serverStatus`
+- **app.js** 수정 —
+  - `ADMIN_EMAIL`(이메일 기준) → `ADMIN_USERNAME="profh"`(아이디 기준)으로 관리자 판정 방식 변경, `isAdmin()`이 `currentUser.username`을 확인하도록 수정
+  - `save()`가 `saveToDrive()` 대신 `saveToServer()` 호출
+  - Google 로그인 버튼 바인딩, `window.load` 시 `initGoogle()` 호출 코드 제거
+- **functions/api/** 신규 생성 (Cloudflare Pages Functions, D1 바인딩 변수명 `DB` 사용):
+  - `_utils.js` — PBKDF2-SHA256(100,000회) 비밀번호 해시/검증, 세션 토큰 발급, `requireAuth()` 헬퍼
+  - `signup.js` — 회원가입(소속학교/이름/아이디/비밀번호/이메일), 아이디 중복 검사, 30일 세션 발급
+  - `login.js` — 로그인, 30일 세션 발급
+  - `logout.js` — 세션 토큰 삭제
+  - `data.js` — GET(불러오기)/POST(저장, upsert). GET 호출 시 `updated_at`이 90일(3개월) 이상 지난 `user_data` 행을 자동 삭제(느슨한 만료 정리 방식 — Cron Trigger 없이도 접속이 있을 때마다 정리됨)
+  - `find-account.js` — 이메일로 계정 존재 여부 확인(실제 발송 없음, 관리자 문의 안내)
+- **schema.sql** 신규 생성 — `users`/`sessions`/`user_data` 테이블 정의. 관리자 계정 시드 포함(아이디 `profh`, 임시 비밀번호 `1234`, 이메일 `byeorie@gmail.com`) — **최초 접속 후 반드시 비밀번호 변경 필요**
+- **style.css** 수정 — `.google-auth`/`#googleLoginBtn.avatar-btn` 등 Google 전용 클래스를 `.user-auth`/`#userMenuBtn.avatar-btn`으로 교체, 로그인/회원가입 탭·폼 스타일(`.auth-tabs`, `.auth-panel`, `.auth-submit` 등) 추가
+- **privacy.html** 수정 — Google Drive 관련 서술 제거, 자체 계정(비밀번호 해시 저장)·서버 3개월 자동삭제 정책으로 재작성
+- **README.md** 재작성 — 자체 로그인/D1 저장 구조 반영, `functions/api/` 엔드포인트 표, Cloudflare 대시보드 최초 수동 설정(D1 생성 → schema.sql 실행 → Pages에 `DB` 바인딩) 안내 추가
+- **미완료(다음 단계로 보류)**: 로컬 저장을 "독자 포맷"으로 내보내기/불러오기 하는 기능은 요청대로 이번 작업에서 제외 — 모든 기능 완성 후 별도 진행
+- **주의**: `functions/api/` 사용을 위해서는 Cloudflare 대시보드에서 D1 데이터베이스를 생성하고 `schema.sql`을 실행한 뒤, Pages 프로젝트에 변수명 `DB`로 바인딩하는 수동 설정이 최초 1회 필요함 (자동화 불가 영역, 안내 문서 참고)
+
 ## 2026-07-04 (20차) · "아이디어 탐색" 탭 상단 작품DB 상태 안내 블록 제거
 - **app.js** 수정 — `rExplore()` 상단의 "작품DB에 N개 등록되어 있습니다 / 아직 등록된 작품DB가 없습니다" 안내 블록 삭제. 등록 현황은 관리자 메뉴("작품DB 관리")에서만 확인 가능
 - 참고: 직전 커밋(app.js 복구)은 이미 다른 세션에서 완료되어 있었음 — 확인해보니 배포가 정상 상태였음

@@ -1,7 +1,7 @@
 /* ===== 상태 & 저장 ===== */
 const LS_KEY = "storyhelper_v1";
-const ADMIN_EMAIL = "studio.inknpen@gmail.com";
-function isAdmin(){ return typeof gUserEmail!=="undefined" && gUserEmail===ADMIN_EMAIL; }
+const ADMIN_USERNAME = "profh";
+function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
 function refreshAdminTabVisibility(){
   const grp=document.getElementById("adminNavGroup");
   if(grp) grp.style.display=isAdmin()?"":"none";
@@ -59,7 +59,7 @@ function save(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
-  if(typeof saveToDrive==="function") saveToDrive();
+  if(typeof saveToServer==="function") saveToServer();
 }
 function uid(){ return "p"+Date.now()+Math.floor(Math.random()*1000); }
 function blankProject(id,name){
@@ -109,12 +109,6 @@ document.getElementById("delProjBtn").onclick=()=>{
   DB.current=DB.projects[0].id; P=currentProject(); save(); refreshProjSelect(); render();
 };
 
-/* Google 로그인 */
-document.getElementById("googleLoginBtn").onclick=()=>{
-  if(typeof googleLogin==="function") googleLogin();
-  else alert("Google 라이브러리 로딩 중입니다. 잠시 후 다시 눌러주세요.");
-};
-
 /* ===== 탭 ===== */
 const TAB_KEY = "storyhelper_activeTab";
 const TAB_NAMES = [...document.querySelectorAll(".tab")].map(t=>t.dataset.tab);
@@ -160,7 +154,7 @@ function render(){
     if(!DB.workDB) DB.workDB=fillWorkDB();
     if(activeTab==="admin" && !isAdmin()){
       app.innerHTML='<div class="card"><h2>🔒 접근 권한이 없습니다</h2>'
-        +'<p class="hint">이 메뉴는 관리자 계정(studio.inknpen@gmail.com)으로 로그인해야 사용할 수 있습니다.</p></div>';
+        +'<p class="hint">이 메뉴는 관리자 계정으로 로그인해야 사용할 수 있습니다.</p></div>';
       return;
     }
     const renderers={idea:rIdea, explore:rExplore, admin:rAdmin, character:rChar, world:rWorld, background:rBg,
@@ -478,13 +472,13 @@ function rExplore(){
   };
 }
 
-/* 🔐 관리자 — 작품DB 등록/관리 (studio.inknpen@gmail.com 전용) */
+/* 🔐 관리자 — 작품DB 등록/관리 (아이디: profh 전용) */
 function rAdmin(){
   if(!DB.workDB) DB.workDB=fillWorkDB();
   const wdb=DB.workDB;
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<h2>🔐 작품DB 관리</h2>
-    <p class="hint">관리자 계정(${esc(ADMIN_EMAIL)})으로 로그인된 상태입니다. 여기서 등록한 작품DB는 모든 학생의 "아이디어 탐색" 탭에서 공통으로 사용됩니다.</p>
+    <p class="hint">관리자 계정(${esc(ADMIN_USERNAME)})으로 로그인된 상태입니다. 여기서 등록한 작품DB는 모든 학생의 "아이디어 탐색" 탭에서 공통으로 사용됩니다.</p>
     <div class="explore-dbstatus">${wdb.works.length
       ?`📚 <b>${esc(wdb.fileName)}</b> — 작품 ${wdb.works.length}개 (${esc(wdb.uploadedAt)})`
       :`아직 작품DB가 없습니다. 아래에서 파일을 업로드하세요.`}</div>
@@ -688,4 +682,3 @@ document.getElementById("aboutLink").onclick=e=>{
 refreshProjSelect();
 refreshAdminTabVisibility();
 render();
-window.addEventListener("load",()=>{ if(typeof initGoogle==="function") initGoogle(); });

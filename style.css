@@ -19,16 +19,12 @@ a{color:var(--accent)}
   border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0}
 .proj-controls button:hover{background:var(--accent2)}
 .save-status{font-size:12px;color:var(--ok);min-width:48px;white-space:nowrap;flex-shrink:0}
-.google-auth{display:flex;align-items:center;gap:8px;margin-left:8px;flex-shrink:0}
-.google-auth>#googleLoginBtn{padding:6px 12px;border:1px solid var(--line);background:#fff;
-  border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;display:inline-flex;align-items:center}
-.google-auth>#googleLoginBtn:hover{background:var(--accent2)}
+.user-auth{display:flex;align-items:center;gap:8px;margin-left:8px;flex-shrink:0}
 .user-menu-wrap{position:relative;flex-shrink:0}
-#googleLoginBtn.avatar-btn{padding:0;border:none;background:transparent;border-radius:50%;
+#userMenuBtn.avatar-btn{padding:0;border:none;background:transparent;border-radius:50%;
   width:32px;height:32px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-#googleLoginBtn.avatar-btn:hover{filter:brightness(.92)}
-#googleLoginBtn.avatar-btn img{width:32px;height:32px;border-radius:50%;object-fit:cover;display:block}
-#googleLoginBtn.avatar-btn .avatar-fallback{width:32px;height:32px;border-radius:50%;
+#userMenuBtn.avatar-btn:hover{filter:brightness(.92)}
+#userMenuBtn.avatar-btn .avatar-fallback{width:32px;height:32px;border-radius:50%;
   background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;
   font-size:14px;font-weight:700;text-transform:uppercase}
 .user-menu{position:fixed;background:#fff;
@@ -152,20 +148,38 @@ textarea{resize:vertical;min-height:70px}
   background: #f7f8fa;
 }
 .login-box {
-  text-align: center; padding: 56px 48px;
+  text-align: center; padding: 48px 40px;
   background: #fff; border-radius: 18px;
   box-shadow: 0 10px 40px rgba(0,0,0,.08);
-  width: 360px; max-width: 90vw;
+  width: 380px; max-width: 90vw;
+  max-height: 90vh; overflow-y: auto;
 }
 .login-box .login-sub {
   font-size: .85em; color: #9aa0a6; margin: 0 0 4px; letter-spacing: .02em;
 }
-.login-box h1 { margin: 0 0 32px; font-size: 1.7em; font-weight: 700; color: #202124; }
-.login-box .login-desc { margin: 0 0 28px; font-size: .88em; line-height: 1.7; color: #80868b; }
-#overlayLoginBtn {
-  width: 100%; padding: 15px 0; font-size: 1.02em; font-weight: 600; cursor: pointer;
-  background: #2b3a67; color: #fff; border: none; border-radius: 10px;
-  transition: background .15s;
-}
-#overlayLoginBtn:hover { background: #1f2c52; }
+.login-box h1 { margin: 0 0 24px; font-size: 1.7em; font-weight: 700; color: #202124; }
+.login-box .login-desc { margin: 0 0 20px; font-size: .88em; line-height: 1.7; color: #80868b; }
 body.logged-in .login-overlay { display: none; }
+
+/* 로그인/회원가입 탭 */
+.auth-tabs { display: flex; gap: 4px; background: #f1f2f4; border-radius: 10px; padding: 4px; margin-bottom: 22px; }
+.auth-tab { flex: 1; padding: 9px 0; border: none; background: transparent; border-radius: 8px;
+  font-size: .9em; font-weight: 600; color: #80868b; cursor: pointer; }
+.auth-tab.active { background: #fff; color: #2b3a67; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+/* 로그인/회원가입 폼 */
+.auth-panel { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.auth-panel input {
+  width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: .92em; background: #fbfbfa;
+}
+.auth-panel input:focus { outline: none; border-color: #2b3a67; background: #fff; }
+.auth-submit {
+  width: 100%; padding: 13px 0; font-size: 1.0em; font-weight: 600; cursor: pointer;
+  background: #2b3a67; color: #fff; border: none; border-radius: 10px;
+  margin-top: 4px; transition: background .15s;
+}
+.auth-submit:hover { background: #1f2c52; }
+.auth-error { min-height: 18px; font-size: .82em; color: #c4654a; margin: 0; text-align: center; }
+.auth-link { display: block; text-align: center; font-size: .82em; color: #80868b; margin-top: 2px; }
+.auth-link:hover { color: #2b3a67; }
