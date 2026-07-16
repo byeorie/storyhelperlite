@@ -135,18 +135,25 @@ textarea{resize:vertical;min-height:70px}
 .plot-struct-btn .ps-title{font-weight:700;font-size:15px;color:var(--ink);margin-bottom:4px}
 .plot-struct-btn .ps-sub{font-size:12px;color:var(--muted);line-height:1.5}
 .plot-toolbar{display:flex;gap:8px;flex-wrap:wrap}
-.plot-pool-card .plot-pool{min-height:52px}
-.plot-drop{display:flex;flex-direction:column;gap:8px;border:1px dashed var(--line);
-  border-radius:8px;padding:8px;background:#faf8f4}
-.plot-empty{margin:0;padding:6px 4px;font-size:12px;text-align:center}
+.plot-empty{margin:0;padding:6px 4px;font-size:12px;text-align:center;color:var(--muted)}
 .plot-sections{display:flex;flex-direction:column;gap:14px}
 .plot-section{padding:14px 16px}
-.plot-section-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.plot-section.sec-dragging{opacity:.4}
+.plot-section-head{display:flex;align-items:center;gap:6px}
 .plot-sec-num{background:var(--accent);color:#fff;width:24px;height:24px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
-.plot-sec-name{flex:1;font-weight:700;font-size:14px;padding:6px 8px}
-.plot-sec-count{font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0}
-.plot-sec-del{flex-shrink:0}
+.plot-sec-name{font-weight:700;font-size:15px;color:var(--ink)}
+.plot-sec-spacer{flex:1}
+.plot-sec-count{font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;margin-right:2px}
+.plot-icon-btn{background:transparent;border:none;cursor:pointer;color:var(--muted);
+  font-size:15px;line-height:1;padding:5px 6px;border-radius:6px;flex-shrink:0}
+.plot-icon-btn:hover{background:var(--bg);color:var(--ink)}
+.plot-sec-move{cursor:grab}
+.plot-sec-move:active{cursor:grabbing}
+.plot-sec-del:hover{color:#b3503a;background:#f7e9e5}
+.plot-sec-desc{color:var(--muted);font-size:12px;margin:2px 0 12px;line-height:1.5;white-space:pre-wrap}
+.plot-section-body{display:flex;flex-direction:column;gap:8px}
+.plot-section-body:not(:empty){margin-bottom:8px}
 .plot-idea{display:flex;align-items:flex-start;gap:8px;background:#fff;border:1px solid var(--line);
   border-left:5px solid var(--line);border-radius:8px;padding:9px 11px;transition:opacity .15s}
 .plot-idea.dragging{opacity:.4}
@@ -156,6 +163,28 @@ textarea{resize:vertical;min-height:70px}
 .plot-idea-text{font-size:13px;font-weight:600;white-space:pre-wrap;word-break:break-word}
 .plot-idea-tags{display:flex;flex-wrap:wrap;gap:4px}
 .plot-idea-tag{font-size:11px;font-weight:600;border:1px solid transparent;border-radius:999px;padding:1px 7px}
+.plot-idea-rm{background:transparent;border:none;cursor:pointer;color:var(--muted);
+  font-size:12px;line-height:1;padding:2px 4px;flex-shrink:0}
+.plot-idea-rm:hover{color:#b3503a}
+/* ＋ 아이디어 추가 박스 */
+.plot-add-box{display:flex;align-items:center;justify-content:center;gap:6px;
+  border:1px dashed var(--line);border-radius:8px;padding:11px;cursor:pointer;
+  background:#faf8f4;color:var(--muted);font-size:13px;font-weight:600;transition:border-color .12s,color .12s}
+.plot-add-box:hover,.plot-add-box.drop-hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
+.plot-add-plus{font-size:16px;line-height:1}
+/* 아이디어 선택 피커 */
+.plot-picker{margin-top:10px;border:1px solid var(--accent2);border-radius:10px;
+  padding:10px 12px;background:#fbf8f3}
+.plot-picker-top{display:flex;align-items:center;margin-bottom:8px}
+.plot-picker-title{flex:1;font-size:13px;font-weight:700;color:var(--accent)}
+.plot-picker-filter{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;
+  padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.plot-picker-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}
+.plot-pick-item{display:flex;align-items:center;flex-wrap:wrap;gap:6px;background:#fff;
+  border:1px solid var(--line);border-left:4px solid var(--line);border-radius:7px;
+  padding:7px 10px;cursor:pointer;transition:background .1s,border-color .1s}
+.plot-pick-item:hover{background:var(--accent2);border-color:var(--accent)}
+.plot-pick-text{flex:1;font-size:13px;font-weight:600;min-width:0;word-break:break-word}
 
 /* 아이디어 탐색 */
 .explore-dbstatus{background:#fbf8f3;border:1px solid var(--line);border-radius:8px;

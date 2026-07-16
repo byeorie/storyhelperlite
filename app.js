@@ -84,7 +84,7 @@ function fillPlotDoc(pd){
   return {
     structure: pd.structure||"",
     sections: Array.isArray(pd.sections)
-      ? pd.sections.map(s=>({id:s.id||uid(), name:s.name||"섹션", ideaIds:Array.isArray(s.ideaIds)?s.ideaIds.slice():[]}))
+      ? pd.sections.map(s=>({id:s.id||uid(), name:s.name||"섹션", desc:s.desc||"", ideaIds:Array.isArray(s.ideaIds)?s.ideaIds.slice():[]}))
       : [],
   };
 }
@@ -276,7 +276,7 @@ function reorderIdeaBlocks(orderedIdsTopToBottom){
   P.ideaBlocks=P.ideaBlocks.map(b=> shownIds.has(b.id) ? idToBlock[newShownStorageOrder[si++]] : b);
 }
 document.addEventListener("mouseup", ()=>{
-  document.querySelectorAll(".idea-block[draggable=true]").forEach(el=>el.draggable=false);
+  document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true]").forEach(el=>el.draggable=false);
 });
 
 function rIdea(){
@@ -713,6 +713,9 @@ function rEvent(){
 }
 
 /* ===== 📖 플롯 생성 ===== */
+let plotPickerFor=null;       // 현재 아이디어 피커가 열린 섹션 id
+let plotPickerFilter=[];      // 피커 내 태그 필터
+const plotCollapsed=new Set();// 접힌 섹션 id (화면 상태, 저장 안 함)
 /* 아이디어 id로 블록 찾기 */
 function findIdea(id){ return (P.ideaBlocks||[]).find(b=>b.id===id); }
 /* 어느 섹션에도 배치되지 않은 아이디어 목록 */
@@ -743,9 +746,9 @@ function rPlot(){
       const st=PLOT_STRUCTURES[key];
       const b=document.createElement("button"); b.className="plot-struct-btn";
       b.innerHTML=`<div class="ps-title">${st.label}</div>
-        <div class="ps-sub">${st.sections.join(" · ")}</div>`;
+        <div class="ps-sub">${st.sections.map(s=>esc(s.name)).join(" · ")}</div>`;
       b.onclick=()=>{
-        P.plotDoc={structure:key, sections:st.sections.map(n=>({id:uid(), name:n, ideaIds:[]}))};
+        P.plotDoc={structure:key, sections:st.sections.map(s=>({id:uid(), name:s.name, desc:s.desc||"", ideaIds:[]}))};
         save(); render();
       };
       box.appendChild(b);
@@ -757,7 +760,7 @@ function rPlot(){
   const struct=PLOT_STRUCTURES[P.plotDoc.structure];
   const head=document.createElement("div"); head.className="card";
   head.innerHTML=`<h2>📖 플롯 생성</h2>
-    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 아이디어를 섹션으로 끌어다 배치하고, 핸들(⠿)로 순서와 섹션을 바꿀 수 있습니다.</p>
+    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 핸들(⠿)로 아이디어·섹션 순서를 바꿀 수 있습니다.</p>
     <div class="plot-toolbar">
       <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
@@ -765,7 +768,7 @@ function rPlot(){
   app.appendChild(head);
   head.querySelector("#addSection").onclick=()=>{
     const name=prompt("새 섹션 이름:","새 섹션"); if(name===null)return;
-    P.plotDoc.sections.push({id:uid(), name:name||"새 섹션", ideaIds:[]});
+    P.plotDoc.sections.push({id:uid(), name:name||"새 섹션", desc:"", ideaIds:[]});
     save(); render();
   };
   head.querySelector("#changeStruct").onclick=()=>{
@@ -773,63 +776,197 @@ function rPlot(){
     P.plotDoc={structure:"", sections:[]}; save(); render();
   };
 
-  /* 미배치 아이디어 풀 */
-  const pool=unplacedIdeas();
-  const poolCard=document.createElement("div"); poolCard.className="card plot-pool-card";
-  poolCard.innerHTML=`<label>미배치 아이디어 (${pool.length})</label>
-    <p class="hint" style="margin:0 0 10px">여기 있는 아이디어를 아래 섹션으로 끌어다 놓으세요.</p>`;
-  const poolBox=document.createElement("div"); poolBox.className="plot-drop plot-pool"; poolBox.dataset.sec="__pool__";
-  if(!pool.length){ const e=document.createElement("p"); e.className="hint plot-empty"; e.textContent="모든 아이디어가 배치되었습니다."; poolBox.appendChild(e); }
-  pool.forEach(b=>poolBox.appendChild(plotIdeaCard(b)));
-  poolCard.appendChild(poolBox);
-  app.appendChild(poolCard);
-
   /* 섹션들 */
   const secWrap=document.createElement("div"); secWrap.className="plot-sections";
   app.appendChild(secWrap);
   P.plotDoc.sections.forEach((sec,idx)=>{
-    const card=document.createElement("div"); card.className="card plot-section";
-    const h=document.createElement("div"); h.className="plot-section-head";
-    const num=document.createElement("span"); num.className="plot-sec-num"; num.textContent=idx+1;
-    const nameEl=document.createElement("input"); nameEl.className="plot-sec-name"; nameEl.type="text"; nameEl.value=sec.name;
-    nameEl.onchange=()=>{ sec.name=nameEl.value||sec.name; save(); };
-    const cnt=document.createElement("span"); cnt.className="plot-sec-count"; cnt.textContent=`${(sec.ideaIds||[]).length}개`;
-    const delBtn=document.createElement("button"); delBtn.className="btn danger sm plot-sec-del"; delBtn.textContent="✕";
-    delBtn.title="섹션 삭제"; delBtn.onclick=()=>{
-      if((sec.ideaIds||[]).length && !confirm("이 섹션의 아이디어 배치가 해제됩니다. (원본은 유지) 삭제할까요?"))return;
-      P.plotDoc.sections=P.plotDoc.sections.filter(x=>x.id!==sec.id); save(); render();
-    };
-    h.appendChild(num); h.appendChild(nameEl); h.appendChild(cnt); h.appendChild(delBtn);
-    card.appendChild(h);
-    const body=document.createElement("div"); body.className="plot-drop plot-section-body"; body.dataset.sec=sec.id;
-    const ids=(sec.ideaIds||[]);
-    if(!ids.length){ const e=document.createElement("p"); e.className="hint plot-empty"; e.textContent="여기로 아이디어를 끌어다 놓으세요."; body.appendChild(e); }
-    ids.forEach(id=>{ const b=findIdea(id); if(b) body.appendChild(plotIdeaCard(b)); });
-    card.appendChild(body);
-    secWrap.appendChild(card);
+    secWrap.appendChild(plotSectionCard(sec, idx, secWrap));
   });
 
-  /* 드래그앤드롭 (풀 + 모든 섹션 공용) */
-  const drops=[poolBox, ...secWrap.querySelectorAll(".plot-drop")];
-  drops.forEach(zone=>{
-    zone.addEventListener("dragover", e=>{
-      e.preventDefault();
-      const dragging=document.querySelector(".plot-idea.dragging");
-      if(!dragging) return;
-      const after=getDragAfterElementV(zone, e.clientY);
-      if(after==null) zone.appendChild(dragging);
-      else zone.insertBefore(dragging, after);
-    });
-    zone.addEventListener("drop", e=>{
-      e.preventDefault();
-      rebuildPlotFromDOM(secWrap);
-      save(); render();
-    });
+  /* 섹션 순서 드래그 */
+  secWrap.addEventListener("dragover", e=>{
+    const dragging=secWrap.querySelector(".plot-section.sec-dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const after=getDragAfterEl(secWrap, e.clientY, ".plot-section:not(.sec-dragging)");
+    if(after==null) secWrap.appendChild(dragging);
+    else secWrap.insertBefore(dragging, after);
+  });
+  secWrap.addEventListener("drop", e=>{
+    if(!secWrap.querySelector(".plot-section.sec-dragging")) return;
+    e.preventDefault();
+    const order=[...secWrap.querySelectorAll(".plot-section")].map(el=>el.dataset.secid);
+    P.plotDoc.sections.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+    save(); render();
   });
 }
-/* 세로 목록용 삽입 위치 계산 (plot-idea 대상) */
-function getDragAfterElementV(container, y){
-  const els=[...container.querySelectorAll(".plot-idea:not(.dragging)")];
+
+/* 섹션 카드 하나 렌더 */
+function plotSectionCard(sec, idx, secWrap){
+  const card=document.createElement("div"); card.className="card plot-section"; card.dataset.secid=sec.id;
+  const collapsed=plotCollapsed.has(sec.id);
+
+  /* 헤더 */
+  const h=document.createElement("div"); h.className="plot-section-head";
+  const num=document.createElement("span"); num.className="plot-sec-num"; num.textContent=idx+1;
+  const nameEl=document.createElement("span"); nameEl.className="plot-sec-name"; nameEl.textContent=sec.name;
+  const spacer=document.createElement("span"); spacer.className="plot-sec-spacer";
+  const cnt=document.createElement("span"); cnt.className="plot-sec-count"; cnt.textContent=`${(sec.ideaIds||[]).length}개`;
+  // 이름 수정
+  const editBtn=iconBtn("✎","이름 수정",()=>{
+    const nm=prompt("섹션 이름:",sec.name); if(nm===null)return;
+    sec.name=nm||sec.name; save(); render();
+  });
+  // 아이디어 추가
+  const addBtn=iconBtn("＋","아이디어 추가",()=>togglePicker(sec));
+  // 섹션 이동 핸들
+  const moveBtn=iconBtn("☰","드래그해서 섹션 순서 변경",null);
+  moveBtn.classList.add("plot-sec-move");
+  moveBtn.addEventListener("mousedown", ()=>{ card.draggable=true; });
+  moveBtn.addEventListener("touchstart", ()=>{ card.draggable=true; }, {passive:true});
+  card.addEventListener("dragstart", e=>{
+    if(!card.draggable) return;
+    e.dataTransfer.effectAllowed="move";
+    setTimeout(()=>card.classList.add("sec-dragging"),0);
+  });
+  card.addEventListener("dragend", ()=>{ card.draggable=false; card.classList.remove("sec-dragging"); });
+  // 접기/펼치기
+  const collBtn=iconBtn(collapsed?"▸":"▾", collapsed?"펼치기":"접기", ()=>{
+    if(collapsed) plotCollapsed.delete(sec.id); else plotCollapsed.add(sec.id);
+    render();
+  });
+  // 삭제
+  const delBtn=iconBtn("🗑","섹션 삭제",()=>{
+    if((sec.ideaIds||[]).length && !confirm("이 섹션의 아이디어 배치가 해제됩니다. (원본은 유지) 삭제할까요?"))return;
+    P.plotDoc.sections=P.plotDoc.sections.filter(x=>x.id!==sec.id); save(); render();
+  });
+  delBtn.classList.add("plot-sec-del");
+  h.append(num, nameEl, spacer, cnt, editBtn, addBtn, moveBtn, collBtn, delBtn);
+  card.appendChild(h);
+
+  if(collapsed) return card;
+
+  /* 예시 설명 */
+  if(sec.desc){ const dsc=document.createElement("p"); dsc.className="plot-sec-desc"; dsc.textContent=sec.desc; card.appendChild(dsc); }
+
+  /* 배치된 아이디어 (드롭존) */
+  const body=document.createElement("div"); body.className="plot-drop plot-section-body"; body.dataset.sec=sec.id;
+  const ids=(sec.ideaIds||[]);
+  ids.forEach(id=>{ const b=findIdea(id); if(b) body.appendChild(plotIdeaCard(b)); });
+  card.appendChild(body);
+  // 아이디어 카드 드래그(섹션 간 이동/정렬)
+  body.addEventListener("dragover", e=>{
+    const dragging=document.querySelector(".plot-idea.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const after=getDragAfterEl(body, e.clientY, ".plot-idea:not(.dragging)");
+    if(after==null) body.appendChild(dragging);
+    else body.insertBefore(dragging, after);
+  });
+  body.addEventListener("drop", e=>{
+    if(!document.querySelector(".plot-idea.dragging")) return;
+    e.preventDefault();
+    rebuildPlotFromDOM(secWrap);
+    save(); render();
+  });
+
+  /* ＋ 아이디어 추가 박스 (드래그로 이 섹션에 떨어뜨리는 것도 가능) */
+  const addBox=document.createElement("div"); addBox.className="plot-add-box";
+  addBox.innerHTML=`<span class="plot-add-plus">＋</span><span class="plot-add-label">아이디어 추가</span>`;
+  addBox.onclick=()=>togglePicker(sec);
+  addBox.addEventListener("dragover", e=>{
+    const dragging=document.querySelector(".plot-idea.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    body.appendChild(dragging); addBox.classList.add("drop-hover");
+  });
+  addBox.addEventListener("dragleave", ()=>addBox.classList.remove("drop-hover"));
+  addBox.addEventListener("drop", e=>{
+    if(!document.querySelector(".plot-idea.dragging")) return;
+    e.preventDefault();
+    rebuildPlotFromDOM(secWrap); save(); render();
+  });
+  card.appendChild(addBox);
+
+  /* 피커 (열려 있을 때만) */
+  if(plotPickerFor===sec.id) card.appendChild(plotPicker(sec));
+
+  return card;
+}
+
+/* 아이콘 버튼 헬퍼 */
+function iconBtn(label, title, onClick){
+  const b=document.createElement("button"); b.className="plot-icon-btn"; b.textContent=label; b.title=title;
+  if(onClick) b.onclick=onClick;
+  return b;
+}
+/* 피커 토글 (다른 섹션 열면 필터 초기화) */
+function togglePicker(sec){
+  if(plotPickerFor===sec.id){ plotPickerFor=null; }
+  else { plotPickerFor=sec.id; plotPickerFilter=[]; }
+  render();
+}
+/* 아이디어 선택 피커 (미배치 아이디어 + 태그 필터) */
+function plotPicker(sec){
+  const box=document.createElement("div"); box.className="plot-picker";
+  const avail=unplacedIdeas();
+  const tags=[...new Set(avail.flatMap(b=>b.tags||[]))];
+  plotPickerFilter=plotPickerFilter.filter(t=>tags.includes(t));
+
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="아이디어 선택";
+  const closeBtn=iconBtn("✕","닫기",()=>{ plotPickerFor=null; render(); });
+  top.append(ttl, closeBtn);
+  box.appendChild(top);
+
+  if(tags.length){
+    const fbar=document.createElement("div"); fbar.className="plot-picker-filter";
+    const all=document.createElement("span");
+    all.className="idea-tag filter"+(plotPickerFilter.length===0?" on":"");
+    all.textContent="전체";
+    all.onclick=()=>{ plotPickerFilter=[]; render(); };
+    fbar.appendChild(all);
+    tags.forEach(t=>{
+      fbar.appendChild(makeTagChip(t,{
+        filterStyle:true, active:plotPickerFilter.includes(t),
+        onClick:()=>{ plotPickerFilter=plotPickerFilter.includes(t)?plotPickerFilter.filter(x=>x!==t):[...plotPickerFilter,t]; render(); }
+      }));
+    });
+    box.appendChild(fbar);
+  }
+
+  const listed=avail.filter(b=>plotPickerFilter.length===0||plotPickerFilter.some(t=>(b.tags||[]).includes(t)));
+  const list=document.createElement("div"); list.className="plot-picker-list";
+  if(!listed.length){
+    const e=document.createElement("p"); e.className="hint plot-empty";
+    e.textContent=avail.length?"이 태그에 해당하는 아이디어가 없습니다.":"추가할 아이디어가 없습니다. (아이디어 수집에서 먼저 작성하세요)";
+    list.appendChild(e);
+  }
+  listed.forEach(b=>{
+    const it=document.createElement("div"); it.className="plot-pick-item";
+    const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
+    it.style.borderLeftColor=color;
+    const txt=document.createElement("span"); txt.className="plot-pick-text"; txt.textContent=b.text||"(빈 아이디어)";
+    it.appendChild(txt);
+    (b.tags||[]).forEach(t=>{
+      const chip=document.createElement("span"); chip.className="plot-idea-tag";
+      const cc=getTagColor(t);
+      chip.style.background=hexToRgba(cc,0.14); chip.style.color=cc; chip.style.borderColor=hexToRgba(cc,0.5);
+      chip.textContent=t; it.appendChild(chip);
+    });
+    it.onclick=()=>{
+      sec.ideaIds=sec.ideaIds||[];
+      if(!sec.ideaIds.includes(b.id)) sec.ideaIds.push(b.id);
+      save(); render(); // 피커는 계속 열린 상태 유지(여러 개 연속 추가)
+    };
+    list.appendChild(it);
+  });
+  box.appendChild(list);
+  return box;
+}
+/* 삽입 위치 계산 (selector로 대상 지정) */
+function getDragAfterEl(container, y, selector){
+  const els=[...container.querySelectorAll(selector)];
   return els.reduce((closest, child)=>{
     const box=child.getBoundingClientRect();
     const offset=y-box.top-box.height/2;
@@ -837,7 +974,7 @@ function getDragAfterElementV(container, y){
     return closest;
   }, {offset:-Infinity, element:null}).element;
 }
-/* 화면(DOM)의 배치 상태를 plotDoc.sections에 반영 (풀은 미배치=저장 안 함) */
+/* 화면(DOM)의 배치 상태를 plotDoc.sections에 반영 */
 function rebuildPlotFromDOM(secWrap){
   secWrap.querySelectorAll(".plot-section-body").forEach(body=>{
     const secId=body.dataset.sec;
@@ -845,7 +982,7 @@ function rebuildPlotFromDOM(secWrap){
     if(sec) sec.ideaIds=[...body.querySelectorAll(".plot-idea")].map(el=>el.dataset.id);
   });
 }
-/* 플롯용 아이디어 미니 카드 (드래그 가능) */
+/* 플롯용 아이디어 미니 카드 (드래그 가능, × 로 배치 해제) */
 function plotIdeaCard(b){
   const d=document.createElement("div"); d.className="plot-idea"; d.dataset.id=b.id; d.draggable=false;
   const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
@@ -873,7 +1010,12 @@ function plotIdeaCard(b){
     });
     content.appendChild(tags);
   }
-  d.appendChild(handle); d.appendChild(content);
+  const rm=document.createElement("button"); rm.className="plot-idea-rm"; rm.textContent="✕"; rm.title="이 섹션에서 빼기";
+  rm.onclick=()=>{
+    P.plotDoc.sections.forEach(s=>{ s.ideaIds=(s.ideaIds||[]).filter(x=>x!==b.id); });
+    save(); render();
+  };
+  d.appendChild(handle); d.appendChild(content); d.appendChild(rm);
   return d;
 }
 
