@@ -1254,12 +1254,11 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   titleEl.value=bl.title||"";
   titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
   titleEl.onblur=()=>{ titleEl.readOnly=true; };
-  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn"; editBtn.textContent="✎ 수정"; editBtn.title="플롯/제목 수정";
+  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn scene-hicon"; editBtn.textContent="✎"; editBtn.title="수정";
   editBtn.onclick=()=>{ titleEl.readOnly=false; titleEl.focus(); try{ titleEl.select(); }catch(e){} };
-  const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn"; addTextBtn.textContent="＋ 본문";
-  addTextBtn.title="본문 하위 블록 추가";
+  const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn scene-hicon"; addTextBtn.textContent="＋"; addTextBtn.title="본문 추가";
   addTextBtn.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
-  const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn"; dlgBtn.textContent="💬 대사 추가";
+  const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn scene-hicon"; dlgBtn.textContent="💬"; dlgBtn.title="대사 추가";
   dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
   const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.textContent="✕"; delBtn.title="블록 삭제";
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
