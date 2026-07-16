@@ -75,7 +75,7 @@ function blankProject(id,name){
     plot:Array(12).fill(""),
     ideaBlocks:[],
     tagColors:{},
-    plotDoc:{structure:"", sections:[]},
+    plotDoc:{structure:"", sections:[], ideaOverrides:{}},
     writeDoc:{blocks:[]},
     explore:blankExplore()};
 }
@@ -91,18 +91,19 @@ function fillWriteDoc(wd){
       if(x.text) items.push({id:uid(), type:"text", char:"", text:x.text});
       if(Array.isArray(x.lines)) x.lines.forEach(l=>items.push({id:l.id||uid(), type:"line", char:l.char||"", text:l.text||""}));
     }
-    return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", items};
+    return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items};
   }) : []};
 }
 /* plotDoc 기본값 보정 (예전 데이터 안전 처리) */
 function fillPlotDoc(pd){
-  const b={structure:"", sections:[]};
+  const b={structure:"", sections:[], ideaOverrides:{}};
   if(!pd||typeof pd!=="object") return b;
   return {
     structure: pd.structure||"",
     sections: Array.isArray(pd.sections)
       ? pd.sections.map(s=>({id:s.id||uid(), name:s.name||"섹션", desc:s.desc||"", ideaIds:Array.isArray(s.ideaIds)?s.ideaIds.slice():[]}))
       : [],
+    ideaOverrides: (pd.ideaOverrides && typeof pd.ideaOverrides==="object") ? Object.assign({}, pd.ideaOverrides) : {},
   };
 }
 function blankChar(){
@@ -736,6 +737,16 @@ let plotPickerFilter=[];      // 피커 내 태그 필터
 const plotCollapsed=new Set();// 접힌 섹션 id (화면 상태, 저장 안 함)
 /* 아이디어 id로 블록 찾기 */
 function findIdea(id){ return (P.ideaBlocks||[]).find(b=>b.id===id); }
+/* 플롯에서 표시할 아이디어 텍스트 — 오버라이드가 있으면 그것(아이디어 수집과 독립), 없으면 원본 */
+function plotIdeaText(id){
+  const ov=P.plotDoc.ideaOverrides||{};
+  if(Object.prototype.hasOwnProperty.call(ov,id)) return ov[id];
+  const idea=findIdea(id); return idea?(idea.text||""):"";
+}
+function setPlotIdeaText(id, text){
+  if(!P.plotDoc.ideaOverrides) P.plotDoc.ideaOverrides={};
+  P.plotDoc.ideaOverrides[id]=text; save();
+}
 /* 어느 섹션에도 배치되지 않은 아이디어 목록 */
 function unplacedIdeas(){
   const placed=new Set();
@@ -1022,7 +1033,10 @@ function plotIdeaCard(b){
   });
   d.addEventListener("dragend", ()=>{ d.draggable=false; d.classList.remove("dragging"); });
   const content=document.createElement("div"); content.className="plot-idea-content";
-  const txt=document.createElement("div"); txt.className="plot-idea-text"; txt.textContent=b.text||"(빈 아이디어)";
+  const txt=document.createElement("div"); txt.className="plot-idea-text";
+  txt.contentEditable="true"; txt.spellcheck=false; txt.dataset.ph="아이디어 내용";
+  txt.textContent=plotIdeaText(b.id);
+  txt.oninput=()=>{ setPlotIdeaText(b.id, txt.textContent); };
   content.appendChild(txt);
   if((b.tags||[]).length){
     const tags=document.createElement("div"); tags.className="plot-idea-tags";
@@ -1046,6 +1060,7 @@ function plotIdeaCard(b){
 
 /* ===== ✍️ 글쓰기 ===== */
 let writeDlgFor=null;       // 대사 추가 팝업이 열린 블록 id
+let writeFocusTitle=null;   // 렌더 후 제목 입력에 포커스할 블록 id
 
 /* 섹션에 속한 장면 블록(배열 순서 유지) */
 function blocksOfSection(secId){ return (P.writeDoc.blocks||[]).filter(b=>b.sectionId===secId); }
@@ -1079,6 +1094,8 @@ function rWrite(){
   const secIds=new Set(pd.sections.map(s=>s.id));
   let fixed=false;
   (P.writeDoc.blocks||[]).forEach(b=>{ if(!secIds.has(b.sectionId)){ b.sectionId=pd.sections[0].id; fixed=true; } });
+  /* 예전에 불러온 블록(제목 없음)은 원본 아이디어 텍스트를 제목으로 1회 스냅샷 → 이후 독립 수정 */
+  (P.writeDoc.blocks||[]).forEach(b=>{ if(b.fromIdea && !b.title){ const t=plotIdeaText(b.fromIdea); if(t){ b.title=t; fixed=true; } } });
   if(fixed) save();
 
   const layout=document.createElement("div"); layout.className="write-layout";
@@ -1140,7 +1157,7 @@ function loadPlotIntoWrite(){
   (P.plotDoc.sections||[]).forEach(sec=>{
     (sec.ideaIds||[]).forEach(id=>{
       if(existing.has(id)) return;
-      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, items:[]});
+      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[]});
       existing.add(id); added++;
     });
   });
@@ -1169,16 +1186,32 @@ function renderLeftInto(left){
     if(blocks.length){
       const bl=document.createElement("div"); bl.className="wpl-blocks";
       blocks.forEach((b,bi)=>{
-        const idea=b.fromIdea?findIdea(b.fromIdea):null;
-        const label=idea? (idea.text||"(빈 아이디어)") : (blockFirstText(b)||"(빈 블록)");
+        let label=(b.title&&b.title.trim())||"";
+        if(!label){ const idea=b.fromIdea?findIdea(b.fromIdea):null; label=idea?(idea.text||""):""; }
+        if(!label) label=blockFirstText(b)||"(빈 블록)";
         const li=document.createElement("div"); li.className="wpl-block"; li.textContent=`${bi+1}. ${label}`; li.title=label;
         li.onclick=(e)=>{ e.stopPropagation(); const el=document.getElementById("wblk-"+b.id); if(el) el.scrollIntoView({behavior:"smooth", block:"center"}); };
         bl.appendChild(li);
       });
       item.appendChild(bl);
     }
+    /* 이 섹션에 아이디어(장면 블록) 추가 */
+    const addIdea=document.createElement("button"); addIdea.className="wpl-add"; addIdea.textContent="＋ 아이디어";
+    addIdea.onclick=(e)=>{
+      e.stopPropagation();
+      const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]};
+      P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render();
+    };
+    item.appendChild(addIdea);
     left.appendChild(item);
   });
+  /* 플롯 단계(섹션) 추가 */
+  const addSec=document.createElement("button"); addSec.className="wpl-add-section"; addSec.textContent="＋ 플롯 단계 추가";
+  addSec.onclick=()=>{
+    const name=prompt("새 플롯 단계 이름:","새 단계"); if(name===null)return;
+    P.plotDoc.sections.push({id:uid(), name:name||"새 단계", desc:"", ideaIds:[]}); save(); render();
+  };
+  left.appendChild(addSec);
 }
 /* 블록의 첫 텍스트(본문/대사) 미리보기용 */
 function blockFirstText(bl){
@@ -1210,19 +1243,14 @@ function sceneBlockCard(bl, main, liveRefresh){
   head.append(handle, spacer, addTextBtn, dlgBtn, delBtn);
   d.appendChild(head);
 
-  /* 플롯에서 불러온 블록이면 원본 아이디어를 참고 라벨로 표시 */
-  if(bl.fromIdea){
-    const idea=findIdea(bl.fromIdea);
-    const ref=document.createElement("div"); ref.className="scene-ref";
-    if(idea){
-      const color=(idea.tags&&idea.tags.length)?getTagColor(idea.tags[0]):"var(--line)";
-      ref.style.borderLeftColor=color;
-      ref.textContent=idea.text||"(빈 아이디어)";
-    }else{
-      ref.classList.add("gone"); ref.textContent="(원본 아이디어가 삭제됨)";
-    }
-    d.appendChild(ref);
-  }
+  /* 아이디어/제목 — 글쓰기에서 자유롭게 수정 (아이디어 수집·플롯 생성 원본과 독립) */
+  const titleEl=document.createElement("input"); titleEl.className="scene-title"; titleEl.type="text";
+  titleEl.placeholder="아이디어 / 제목 (자유롭게 수정)";
+  titleEl.value=bl.title||"";
+  if(bl.fromIdea){ const idea=findIdea(bl.fromIdea); if(idea && idea.tags && idea.tags.length) titleEl.style.borderLeftColor=getTagColor(idea.tags[0]); }
+  titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
+  d.appendChild(titleEl);
+  if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.focus(); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
 
   /* 하위 블록(본문/대사) */
   const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
@@ -1429,7 +1457,7 @@ function buildPreview(){
     const label=(PLOT_STRUCTURES[pd.structure]&&PLOT_STRUCTURES[pd.structure].label)||"사용자 구조";
     plot=`<p class="muted" style="margin:0 0 8px">구조: ${esc(label)}</p>`+
       pd.sections.map((s,i)=>{
-        const items=(s.ideaIds||[]).map(id=>{const b=(P.ideaBlocks||[]).find(x=>x.id===id);return b?`<li>${esc(b.text)}</li>`:"";}).join("");
+        const items=(s.ideaIds||[]).map(id=>{const t=plotIdeaText(id);return t?`<li>${esc(t)}</li>`:"";}).join("");
         return `<p><b>${i+1}. ${esc(s.name)}</b></p>${items?`<ul>${items}</ul>`:`<p><i>(배치된 아이디어 없음)</i></p>`}`;
       }).join("");
   }else{

@@ -160,7 +160,9 @@ textarea{resize:vertical;min-height:70px}
 .plot-idea-handle{cursor:grab;color:var(--muted);font-size:14px;line-height:1.4;user-select:none;flex-shrink:0}
 .plot-idea-handle:active{cursor:grabbing}
 .plot-idea-content{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
-.plot-idea-text{font-size:13px;font-weight:600;white-space:pre-wrap;word-break:break-word}
+.plot-idea-text{font-size:13px;font-weight:600;white-space:pre-wrap;word-break:break-word;outline:none;border-radius:4px}
+.plot-idea-text:focus{background:var(--bg);box-shadow:inset 0 0 0 1px var(--line)}
+.plot-idea-text:empty:before{content:attr(data-ph);color:var(--muted);font-weight:400}
 .plot-idea-tags{display:flex;flex-wrap:wrap;gap:4px}
 .plot-idea-tag{font-size:11px;font-weight:600;border:1px solid transparent;border-radius:999px;padding:1px 7px}
 .plot-idea-rm{background:transparent;border:none;cursor:pointer;color:var(--muted);
@@ -208,6 +210,12 @@ textarea{resize:vertical;min-height:70px}
 .wpl-block{font-size:11px;color:var(--muted);line-height:1.5;cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 4px;border-radius:4px}
 .wpl-block:hover{background:var(--bg);color:var(--ink)}
+.wpl-add{margin-top:5px;width:100%;background:transparent;border:1px dashed var(--line);
+  border-radius:6px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;padding:4px}
+.wpl-add:hover{border-color:var(--accent);color:var(--accent)}
+.wpl-add-section{margin-top:12px;width:100%;background:var(--accent2);border:none;
+  border-radius:8px;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;padding:8px}
+.wpl-add-section:hover{filter:brightness(.97)}
 
 .write-main{flex:0 1 800px;min-width:0}
 .write-toolbar{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px}
@@ -232,9 +240,11 @@ textarea{resize:vertical;min-height:70px}
 .scene-dlg-btn:hover{filter:brightness(.96)}
 .scene-del-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px}
 .scene-del-btn:hover{color:#b3503a}
-.scene-ref{font-size:14px;color:var(--ink);background:#faf8f4;border-left:3px solid var(--line);
-  border-radius:4px;padding:7px 11px;margin-bottom:8px;white-space:pre-wrap;word-break:break-word}
-.scene-ref.gone{font-style:italic;color:var(--muted)}
+.scene-title{width:100%;font-size:14px;font-weight:700;color:var(--ink);
+  border:1px solid var(--line);border-left:3px solid var(--accent2);border-radius:6px;
+  padding:7px 11px;margin-bottom:8px;background:#fdfcfa;font-family:inherit}
+.scene-title:focus{outline:none;border-color:var(--accent);background:#fff}
+.scene-title::placeholder{font-weight:400;color:var(--muted)}
 /* 하위 블록(본문/대사) */
 .scene-items{display:flex;flex-direction:column;gap:6px;min-height:14px}
 .sub-empty{margin:0;padding:8px;font-size:12px;color:var(--muted);text-align:center;
