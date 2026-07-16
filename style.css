@@ -232,8 +232,13 @@ textarea{resize:vertical;min-height:70px}
 .write-divider .wd-num{background:var(--accent);color:#fff;width:22px;height:22px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
 .write-divider .wd-name{font-weight:700;font-size:14px;color:var(--accent)}
+.write-divider .wd-spacer{flex:1}
+.wd-icon{background:transparent;border:1px solid var(--line);border-radius:6px;cursor:pointer;
+  font-size:13px;line-height:1;padding:3px 8px;color:var(--muted);flex-shrink:0}
+.wd-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
 .write-blocklist{display:flex;flex-direction:column;gap:10px;min-height:20px}
-.scene-block{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;transition:opacity .15s}
+.scene-block{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--accent2);
+  border-radius:10px;padding:10px 12px;transition:opacity .15s}
 .scene-block.dragging{opacity:.4}
 .scene-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}
 .scene-handle{cursor:grab;color:var(--muted);font-size:14px;user-select:none}
@@ -247,8 +252,8 @@ textarea{resize:vertical;min-height:70px}
 .scene-dlg-btn:hover{filter:brightness(.96)}
 .scene-del-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px}
 .scene-del-btn:hover{color:#b3503a}
-.scene-title{width:100%;font-size:14px;font-weight:700;color:var(--ink);
-  border:1px solid transparent;border-left:3px solid var(--accent2);border-radius:6px;
+.scene-title{width:100%;font-size:13px;font-weight:800;color:var(--ink);
+  border:1px solid transparent;border-radius:6px;
   padding:7px 11px;margin-bottom:8px;background:transparent;font-family:inherit;cursor:default}
 .scene-title[readonly]::placeholder{color:var(--muted);font-weight:400}
 .scene-title:not([readonly]){border-color:var(--accent);background:#fff;cursor:text;box-shadow:0 0 0 2px var(--accent2)}

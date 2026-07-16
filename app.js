@@ -1133,15 +1133,17 @@ function rWrite(){
   pd.sections.forEach((sec,i)=>{
     const group=document.createElement("div"); group.className="write-group"; group.id="wsec-"+sec.id;
     const div=document.createElement("div"); div.className="write-divider";
-    div.innerHTML=`<span class="wd-num">${i+1}</span><span class="wd-name">${esc(sec.name)}</span>`;
+    div.innerHTML=`<span class="wd-num">${i+1}</span><span class="wd-name">${esc(sec.name)}</span><span class="wd-spacer"></span>`;
+    const loadBtn=document.createElement("button"); loadBtn.className="wd-icon"; loadBtn.textContent="📥"; loadBtn.title="아이디어 불러오기";
+    loadBtn.onclick=()=>loadSectionIdeas(sec);
+    const createBtn=document.createElement("button"); createBtn.className="wd-icon"; createBtn.textContent="＋"; createBtn.title="아이디어 생성";
+    createBtn.onclick=()=>{ const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]}; P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render(); };
+    div.append(loadBtn, createBtn);
     group.appendChild(div);
     const list=document.createElement("div"); list.className="write-blocklist"; list.dataset.sec=sec.id;
     blocksOfSection(sec.id).forEach(bl=>list.appendChild(sceneBlockCard(bl, main, liveRefresh)));
     group.appendChild(list);
     setupBlockDnD(list, main);
-    const addBtn=document.createElement("button"); addBtn.className="write-add-block"; addBtn.textContent="＋ 아이디어 생성";
-    addBtn.onclick=()=>{ const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]}; P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render(); };
-    group.appendChild(addBtn);
     main.appendChild(group);
   });
   layout.appendChild(main);
@@ -1213,19 +1215,6 @@ function renderLeftInto(left){
       });
       item.appendChild(bl);
     }
-    /* 이 단계에 아이디어 불러오기 / 생성 */
-    const btnRow=document.createElement("div"); btnRow.className="wpl-btnrow";
-    const loadIdea=document.createElement("button"); loadIdea.className="wpl-add wpl-load"; loadIdea.textContent="📥 아이디어 불러오기";
-    loadIdea.title="플롯 생성에서 이 단계에 배치한 아이디어를 불러옵니다";
-    loadIdea.onclick=(e)=>{ e.stopPropagation(); loadSectionIdeas(sec); };
-    const addIdea=document.createElement("button"); addIdea.className="wpl-add"; addIdea.textContent="＋ 아이디어 생성";
-    addIdea.onclick=(e)=>{
-      e.stopPropagation();
-      const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]};
-      P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render();
-    };
-    btnRow.append(loadIdea, addIdea);
-    item.appendChild(btnRow);
     left.appendChild(item);
   });
   /* 플롯 단계(섹션) 추가 */
@@ -1245,6 +1234,8 @@ function blockFirstText(bl){
 /* 장면 블록 카드 */
 function sceneBlockCard(bl, main, liveRefresh){
   const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.id="wblk-"+bl.id; d.draggable=false;
+  /* 블록 왼쪽 컬러 바 — 불러온 아이디어면 태그 색상, 아니면 기본색 */
+  if(bl.fromIdea){ const idea=findIdea(bl.fromIdea); if(idea && idea.tags && idea.tags.length) d.style.borderLeftColor=getTagColor(idea.tags[0]); }
   const head=document.createElement("div"); head.className="scene-head";
   const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 블록 이동";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
@@ -1260,7 +1251,6 @@ function sceneBlockCard(bl, main, liveRefresh){
   const titleEl=document.createElement("input"); titleEl.className="scene-title"; titleEl.type="text"; titleEl.readOnly=true;
   titleEl.placeholder="아이디어 / 제목 (✎ 수정 버튼으로 편집)";
   titleEl.value=bl.title||"";
-  if(bl.fromIdea){ const idea=findIdea(bl.fromIdea); if(idea && idea.tags && idea.tags.length) titleEl.style.borderLeftColor=getTagColor(idea.tags[0]); }
   titleEl.oninput=()=>{ bl.title=titleEl.value; save(); liveRefresh&&liveRefresh(); };
   titleEl.onblur=()=>{ titleEl.readOnly=true; };
   const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn"; editBtn.textContent="✎ 수정"; editBtn.title="아이디어(제목) 수정";
