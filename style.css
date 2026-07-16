@@ -254,7 +254,7 @@ textarea{resize:vertical;min-height:70px}
 .scene-dlg-btn:hover{filter:brightness(.96)}
 .scene-del-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px}
 .scene-del-btn:hover{color:#b3503a}
-.scene-title{width:100%;font-size:11px;font-weight:800;color:var(--ink);
+input.scene-title{width:100%;font-size:11px;font-weight:800;color:var(--ink);
   border:1px solid var(--line);border-radius:6px;
   padding:7px 11px;margin-bottom:8px;background:#e2dbca;font-family:inherit;cursor:default}
 .scene-title[readonly]::placeholder{color:var(--muted);font-weight:600}
@@ -274,10 +274,10 @@ textarea{resize:vertical;min-height:70px}
 .sub-handle{cursor:grab;color:var(--muted);font-size:13px;user-select:none;flex-shrink:0;padding-top:2px}
 .sub-handle:active{cursor:grabbing}
 .sub-textarea{flex:1;min-width:0;min-height:44px;border:none;background:transparent;
-  font:inherit;resize:vertical;color:var(--ink);padding:2px 0}
+  font-family:inherit;font-size:10px;resize:vertical;color:var(--ink);padding:2px 0}
 .sub-textarea:focus{outline:none}
-.sub-line .dlg-who{font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0;white-space:nowrap;padding-top:1px}
-.sub-line .dlg-text{flex:1;font-size:13px;min-width:0;word-break:break-word;padding-top:1px}
+.sub-line .dlg-who{font-size:10px;font-weight:700;color:var(--accent);flex-shrink:0;white-space:nowrap;padding-top:1px}
+.sub-line .dlg-text{flex:1;font-size:10px;min-width:0;word-break:break-word;padding-top:1px}
 .sub-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;flex-shrink:0}
 .sub-del:hover{color:#b3503a}
 .write-add-block{width:100%;margin-top:10px;background:transparent;border:1px dashed var(--line);
