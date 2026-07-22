@@ -950,7 +950,9 @@ function charRelationshipGraph(){
       e._x1=Bx-ux*(NODE_R+4); e._y1=By-uy*(NODE_R+4);
       e._x2=Ax+ux*(NODE_R+10); e._y2=Ay+uy*(NODE_R+10);
     }
-    e._mx=(Ax+Bx)/2; e._my=(Ay+By)/2;
+    /* 라벨 박스는 평행 이동만으로는 폭이 넓어 서로 겹칠 수 있어, 같은 쌍 안에서 선을 따라 위치(t)도 함께 벌린다 */
+    const t=Math.max(0.26, Math.min(0.74, 0.5+(e._idx-(e._count-1)/2)*0.18));
+    e._mx=Ax+(Bx-Ax)*t; e._my=Ay+(By-Ay)*t;
   });
   /* 1단계: 화살표 선을 모두 그린다 */
   edges.forEach(e=>{
