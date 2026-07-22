@@ -110,7 +110,9 @@ function fillWriteDoc(wd){
       if(Array.isArray(x.lines)) x.lines.forEach(l=>items.push({id:l.id||uid(), type:"line", char:l.char||"", text:l.text||""}));
     }
     const groupId=(x.groupId && groupIds.has(x.groupId)) ? x.groupId : "";
-    return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items, groupId};
+    const backgrounds=Array.isArray(x.backgrounds)?x.backgrounds.filter(s=>typeof s==="string"&&s.trim()):[];
+    const characters=Array.isArray(x.characters)?x.characters.filter(s=>typeof s==="string"&&s.trim()):[];
+    return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items, groupId, backgrounds, characters};
   }) : []);
   const groups=(Array.isArray(wd.groups)?wd.groups:[]).map(g=>({id:(g&&g.id)||uid(), name:(g&&g.name)||"그룹"}));
   return {blocks, groups};
@@ -1213,7 +1215,7 @@ function rWrite(){
     const loadBtn=document.createElement("button"); loadBtn.className="wd-icon"; loadBtn.textContent="📥"; loadBtn.title="아이디어 불러오기";
     loadBtn.onclick=()=>loadSectionIdeas(sec);
     const createBtn=document.createElement("button"); createBtn.className="wd-icon"; createBtn.textContent="＋"; createBtn.title="블럭 생성";
-    createBtn.onclick=()=>{ const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[]}; P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render(); };
+    createBtn.onclick=()=>{ const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[], groupId:"", backgrounds:[], characters:[]}; P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render(); };
     div.append(loadBtn, createBtn);
     group.appendChild(div);
     const list=document.createElement("div"); list.className="write-blocklist"; list.dataset.sec=sec.id;
@@ -1253,7 +1255,7 @@ function loadPlotIntoWrite(){
   (P.plotDoc.sections||[]).forEach(sec=>{
     (sec.ideaIds||[]).forEach(id=>{
       if(existing.has(id)) return;
-      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[]});
+      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[], groupId:"", backgrounds:[], characters:[]});
       existing.add(id); added++;
     });
   });
@@ -1266,7 +1268,7 @@ function loadSectionIdeas(sec){
   let added=0;
   (sec.ideaIds||[]).forEach(id=>{
     if(existing.has(id)) return;
-    P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[]});
+    P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[], groupId:"", backgrounds:[], characters:[]});
     existing.add(id); added++;
   });
   if(added){ save(); render(); }
@@ -1402,18 +1404,17 @@ function sceneBlockCard(bl, main, liveRefresh, num){
     if(!dndDropHandled && main && main.isConnected) commitWriteBlockOrder(main);
   });
   /* 플롯/제목 — 헤더 한 줄에 배치. 길면 이 칸만 줄바꿈되어 늘어나고, 핸들·번호·버튼은 위치 고정.
-     기본은 잠금(읽기전용), ✎ 수정 버튼을 눌러야 편집 */
+     기본은 잠금(읽기전용), 텍스트를 클릭하면 바로 편집 */
   const titleEl=document.createElement("div"); titleEl.className="scene-title"; titleEl.contentEditable="false";
-  titleEl.spellcheck=false; titleEl.dataset.ph="플롯 / 제목 (✎ 수정 버튼으로 편집)";
+  titleEl.spellcheck=false; titleEl.dataset.ph="플롯 / 제목 (클릭해서 편집)";
   titleEl.textContent=bl.title||"";
   titleEl.oninput=()=>{ bl.title=titleEl.textContent; save(); liveRefresh&&liveRefresh(); };
   titleEl.addEventListener("blur", ()=>{ titleEl.contentEditable="false"; });
-  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn scene-hicon"; editBtn.innerHTML=ICONS.edit; editBtn.title="수정";
-  editBtn.onclick=()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); };
-  const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn scene-hicon"; addTextBtn.innerHTML=ICONS.plus; addTextBtn.title="본문 추가";
-  addTextBtn.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
-  const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn scene-hicon"; dlgBtn.innerHTML=ICONS.chat; dlgBtn.title="대사 추가";
-  dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
+  titleEl.addEventListener("click", ()=>{ if(titleEl.contentEditable!=="true"){ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); } });
+  const bgBtn=document.createElement("button"); bgBtn.className="scene-tagbtn"; bgBtn.innerHTML=ICONS.plus+" 배경"; bgBtn.title="배경 메모 추가";
+  bgBtn.onclick=e=>{ e.stopPropagation(); const nm=prompt("배경 메모:"); if(nm&&nm.trim()){ bl.backgrounds=bl.backgrounds||[]; bl.backgrounds.push(nm.trim()); save(); render(); } };
+  const charBtn=document.createElement("button"); charBtn.className="scene-tagbtn"; charBtn.innerHTML=ICONS.plus+" 캐릭터"; charBtn.title="캐릭터 추가";
+  charBtn.onclick=e=>{ e.stopPropagation(); openCharacterPicker(charBtn, bl); };
   const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.innerHTML=ICONS.close; delBtn.title="블록 삭제";
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
   if(writeSelectMode){
@@ -1423,16 +1424,63 @@ function sceneBlockCard(bl, main, liveRefresh, num){
     chk.onchange=()=>{ if(chk.checked) writeSelectedIds.add(bl.id); else writeSelectedIds.delete(bl.id); render(); };
     head.appendChild(chk);
   }
-  head.append(handle, numEl, titleEl, editBtn, addTextBtn, dlgBtn, delBtn);
+  head.append(handle, numEl, titleEl, bgBtn, charBtn, delBtn);
   d.appendChild(head);
   if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
+
+  /* 배경/캐릭터 메모 — 플롯/제목 바로 아래 2열 */
+  if((bl.backgrounds&&bl.backgrounds.length) || (bl.characters&&bl.characters.length)){
+    const metaRow=document.createElement("div"); metaRow.className="scene-meta-row";
+    const bgCol=document.createElement("div"); bgCol.className="scene-meta-col";
+    (bl.backgrounds||[]).forEach((bg,i)=>bgCol.appendChild(metaChip(bg, ()=>{ bl.backgrounds.splice(i,1); save(); render(); })));
+    const charCol=document.createElement("div"); charCol.className="scene-meta-col";
+    (bl.characters||[]).forEach((nm,i)=>charCol.appendChild(metaChip(nm, ()=>{ bl.characters.splice(i,1); save(); render(); })));
+    metaRow.append(bgCol, charCol);
+    d.appendChild(metaRow);
+  }
 
   /* 하위 블록(본문/대사) */
   const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
   (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh, main)));
   setupItemDnD(itemsEl, main);
   d.appendChild(itemsEl);
+
+  /* 본문 블록 아래 점선 추가 버튼 — 새 본문(텍스트) 항목 추가. 대사 추가는 우클릭 메뉴에서 */
+  const addDashed=document.createElement("button"); addDashed.type="button"; addDashed.className="scene-dashed-add";
+  addDashed.innerHTML=ICONS.plus+" 추가";
+  addDashed.title="본문 추가 (대사 추가는 우클릭 메뉴)";
+  addDashed.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
+  d.appendChild(addDashed);
   return d;
+}
+/* 배경/캐릭터 메모 칩 하나 */
+function metaChip(text, onRemove){
+  const chip=document.createElement("span"); chip.className="scene-chip";
+  const txt=document.createElement("span"); txt.className="chip-text"; txt.textContent=text;
+  const xBtn=document.createElement("button"); xBtn.type="button"; xBtn.className="chip-x"; xBtn.innerHTML=ICONS.close; xBtn.title="삭제";
+  xBtn.onclick=e=>{ e.stopPropagation(); onRemove(); };
+  chip.append(txt, xBtn);
+  return chip;
+}
+/* [+캐릭터] 버튼 — 캐릭터 설정에 등록된 인물 드롭다운(+직접입력) */
+function openCharacterPicker(btn, bl){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  m.innerHTML="";
+  const names=(P.characters||[]).map(c=>c.name).filter(Boolean);
+  names.forEach(name=>{
+    const b=document.createElement("button"); b.textContent=name;
+    b.onclick=()=>{ hideCtxMenu(); bl.characters=bl.characters||[]; if(!bl.characters.includes(name)) bl.characters.push(name); save(); render(); };
+    m.appendChild(b);
+  });
+  if(names.length){ const hr=document.createElement("hr"); m.appendChild(hr); }
+  const custom=document.createElement("button"); custom.innerHTML=ICONS.edit+" 직접 입력";
+  custom.onclick=()=>{ hideCtxMenu(); const nm=prompt("캐릭터 이름:"); if(nm&&nm.trim()){ bl.characters=bl.characters||[]; bl.characters.push(nm.trim()); save(); render(); } };
+  m.appendChild(custom);
+  m.hidden=false;
+  const rect=btn.getBoundingClientRect();
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(rect.left, vw-190)+"px";
+  m.style.top=Math.min(rect.bottom+4, vh-((names.length+1)*36+20))+"px";
 }
 
 /* 하위 블록 하나 (본문 type=text / 대사 type=line) */

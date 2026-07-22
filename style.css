@@ -411,3 +411,21 @@ body.logged-in .login-overlay { display: none; }
 
 /* ===== 내보내기 탭 ===== */
 .export-btnrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+
+/* ===== 본문 블록: 배경/캐릭터 태그 · 점선 추가버튼 ===== */
+.scene-tagbtn{flex-shrink:0;display:inline-flex;align-items:center;gap:3px;margin-top:2px;
+  background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:6px;
+  cursor:pointer;font-size:11px;font-weight:600;padding:4px 8px}
+.scene-tagbtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
+.scene-meta-row{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:0 0 8px}
+.scene-meta-col{display:flex;flex-wrap:wrap;gap:5px;align-content:flex-start}
+.scene-chip{display:inline-flex;align-items:center;gap:5px;background:var(--accent2);
+  color:var(--ink);border-radius:12px;padding:3px 4px 3px 9px;font-size:11px;font-weight:600}
+.chip-x{display:inline-flex;align-items:center;justify-content:center;background:transparent;
+  border:none;cursor:pointer;color:var(--muted);padding:2px;border-radius:50%}
+.chip-x .icon{width:10px;height:10px}
+.chip-x:hover{color:#b3503a;background:#fff}
+.scene-dashed-add{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;
+  margin-top:8px;padding:8px;border:1.5px dashed var(--line);border-radius:8px;background:transparent;
+  color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
+.scene-dashed-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
