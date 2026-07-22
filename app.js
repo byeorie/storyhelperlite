@@ -131,7 +131,7 @@ function fillPlotDoc(pd){
   };
 }
 function blankChar(){
-  return {id:uid(), name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[]};
+  return {id:uid(), name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:""};
 }
 function currentProject(){
   return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
@@ -751,13 +751,41 @@ function rChar(){
     if(ch) app.appendChild(charModal(ch)); else charModalFor=null;
   }
 }
+/* 캐릭터 사진 업로드 — 500KB 이하만 허용, 300x300으로 잘라 압축(JPEG)한 뒤 데이터URL로 저장 */
+function handleCharImageFile(file, ch, onDone){
+  if(!file) return;
+  if(!file.type||!file.type.startsWith("image/")){ alert("이미지 파일만 업로드할 수 있습니다."); return; }
+  if(file.size>500*1024){ alert("이미지 용량은 500KB 이하만 업로드할 수 있습니다."); return; }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const SIZE=300;
+      const canvas=document.createElement("canvas"); canvas.width=SIZE; canvas.height=SIZE;
+      const ctx=canvas.getContext("2d");
+      const scale=Math.max(SIZE/img.width, SIZE/img.height);
+      const w=img.width*scale, h=img.height*scale;
+      ctx.drawImage(img, (SIZE-w)/2, (SIZE-h)/2, w, h);
+      ch.image=canvas.toDataURL("image/jpeg", 0.85);
+      save(); onDone&&onDone();
+    };
+    img.onerror=()=>alert("이미지를 불러오지 못했습니다.");
+    img.src=reader.result;
+  };
+  reader.onerror=()=>alert("파일을 읽지 못했습니다.");
+  reader.readAsDataURL(file);
+}
+/* 캐릭터 아바타 HTML(이미지 있으면 이미지, 없으면 이니셜) */
+function charAvatarHtml(ch){
+  const initial=esc((ch.name||"?").trim().charAt(0)||"?");
+  return ch.image ? `<img src="${ch.image}" alt="">` : initial;
+}
 /* 갤러리 카드 (미리보기, 클릭 시 편집 팝업) */
 function charGalleryCard(ch){
   const d=document.createElement("div"); d.className="char-card-mini";
   d.onclick=()=>{ charModalFor=ch.id; render(); };
-  const initial=(ch.name||"?").trim().charAt(0)||"?";
   const relCount=(ch.relationships||[]).length;
-  d.innerHTML=`<div class="char-avatar" style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}">${esc(initial)}</div>
+  d.innerHTML=`<div class="char-avatar"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
     <div class="char-card-name">${esc(ch.name)||"이름 없음"}</div>
     <div class="char-card-role">${esc(ch.role)||"-"}</div>
     <div class="char-card-badges">${ch.mbti?`<span class="char-badge">${esc(ch.mbti)}</span>`:""}${ch.enneagram?`<span class="char-badge">${esc(ch.enneagram)}유형</span>`:""}</div>
@@ -788,6 +816,14 @@ function charModal(ch){
   const enOpts=ENNEAGRAM.map(e=>`<option value="${e.n}">${e.n} — ${e.d}</option>`).join("");
   const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m}</option>`).join("");
   body.innerHTML=`
+    <div class="char-img-row">
+      <div class="char-avatar char-avatar-lg" id="charImgPreview"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
+      <div class="char-img-actions">
+        <label class="btn ghost sm">사진 선택<input type="file" id="charImgInput" accept="image/*" style="display:none"></label>
+        <button type="button" class="btn ghost sm" id="charImgRemove"${ch.image?"":" disabled"}>제거</button>
+        <p class="hint" style="margin:4px 0 0">500KB 이하 이미지, 300×300px로 자동 압축됩니다.</p>
+      </div>
+    </div>
     <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
     <div><label>역할</label><input type="text" data-k="role" placeholder="주인공/조력자/적대자"></div></div>
     <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
@@ -803,6 +839,17 @@ function charModal(ch){
   const nameInput=body.querySelector('[data-k="name"]');
   nameInput.addEventListener("input", ()=>{ ttl.textContent=nameInput.value?("✎ "+nameInput.value):"✎ 새 캐릭터"; });
 
+  const imgPreview=body.querySelector("#charImgPreview");
+  const imgInput=body.querySelector("#charImgInput");
+  const imgRemoveBtn=body.querySelector("#charImgRemove");
+  function refreshImgPreview(){
+    imgPreview.innerHTML=charAvatarHtml(ch);
+    imgPreview.style.background=ch.image?"":TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length];
+    imgRemoveBtn.disabled=!ch.image;
+  }
+  imgInput.onchange=e=>{ handleCharImageFile(e.target.files[0], ch, refreshImgPreview); e.target.value=""; };
+  imgRemoveBtn.onclick=()=>{ ch.image=""; save(); refreshImgPreview(); };
+
   function renderRelList(){
     const listEl=body.querySelector("#charRelList");
     listEl.innerHTML="";
@@ -810,7 +857,8 @@ function charModal(ch){
     ch.relationships.forEach((rel,i)=>{
       const target=P.characters.find(c=>c.id===rel.targetId);
       const row=document.createElement("div"); row.className="char-rel-item";
-      const tgt=document.createElement("span"); tgt.className="char-rel-target"; tgt.textContent=target?target.name||"(이름 없음)":"(삭제된 캐릭터)";
+      const tgt=document.createElement("span"); tgt.className="char-rel-target";
+      tgt.textContent=(rel.mutual?"↔ ":"→ ")+(target?target.name||"(이름 없음)":"(삭제된 캐릭터)");
       const lbl=document.createElement("span"); lbl.className="char-rel-label"; lbl.textContent=rel.label||"-";
       const x=document.createElement("button"); x.type="button"; x.className="chip-x"; x.innerHTML=ICONS.close; x.title="삭제";
       x.onclick=()=>{ ch.relationships.splice(i,1); save(); renderRelList(); };
@@ -825,14 +873,17 @@ function charModal(ch){
   if(others.length){
     const sel=document.createElement("select");
     sel.innerHTML=others.map(c=>`<option value="${c.id}">${esc(c.name)||"(이름 없음)"}</option>`).join("");
-    const txt=document.createElement("input"); txt.type="text"; txt.placeholder="관계 (예: 친구, 라이벌, 짝사랑)";
+    const txt=document.createElement("input"); txt.type="text"; txt.placeholder="관계 (예: 사랑, 증오, 무관심)";
+    const mutualWrap=document.createElement("label"); mutualWrap.className="char-rel-mutual";
+    const mutualChk=document.createElement("input"); mutualChk.type="checkbox";
+    mutualWrap.append(mutualChk, document.createTextNode(" 양방향(서로 같은 관계)"));
     const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="btn ghost sm"; addBtn.textContent="+ 관계 추가";
     addBtn.onclick=()=>{
       ch.relationships=ch.relationships||[];
-      ch.relationships.push({id:uid(), targetId:sel.value, label:txt.value.trim()});
-      txt.value=""; save(); renderRelList();
+      ch.relationships.push({id:uid(), targetId:sel.value, label:txt.value.trim(), mutual:mutualChk.checked});
+      txt.value=""; mutualChk.checked=false; save(); renderRelList();
     };
-    addWrap.append(sel, txt, addBtn);
+    addWrap.append(sel, txt, mutualWrap, addBtn);
   }else{
     addWrap.innerHTML='<p class="hint" style="margin:4px 0">관계를 맺으려면 캐릭터가 2명 이상 있어야 합니다.</p>';
   }
@@ -861,12 +912,28 @@ function charRelationshipGraph(){
   const svg=document.createElementNS(svgNS,"svg");
   svg.setAttribute("viewBox",`0 0 ${size} ${size}`); svg.setAttribute("width",size); svg.setAttribute("height",size);
   svg.setAttribute("class","char-graph-svg");
+  /* 화살촉 마커 정의 */
+  const defs=document.createElementNS(svgNS,"defs");
+  const marker=document.createElementNS(svgNS,"marker");
+  marker.setAttribute("id","charArrowHead"); marker.setAttribute("viewBox","0 0 10 10");
+  marker.setAttribute("refX","8"); marker.setAttribute("refY","5");
+  marker.setAttribute("markerWidth","7"); marker.setAttribute("markerHeight","7"); marker.setAttribute("orient","auto-start-reverse");
+  const arrowPath=document.createElementNS(svgNS,"path");
+  arrowPath.setAttribute("d","M0,0 L10,5 L0,10 Z"); arrowPath.setAttribute("class","char-graph-arrowhead");
+  marker.appendChild(arrowPath); defs.appendChild(marker); svg.appendChild(defs);
+  const NODE_R=26;
   chars.forEach(ch=>{
     (ch.relationships||[]).forEach(rel=>{
       const t=pos[rel.targetId]; const s=pos[ch.id]; if(!t||!s) return;
+      const dx=t.x-s.x, dy=t.y-s.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+      const ux=dx/dist, uy=dy/dist;
+      const x1=s.x+ux*(NODE_R+4), y1=s.y+uy*(NODE_R+4);
+      const x2=t.x-ux*(NODE_R+10), y2=t.y-uy*(NODE_R+10);
       const line=document.createElementNS(svgNS,"line");
-      line.setAttribute("x1",s.x); line.setAttribute("y1",s.y); line.setAttribute("x2",t.x); line.setAttribute("y2",t.y);
+      line.setAttribute("x1",x1); line.setAttribute("y1",y1); line.setAttribute("x2",x2); line.setAttribute("y2",y2);
       line.setAttribute("class","char-graph-edge");
+      line.setAttribute("marker-end","url(#charArrowHead)");
+      if(rel.mutual) line.setAttribute("marker-start","url(#charArrowHead)");
       svg.appendChild(line);
       if(rel.label){
         const label=document.createElementNS(svgNS,"text");
