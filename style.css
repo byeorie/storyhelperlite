@@ -373,3 +373,41 @@ body.logged-in .login-overlay { display: none; }
 .auth-error { min-height: 18px; font-size: .82em; color: #c4654a; margin: 0; text-align: center; }
 .auth-link { display: block; text-align: center; font-size: .82em; color: #80868b; margin-top: 2px; }
 .auth-link:hover { color: #2b3a67; }
+
+/* ===== 심플라인 아이콘 / 아이콘 버튼 ===== */
+.icon{width:15px;height:15px;vertical-align:-3px;flex-shrink:0}
+.icon-btn{display:inline-flex;align-items:center;gap:5px}
+.icon-btn .icon{vertical-align:-2px}
+
+/* ===== 글쓰기 툴바 ===== */
+.write-toolbar{align-items:center}
+.write-toolbar-right{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.wt-selecting{background:var(--accent2)!important;border-color:var(--accent)!important;color:var(--accent)!important}
+
+/* ===== 본문 블록 선택 · 그룹화 ===== */
+.scene-select-chk{flex-shrink:0;margin-top:6px;width:15px;height:15px;cursor:pointer}
+.scene-block.selected{outline:2px solid var(--accent);outline-offset:1px}
+.write-blockgroup{border:1px dashed var(--line);border-radius:10px;padding:10px;margin-bottom:10px;
+  background:#faf8f3}
+.wg-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.wg-title{font-size:12px;font-weight:800;color:var(--accent);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wg-actions{display:flex;gap:4px}
+.wg-actions button{background:transparent;border:1px solid var(--line);border-radius:6px;
+  cursor:pointer;font-size:11px;padding:3px 7px;color:var(--muted)}
+.wg-actions button:hover{border-color:var(--accent);color:var(--accent)}
+.write-blockgroup .wg-body{display:flex;flex-direction:column;gap:8px}
+
+/* ===== 우클릭 컨텍스트 메뉴 ===== */
+.ctx-menu{position:fixed;z-index:200;background:#fff;border:1px solid var(--line);
+  border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.16);padding:4px;min-width:170px;font-size:13px}
+.ctx-menu[hidden]{display:none}
+.ctx-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  padding:8px 10px;border:none;background:transparent;border-radius:6px;cursor:pointer;
+  font-size:13px;color:var(--ink)}
+.ctx-menu button:hover{background:var(--accent2)}
+.ctx-menu button.danger{color:#b3503a}
+.ctx-menu hr{border:none;border-top:1px solid var(--line);margin:4px 2px}
+
+/* ===== 내보내기 탭 ===== */
+.export-btnrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}

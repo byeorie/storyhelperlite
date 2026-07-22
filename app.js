@@ -1,6 +1,23 @@
 /* ===== 상태 & 저장 ===== */
 const LS_KEY = "storyhelper_v1";
 const ADMIN_USERNAME = "profh";
+
+/* ===== 심플라인 아이콘 (24x24 stroke, currentColor) ===== */
+const ICONS = {
+  plus:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+  edit:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
+  download:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h7"/></svg>',
+  upload:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h5l2 2h7a2 2 0 0 1 2 2v2H2V7a2 2 0 0 1 2-2z"/><path d="M2 11h20l-1.7 7a2 2 0 0 1-2 1.5H5.7a2 2 0 0 1-2-1.5z"/></svg>',
+  file:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>',
+  pdf:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+  chat:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+  close:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  check:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  group:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  ungroup:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 10 21 3M3 21l7-7" stroke-dasharray="2 2"/></svg>',
+  load:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>'
+};
 function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
 function refreshAdminTabVisibility(){
   const grp=document.getElementById("adminNavGroup");
@@ -76,14 +93,15 @@ function blankProject(id,name){
     ideaBlocks:[],
     tagColors:{},
     plotDoc:{structure:"", sections:[], ideaOverrides:{}},
-    writeDoc:{blocks:[]},
+    writeDoc:{blocks:[], groups:[]},
     explore:blankExplore()};
 }
 /* writeDoc 기본값 보정 (본문/대사를 공통 하위블록 items로 통합) */
 function fillWriteDoc(wd){
-  const b={blocks:[]};
+  const b={blocks:[], groups:[]};
   if(!wd||typeof wd!=="object") return b;
-  return {blocks: Array.isArray(wd.blocks) ? wd.blocks.map(x=>{
+  const groupIds=new Set((Array.isArray(wd.groups)?wd.groups:[]).map(g=>g&&g.id).filter(Boolean));
+  const blocks=(Array.isArray(wd.blocks) ? wd.blocks.map(x=>{
     let items=[];
     if(Array.isArray(x.items)){
       items=x.items.map(it=>({id:it.id||uid(), type:(it.type==="line"?"line":"text"), char:it.char||"", text:it.text||""}));
@@ -91,8 +109,11 @@ function fillWriteDoc(wd){
       if(x.text) items.push({id:uid(), type:"text", char:"", text:x.text});
       if(Array.isArray(x.lines)) x.lines.forEach(l=>items.push({id:l.id||uid(), type:"line", char:l.char||"", text:l.text||""}));
     }
-    return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items};
-  }) : []};
+    const groupId=(x.groupId && groupIds.has(x.groupId)) ? x.groupId : "";
+    return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items, groupId};
+  }) : []);
+  const groups=(Array.isArray(wd.groups)?wd.groups:[]).map(g=>({id:(g&&g.id)||uid(), name:(g&&g.name)||"그룹"}));
+  return {blocks, groups};
 }
 /* plotDoc 기본값 보정 (예전 데이터 안전 처리) */
 function fillPlotDoc(pd){
@@ -1102,6 +1123,9 @@ function plotIdeaCard(b, secWrap){
 /* ===== ✍️ 글쓰기 ===== */
 let writeDlgFor=null;       // 대사 추가 팝업이 열린 블록 id
 let writeFocusTitle=null;   // 렌더 후 제목 입력에 포커스할 블록 id
+let writeSelectMode=false;  // 본문 블록 선택 모드(그룹화용)
+let writeSelectedIds=new Set(); // 선택된 본문 블록 id들
+let ctxMenuTargetBlock=null;    // 우클릭 메뉴가 열린 블록
 
 /* 섹션에 속한 장면 블록(배열 순서 유지) */
 function blocksOfSection(secId){ return (P.writeDoc.blocks||[]).filter(b=>b.sectionId===secId); }
@@ -1124,6 +1148,7 @@ function sectionCharCounts(){
 
 function rWrite(){
   if(!P.writeDoc) P.writeDoc={blocks:[]};
+  if(!Array.isArray(P.writeDoc.groups)) P.writeDoc.groups=[];
   const pd=P.plotDoc;
   if(!pd || !pd.structure || !pd.sections.length){
     const c=document.createElement("div"); c.className="card";
@@ -1150,11 +1175,26 @@ function rWrite(){
   /* 중앙: 장면 블록 */
   const main=document.createElement("div"); main.className="write-main";
   const bar=document.createElement("div"); bar.className="write-toolbar";
-  const loadBtn=document.createElement("button"); loadBtn.className="btn ghost sm";
-  loadBtn.textContent="📥 플롯 불러오기";
+  const loadBtn=document.createElement("button"); loadBtn.className="btn ghost sm icon-btn";
+  loadBtn.innerHTML=ICONS.load+" 플롯 불러오기";
   loadBtn.title="플롯 생성에서 각 섹션에 배치한 아이디어를 장면 블록으로 불러옵니다";
   loadBtn.onclick=loadPlotIntoWrite;
   bar.append(loadBtn);
+  const barRight=document.createElement("div"); barRight.className="write-toolbar-right";
+  const selBtn=document.createElement("button"); selBtn.className="btn ghost sm icon-btn"+(writeSelectMode?" wt-selecting":"");
+  selBtn.innerHTML=ICONS.check+(writeSelectMode?" 선택 중":" 블록 선택");
+  selBtn.title="여러 본문 블록을 선택해 그룹으로 묶을 수 있습니다";
+  selBtn.onclick=()=>{ writeSelectMode=!writeSelectMode; if(!writeSelectMode) writeSelectedIds.clear(); render(); };
+  barRight.appendChild(selBtn);
+  if(writeSelectMode){
+    const groupBtn=document.createElement("button"); groupBtn.className="btn ghost sm icon-btn";
+    groupBtn.innerHTML=ICONS.group+" 그룹으로 묶기 ("+writeSelectedIds.size+")";
+    groupBtn.disabled=writeSelectedIds.size<2;
+    if(groupBtn.disabled) groupBtn.style.opacity=.45;
+    groupBtn.onclick=groupSelectedBlocks;
+    barRight.appendChild(groupBtn);
+  }
+  bar.appendChild(barRight);
   main.appendChild(bar);
 
   /* 우: 미리보기 (넓은 화면에서 상시 표시, 좁으면 CSS로 숨김) */
@@ -1177,7 +1217,18 @@ function rWrite(){
     div.append(loadBtn, createBtn);
     group.appendChild(div);
     const list=document.createElement("div"); list.className="write-blocklist"; list.dataset.sec=sec.id;
-    blocksOfSection(sec.id).forEach((bl)=>list.appendChild(sceneBlockCard(bl, main, liveRefresh, ++writeBlockNo)));
+    let curGroupWrap=null, curGroupId=null;
+    blocksOfSection(sec.id).forEach((bl)=>{
+      const card=sceneBlockCard(bl, main, liveRefresh, ++writeBlockNo);
+      const gid=bl.groupId||"";
+      if(gid){
+        if(gid!==curGroupId){ curGroupWrap=blockGroupWrap(gid, list); curGroupId=gid; }
+        curGroupWrap.querySelector(".wg-body").appendChild(card);
+      }else{
+        curGroupWrap=null; curGroupId=null;
+        list.appendChild(card);
+      }
+    });
     group.appendChild(list);
     setupBlockDnD(list, main);
     main.appendChild(group);
@@ -1281,9 +1332,58 @@ function autoGrowTextarea(ta){
   ta.style.height=ta.scrollHeight+"px";
 }
 
+/* 여러 본문 블록을 하나의 그룹 상자로 묶어 보여주는 래퍼 생성 */
+function blockGroupWrap(gid, list){
+  const wrap=document.createElement("div"); wrap.className="write-blockgroup"; wrap.dataset.group=gid;
+  const g=(P.writeDoc.groups||[]).find(x=>x.id===gid);
+  const head=document.createElement("div"); head.className="wg-head";
+  const title=document.createElement("span"); title.className="wg-title"; title.textContent=(g&&g.name)||"그룹";
+  const actions=document.createElement("div"); actions.className="wg-actions";
+  const renameBtn=document.createElement("button"); renameBtn.title="그룹 이름 변경"; renameBtn.innerHTML=ICONS.edit;
+  renameBtn.onclick=()=>{
+    const nm=prompt("그룹 이름:", (g&&g.name)||"그룹"); if(nm===null||!nm.trim()) return;
+    if(g) g.name=nm.trim(); save(); render();
+  };
+  const ungroupBtn=document.createElement("button"); ungroupBtn.title="그룹 해제"; ungroupBtn.innerHTML=ICONS.ungroup;
+  ungroupBtn.onclick=()=>ungroupBlocks(gid);
+  actions.append(renameBtn, ungroupBtn);
+  head.append(title, actions);
+  const body=document.createElement("div"); body.className="wg-body";
+  wrap.append(head, body);
+  list.appendChild(wrap);
+  return wrap;
+}
+/* 선택된 본문 블록들을 하나의 그룹으로 묶기 */
+function groupSelectedBlocks(){
+  if(writeSelectedIds.size<2) return;
+  const name=prompt("그룹 이름:", "그룹"); if(name===null) return;
+  const gid=uid();
+  P.writeDoc.groups=P.writeDoc.groups||[];
+  P.writeDoc.groups.push({id:gid, name:name.trim()||"그룹"});
+  const selected=new Set(writeSelectedIds);
+  /* 선택된 블록들이 목록에서 서로 붙어 보이도록, 첫 선택 블록 위치로 나머지를 모아온다 */
+  const blocks=P.writeDoc.blocks||[];
+  const picked=blocks.filter(b=>selected.has(b.id));
+  const rest=blocks.filter(b=>!selected.has(b.id));
+  const firstIdx=blocks.findIndex(b=>selected.has(b.id));
+  picked.forEach(b=>{ b.groupId=gid; });
+  const insertAt=Math.min(firstIdx, rest.length);
+  rest.splice(insertAt, 0, ...picked);
+  P.writeDoc.blocks=rest;
+  writeSelectedIds.clear(); writeSelectMode=false;
+  save(); render();
+}
+/* 그룹 해제 (그룹 자체 삭제, 소속 블록은 그대로 남음) */
+function ungroupBlocks(gid){
+  (P.writeDoc.blocks||[]).forEach(b=>{ if(b.groupId===gid) b.groupId=""; });
+  P.writeDoc.groups=(P.writeDoc.groups||[]).filter(g=>g.id!==gid);
+  save(); render();
+}
+
 /* 장면 블록 카드 */
 function sceneBlockCard(bl, main, liveRefresh, num){
-  const d=document.createElement("div"); d.className="scene-block"; d.dataset.id=bl.id; d.id="wblk-"+bl.id; d.draggable=false;
+  const d=document.createElement("div"); d.className="scene-block"+(writeSelectedIds.has(bl.id)?" selected":""); d.dataset.id=bl.id; d.id="wblk-"+bl.id; d.draggable=false;
+  d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openBlockCtxMenu(e.clientX, e.clientY, bl); });
   /* 블록 왼쪽 컬러 바 — 같은 플롯 단계(섹션)에 속한 블록은 모두 같은 색 */
   d.style.borderLeftColor=getSectionColor(bl.sectionId);
   const head=document.createElement("div"); head.className="scene-head";
@@ -1308,14 +1408,21 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   titleEl.textContent=bl.title||"";
   titleEl.oninput=()=>{ bl.title=titleEl.textContent; save(); liveRefresh&&liveRefresh(); };
   titleEl.addEventListener("blur", ()=>{ titleEl.contentEditable="false"; });
-  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn scene-hicon"; editBtn.textContent="✎"; editBtn.title="수정";
+  const editBtn=document.createElement("button"); editBtn.className="scene-edit-btn scene-hicon"; editBtn.innerHTML=ICONS.edit; editBtn.title="수정";
   editBtn.onclick=()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); };
-  const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn scene-hicon"; addTextBtn.textContent="＋"; addTextBtn.title="본문 추가";
+  const addTextBtn=document.createElement("button"); addTextBtn.className="scene-add-btn scene-hicon"; addTextBtn.innerHTML=ICONS.plus; addTextBtn.title="본문 추가";
   addTextBtn.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
-  const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn scene-hicon"; dlgBtn.textContent="💬"; dlgBtn.title="대사 추가";
+  const dlgBtn=document.createElement("button"); dlgBtn.className="scene-dlg-btn scene-hicon"; dlgBtn.innerHTML=ICONS.chat; dlgBtn.title="대사 추가";
   dlgBtn.onclick=()=>{ writeDlgFor=bl.id; render(); };
-  const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.textContent="✕"; delBtn.title="블록 삭제";
+  const delBtn=document.createElement("button"); delBtn.className="scene-del-btn"; delBtn.innerHTML=ICONS.close; delBtn.title="블록 삭제";
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
+  if(writeSelectMode){
+    const chk=document.createElement("input"); chk.type="checkbox"; chk.className="scene-select-chk";
+    chk.title="선택해서 그룹으로 묶기"; chk.checked=writeSelectedIds.has(bl.id);
+    chk.onclick=e=>e.stopPropagation();
+    chk.onchange=()=>{ if(chk.checked) writeSelectedIds.add(bl.id); else writeSelectedIds.delete(bl.id); render(); };
+    head.appendChild(chk);
+  }
   head.append(handle, numEl, titleEl, editBtn, addTextBtn, dlgBtn, delBtn);
   d.appendChild(head);
   if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
@@ -1329,6 +1436,37 @@ function sceneBlockCard(bl, main, liveRefresh, num){
 }
 
 /* 하위 블록 하나 (본문 type=text / 대사 type=line) */
+/* 장면 블록 우클릭 메뉴 */
+function openBlockCtxMenu(x, y, bl){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  ctxMenuTargetBlock=bl;
+  const items=[];
+  items.push(["수정",ICONS.edit,()=>{ writeFocusTitle=bl.id; render(); }]);
+  items.push(["본문 추가",ICONS.plus,()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); }]);
+  items.push(["대사 추가",ICONS.chat,()=>{ writeDlgFor=bl.id; render(); }]);
+  if(writeSelectMode && writeSelectedIds.size>=2 && writeSelectedIds.has(bl.id)){
+    items.push(["그룹으로 묶기",ICONS.group,groupSelectedBlocks]);
+  }
+  if(bl.groupId){
+    items.push(["그룹 해제",ICONS.ungroup,()=>ungroupBlocks(bl.groupId)]);
+  }
+  items.push(["삭제",ICONS.trash,()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(b=>b.id!==bl.id); save(); render(); },"danger"]);
+  m.innerHTML="";
+  items.forEach(([label,icon,fn,cls])=>{
+    const b=document.createElement("button"); if(cls) b.className=cls;
+    b.innerHTML=icon+" "+label;
+    b.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(b);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
+function hideCtxMenu(){ const m=document.getElementById("ctxMenu"); if(m){ m.hidden=true; m.innerHTML=""; } ctxMenuTargetBlock=null; }
+document.addEventListener("click", ()=>hideCtxMenu());
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") hideCtxMenu(); });
+
 function subBlockEl(bl, it, liveRefresh, main){
   const d=document.createElement("div"); d.className="sub-block "+(it.type==="line"?"sub-line":"sub-text"); d.dataset.id=it.id; d.draggable=false;
   const handle=document.createElement("span"); handle.className="sub-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동(다른 블록으로도)";
@@ -1507,19 +1645,33 @@ function paginatePreview(right){
 function rExport(){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>📤 내보내기 / 백업</h2>
-    <p class="hint">완성본을 PDF로 저장하거나, 데이터를 파일로 백업·복원할 수 있습니다.</p>
-    <button class="btn" id="pdfBtn">📄 PDF로 내보내기</button>
-    <button class="btn ghost" id="jsonOut">💾 백업 파일 내보내기 (.json)</button>
-    <label class="btn ghost" style="display:inline-block">📂 백업 불러오기
-      <input type="file" id="jsonIn" accept=".json" style="display:none"></label>
-    <p class="muted" style="margin-top:14px;font-size:12px;color:var(--muted)">※ PDF는 인쇄 창에서 '대상'을 'PDF로 저장'으로 선택하세요.</p>
+    <p class="hint">완성본을 Word·PDF로 내보내거나, 작품 파일(.story)로 백업·복원할 수 있습니다.</p>
+    <div class="export-btnrow">
+      <button class="btn icon-btn" id="docxBtn">${ICONS.file} Word로 내보내기 (.docx)</button>
+      <button class="btn ghost icon-btn" id="pdfBtn">${ICONS.pdf} PDF로 내보내기</button>
+      <button class="btn ghost icon-btn" id="storyOut">${ICONS.download} 작품 파일 내보내기 (.story)</button>
+      <label class="btn ghost icon-btn" style="display:inline-flex">${ICONS.upload} 작품 파일 불러오기
+        <input type="file" id="storyIn" accept=".story,.json" style="display:none"></label>
+    </div>
+    <p class="muted" style="margin-top:14px;font-size:12px;color:var(--muted)">※ PDF는 인쇄 창에서 '대상'을 'PDF로 저장'으로 선택하세요. 기본 저장은 로그인한 계정으로 서버에 자동 저장됩니다 — .story 내보내기는 별도 백업/이동용입니다.</p>
     </div>
     <div id="preview" class="card"></div>`;
   app.appendChild(c);
   c.querySelector("#pdfBtn").onclick=()=>{ buildPreview(); window.print(); };
-  c.querySelector("#jsonOut").onclick=exportJSON;
-  c.querySelector("#jsonIn").onchange=importJSON;
+  c.querySelector("#docxBtn").onclick=exportDocx;
+  c.querySelector("#storyOut").onclick=exportStory;
+  c.querySelector("#storyIn").onchange=importStory;
   buildPreview();
+}
+/* Word(.docx)로 내보내기 — html-docx-js로 미리보기 HTML을 변환 */
+function exportDocx(){
+  buildPreview();
+  const pv=document.getElementById("preview");
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${pv?pv.innerHTML:""}</body></html>`;
+  if(typeof htmlDocx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
+  const blob=htmlDocx.asBlob(html);
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=(P.name||"story")+".docx"; a.click();
 }
 function buildPreview(){
   const pv=document.getElementById("preview"); if(!pv)return;
@@ -1550,12 +1702,12 @@ function buildPreview(){
 }
 function esc(s){return(s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
 
-function exportJSON(){
+function exportStory(){
   const blob=new Blob([JSON.stringify(P,null,2)],{type:"application/json"});
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob); a.download=(P.name||"story")+".json"; a.click();
+  a.href=URL.createObjectURL(blob); a.download=(P.name||"story")+".story"; a.click();
 }
-function importJSON(e){
+function importStory(e){
   const f=e.target.files[0]; if(!f)return;
   const rd=new FileReader();
   rd.onload=()=>{
@@ -1566,7 +1718,7 @@ function importJSON(e){
       DB.projects.push(obj); DB.current=obj.id; P=currentProject();
       save(); refreshProjSelect(); render();
       alert("불러오기 완료!");
-    }catch(_){ alert("올바른 백업 파일이 아닙니다."); }
+    }catch(_){ alert("올바른 작품 파일(.story)이 아닙니다."); }
   };
   rd.readAsText(f);
 }
