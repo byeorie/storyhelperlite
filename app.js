@@ -922,28 +922,59 @@ function charRelationshipGraph(){
   const arrowPath=document.createElementNS(svgNS,"path");
   arrowPath.setAttribute("d","M0,0 L10,5 L0,10 Z"); arrowPath.setAttribute("class","char-graph-arrowhead");
   marker.appendChild(arrowPath); defs.appendChild(marker); svg.appendChild(defs);
-  const NODE_R=26;
+  const NODE_R=26, SPACING=18;
+  /* 관계(간선) 목록 수집 — 같은 두 캐릭터 사이에 관계가 여러 개면 평행하게 벌려서 겹치지 않도록 */
+  const edges=[];
   chars.forEach(ch=>{
     (ch.relationships||[]).forEach(rel=>{
-      const t=pos[rel.targetId]; const s=pos[ch.id]; if(!t||!s) return;
-      const dx=t.x-s.x, dy=t.y-s.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
-      const ux=dx/dist, uy=dy/dist;
-      const x1=s.x+ux*(NODE_R+4), y1=s.y+uy*(NODE_R+4);
-      const x2=t.x-ux*(NODE_R+10), y2=t.y-uy*(NODE_R+10);
-      const line=document.createElementNS(svgNS,"line");
-      line.setAttribute("x1",x1); line.setAttribute("y1",y1); line.setAttribute("x2",x2); line.setAttribute("y2",y2);
-      line.setAttribute("class","char-graph-edge");
-      line.setAttribute("marker-end","url(#charArrowHead)");
-      if(rel.mutual) line.setAttribute("marker-start","url(#charArrowHead)");
-      svg.appendChild(line);
-      if(rel.label){
-        const label=document.createElementNS(svgNS,"text");
-        label.setAttribute("x",(s.x+t.x)/2); label.setAttribute("y",(s.y+t.y)/2);
-        label.setAttribute("class","char-graph-edge-label");
-        label.textContent=rel.label;
-        svg.appendChild(label);
-      }
+      if(pos[rel.targetId] && pos[ch.id]) edges.push({from:ch.id, to:rel.targetId, rel});
     });
+  });
+  const pairGroups={};
+  edges.forEach(e=>{ const key=[e.from,e.to].sort().join("|"); (pairGroups[key]=pairGroups[key]||[]).push(e); });
+  Object.values(pairGroups).forEach(group=>group.forEach((e,i)=>{ e._idx=i; e._count=group.length; }));
+  /* 두 캐릭터 사이의 관계가 여럿이면(방향이 반대여도) 항상 같은 기준(정렬된 id쌍)으로 평행 오프셋을 계산해
+     실제로 벌어지도록 한다 — 각 간선 자신의 from/to 방향으로 계산하면 부호가 서로 상쇄되어 겹쳐 보였음 */
+  edges.forEach(e=>{
+    const [idA,idB]=[e.from,e.to].slice().sort();
+    const A=pos[idA], B=pos[idB];
+    const dx=B.x-A.x, dy=B.y-A.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+    const ux=dx/dist, uy=dy/dist, px=-uy, py=ux;
+    const offset=(e._idx-(e._count-1)/2)*SPACING;
+    const Ax=A.x+px*offset, Ay=A.y+py*offset;
+    const Bx=B.x+px*offset, By=B.y+py*offset;
+    if(e.from===idA){
+      e._x1=Ax+ux*(NODE_R+4); e._y1=Ay+uy*(NODE_R+4);
+      e._x2=Bx-ux*(NODE_R+10); e._y2=By-uy*(NODE_R+10);
+    }else{
+      e._x1=Bx-ux*(NODE_R+4); e._y1=By-uy*(NODE_R+4);
+      e._x2=Ax+ux*(NODE_R+10); e._y2=Ay+uy*(NODE_R+10);
+    }
+    e._mx=(Ax+Bx)/2; e._my=(Ay+By)/2;
+  });
+  /* 1단계: 화살표 선을 모두 그린다 */
+  edges.forEach(e=>{
+    const line=document.createElementNS(svgNS,"line");
+    line.setAttribute("x1",e._x1); line.setAttribute("y1",e._y1); line.setAttribute("x2",e._x2); line.setAttribute("y2",e._y2);
+    line.setAttribute("class","char-graph-edge");
+    line.setAttribute("marker-end","url(#charArrowHead)");
+    if(e.rel.mutual) line.setAttribute("marker-start","url(#charArrowHead)");
+    svg.appendChild(line);
+  });
+  /* 2단계: 관계 라벨 박스를 선 위에 전부 그린다(다른 화살표선에 가려지지 않도록 항상 나중에 그림) */
+  edges.forEach(e=>{
+    if(!e.rel.label) return;
+    const w=Math.max(28, e.rel.label.length*11+14), h=18;
+    const rect=document.createElementNS(svgNS,"rect");
+    rect.setAttribute("x",e._mx-w/2); rect.setAttribute("y",e._my-h/2);
+    rect.setAttribute("width",w); rect.setAttribute("height",h); rect.setAttribute("rx",5);
+    rect.setAttribute("class","char-graph-edge-label-bg");
+    svg.appendChild(rect);
+    const label=document.createElementNS(svgNS,"text");
+    label.setAttribute("x",e._mx); label.setAttribute("y",e._my+4);
+    label.setAttribute("class","char-graph-edge-label");
+    label.textContent=e.rel.label;
+    svg.appendChild(label);
   });
   chars.forEach(ch=>{
     const p=pos[ch.id];

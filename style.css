@@ -440,7 +440,8 @@ body.logged-in .login-overlay { display: none; }
 .char-graph-svg{display:block;margin:0 auto}
 .char-graph-edge{stroke:var(--accent);stroke-width:1.5;opacity:.75}
 .char-graph-arrowhead{fill:var(--accent);opacity:.9}
-.char-graph-edge-label{font-size:10px;fill:var(--muted);text-anchor:middle}
+.char-graph-edge-label-bg{fill:var(--card);stroke:var(--line);stroke-width:1}
+.char-graph-edge-label{font-size:10px;font-weight:600;fill:var(--ink);text-anchor:middle}
 .char-graph-node{cursor:pointer}
 .char-graph-node text{font-size:11px;font-weight:800;fill:#fff;text-anchor:middle}
 
