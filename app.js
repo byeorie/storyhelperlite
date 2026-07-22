@@ -16,7 +16,8 @@ const ICONS = {
   check:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   group:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
   ungroup:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 10 21 3M3 21l7-7" stroke-dasharray="2 2"/></svg>',
-  load:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>'
+  load:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>',
+  network:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5 7 16.5M12 7.5l5 9M7.5 19h9"/></svg>'
 };
 function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
 function refreshAdminTabVisibility(){
@@ -130,7 +131,7 @@ function fillPlotDoc(pd){
   };
 }
 function blankChar(){
-  return {name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:""};
+  return {id:uid(), name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[]};
 }
 function currentProject(){
   return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
@@ -707,23 +708,86 @@ function rAdmin(){
 }
 
 /* ① 캐릭터 */
+let charModalFor=null;      // 편집 팝업이 열린 캐릭터 id
+let charViewMode="gallery"; // "gallery" | "graph"
+/* 존재하지 않는 캐릭터를 가리키는 관계 정리 */
+function cleanCharRelationships(){
+  const ids=new Set((P.characters||[]).map(c=>c.id));
+  (P.characters||[]).forEach(c=>{ c.relationships=(c.relationships||[]).filter(r=>r&&ids.has(r.targetId)); });
+}
 function rChar(){
+  if(!Array.isArray(P.characters)||!P.characters.length) P.characters=[blankChar()];
+  cleanCharRelationships();
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>👤 캐릭터 설정</h2>
-    <p class="hint">MBTI와 에니어그램으로 성격의 뼈대를 잡고, 목표·결함·변화를 채워보세요.</p>
-    <div class="charlist" id="charlist"></div>
-    <button class="btn ghost" id="addChar">＋ 캐릭터 추가</button></div>`;
+    <p class="hint">MBTI와 에니어그램으로 성격의 뼈대를 잡고, 목표·결함·변화, 다른 인물과의 관계를 채워보세요.</p>
+    <div class="char-toolbar">
+      <div class="char-view-toggle">
+        <button type="button" class="char-view-btn${charViewMode==="gallery"?" active":""}" data-view="gallery">${ICONS.group} 갤러리</button>
+        <button type="button" class="char-view-btn${charViewMode==="graph"?" active":""}" data-view="graph">${ICONS.network} 관계도</button>
+      </div>
+      <button class="btn icon-btn" id="addCharBtn">${ICONS.plus} 캐릭터 추가</button>
+    </div>
+    <div id="charBody"></div></div>`;
   app.appendChild(c);
-  const list=c.querySelector("#charlist");
-  P.characters.forEach((ch,i)=>list.appendChild(charCard(ch,i)));
-  c.querySelector("#addChar").onclick=()=>{P.characters.push(blankChar());save();render();};
+  c.querySelectorAll(".char-view-btn").forEach(b=>b.onclick=()=>{ charViewMode=b.dataset.view; render(); });
+  c.querySelector("#addCharBtn").onclick=()=>{
+    const nc=blankChar(); P.characters.push(nc); save(); charModalFor=nc.id; render();
+  };
+  const body=c.querySelector("#charBody");
+  if(charViewMode==="graph"){
+    body.appendChild(charRelationshipGraph());
+  }else{
+    const grid=document.createElement("div"); grid.className="char-gallery";
+    if(!P.characters.length){
+      grid.innerHTML='<p class="hint">아직 등록된 캐릭터가 없습니다. "＋ 캐릭터 추가"로 시작해 보세요.</p>';
+    }else{
+      P.characters.forEach(ch=>grid.appendChild(charGalleryCard(ch)));
+    }
+    body.appendChild(grid);
+  }
+  if(charModalFor){
+    const ch=P.characters.find(x=>x.id===charModalFor);
+    if(ch) app.appendChild(charModal(ch)); else charModalFor=null;
+  }
 }
-function charCard(ch,i){
-  const d=document.createElement("div"); d.className="char-item";
+/* 갤러리 카드 (미리보기, 클릭 시 편집 팝업) */
+function charGalleryCard(ch){
+  const d=document.createElement("div"); d.className="char-card-mini";
+  d.onclick=()=>{ charModalFor=ch.id; render(); };
+  const initial=(ch.name||"?").trim().charAt(0)||"?";
+  const relCount=(ch.relationships||[]).length;
+  d.innerHTML=`<div class="char-avatar" style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}">${esc(initial)}</div>
+    <div class="char-card-name">${esc(ch.name)||"이름 없음"}</div>
+    <div class="char-card-role">${esc(ch.role)||"-"}</div>
+    <div class="char-card-badges">${ch.mbti?`<span class="char-badge">${esc(ch.mbti)}</span>`:""}${ch.enneagram?`<span class="char-badge">${esc(ch.enneagram)}유형</span>`:""}</div>
+    ${relCount?`<div class="char-card-rel">관계 ${relCount}개</div>`:""}
+    <button type="button" class="char-card-del" title="삭제">${ICONS.trash}</button>`;
+  d.querySelector(".char-card-del").onclick=e=>{
+    e.stopPropagation();
+    if(P.characters.length<=1){ alert("최소 1명의 캐릭터는 있어야 합니다."); return; }
+    if(!confirm(`'${ch.name||"이 캐릭터"}'를 삭제할까요?`)) return;
+    P.characters=P.characters.filter(c=>c.id!==ch.id);
+    P.characters.forEach(c=>{ c.relationships=(c.relationships||[]).filter(r=>r.targetId!==ch.id); });
+    save(); render();
+  };
+  return d;
+}
+/* 캐릭터 편집 팝업 — 기본 정보 + 다른 캐릭터와의 관계 */
+function charModal(ch){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay){ charModalFor=null; render(); } };
+  const box=document.createElement("div"); box.className="plot-modal char-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=ch.name?("✎ "+ch.name):"✎ 새 캐릭터";
+  const closeBtn=iconBtn("✕","닫기",()=>{ charModalFor=null; render(); });
+  top.append(ttl, closeBtn);
+  box.appendChild(top);
+
+  const body=document.createElement("div"); body.className="char-modal-body";
   const enOpts=ENNEAGRAM.map(e=>`<option value="${e.n}">${e.n} — ${e.d}</option>`).join("");
   const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m}</option>`).join("");
-  d.innerHTML=`<div class="char-head"><h3>인물 ${i+1}</h3>
-    ${P.characters.length>1?`<button class="btn sm danger" data-del="${i}">삭제</button>`:""}</div>
+  body.innerHTML=`
     <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
     <div><label>역할</label><input type="text" data-k="role" placeholder="주인공/조력자/적대자"></div></div>
     <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
@@ -731,11 +795,104 @@ function charCard(ch,i){
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
     <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
-    <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투, 관계 등"></textarea>`;
-  d.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
-  const del=d.querySelector("[data-del]");
-  if(del)del.onclick=()=>{P.characters.splice(i,1);save();render();};
-  return d;
+    <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
+    <label>다른 캐릭터와의 관계</label>
+    <div class="char-rel-list" id="charRelList"></div>
+    <div class="char-rel-add" id="charRelAdd"></div>`;
+  body.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
+  const nameInput=body.querySelector('[data-k="name"]');
+  nameInput.addEventListener("input", ()=>{ ttl.textContent=nameInput.value?("✎ "+nameInput.value):"✎ 새 캐릭터"; });
+
+  function renderRelList(){
+    const listEl=body.querySelector("#charRelList");
+    listEl.innerHTML="";
+    if(!(ch.relationships||[]).length){ listEl.innerHTML='<p class="hint" style="margin:4px 0">아직 등록된 관계가 없습니다.</p>'; return; }
+    ch.relationships.forEach((rel,i)=>{
+      const target=P.characters.find(c=>c.id===rel.targetId);
+      const row=document.createElement("div"); row.className="char-rel-item";
+      const tgt=document.createElement("span"); tgt.className="char-rel-target"; tgt.textContent=target?target.name||"(이름 없음)":"(삭제된 캐릭터)";
+      const lbl=document.createElement("span"); lbl.className="char-rel-label"; lbl.textContent=rel.label||"-";
+      const x=document.createElement("button"); x.type="button"; x.className="chip-x"; x.innerHTML=ICONS.close; x.title="삭제";
+      x.onclick=()=>{ ch.relationships.splice(i,1); save(); renderRelList(); };
+      row.append(tgt, lbl, x);
+      listEl.appendChild(row);
+    });
+  }
+  renderRelList();
+
+  const addWrap=body.querySelector("#charRelAdd");
+  const others=P.characters.filter(c=>c.id!==ch.id);
+  if(others.length){
+    const sel=document.createElement("select");
+    sel.innerHTML=others.map(c=>`<option value="${c.id}">${esc(c.name)||"(이름 없음)"}</option>`).join("");
+    const txt=document.createElement("input"); txt.type="text"; txt.placeholder="관계 (예: 친구, 라이벌, 짝사랑)";
+    const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="btn ghost sm"; addBtn.textContent="+ 관계 추가";
+    addBtn.onclick=()=>{
+      ch.relationships=ch.relationships||[];
+      ch.relationships.push({id:uid(), targetId:sel.value, label:txt.value.trim()});
+      txt.value=""; save(); renderRelList();
+    };
+    addWrap.append(sel, txt, addBtn);
+  }else{
+    addWrap.innerHTML='<p class="hint" style="margin:4px 0">관계를 맺으려면 캐릭터가 2명 이상 있어야 합니다.</p>';
+  }
+
+  box.appendChild(body);
+  overlay.appendChild(box);
+  setTimeout(()=>{ nameInput.focus(); },0);
+  return overlay;
+}
+/* 캐릭터 관계도 — SVG 원형 배치, 노드 클릭 시 편집 팝업 */
+function charRelationshipGraph(){
+  const wrap=document.createElement("div"); wrap.className="char-graph-card";
+  const chars=(P.characters||[]).filter(c=>c.name && c.name.trim());
+  if(!chars.length){
+    wrap.innerHTML='<p class="hint">이름이 입력된 캐릭터가 있어야 관계도를 볼 수 있습니다.</p>';
+    return wrap;
+  }
+  const size=Math.max(420, chars.length*70);
+  const cx=size/2, cy=size/2, r=size/2-70;
+  const pos={};
+  chars.forEach((ch,i)=>{
+    const angle=(i/chars.length)*Math.PI*2 - Math.PI/2;
+    pos[ch.id]={x:cx+r*Math.cos(angle), y:cy+r*Math.sin(angle)};
+  });
+  const svgNS="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(svgNS,"svg");
+  svg.setAttribute("viewBox",`0 0 ${size} ${size}`); svg.setAttribute("width",size); svg.setAttribute("height",size);
+  svg.setAttribute("class","char-graph-svg");
+  chars.forEach(ch=>{
+    (ch.relationships||[]).forEach(rel=>{
+      const t=pos[rel.targetId]; const s=pos[ch.id]; if(!t||!s) return;
+      const line=document.createElementNS(svgNS,"line");
+      line.setAttribute("x1",s.x); line.setAttribute("y1",s.y); line.setAttribute("x2",t.x); line.setAttribute("y2",t.y);
+      line.setAttribute("class","char-graph-edge");
+      svg.appendChild(line);
+      if(rel.label){
+        const label=document.createElementNS(svgNS,"text");
+        label.setAttribute("x",(s.x+t.x)/2); label.setAttribute("y",(s.y+t.y)/2);
+        label.setAttribute("class","char-graph-edge-label");
+        label.textContent=rel.label;
+        svg.appendChild(label);
+      }
+    });
+  });
+  chars.forEach(ch=>{
+    const p=pos[ch.id];
+    const g=document.createElementNS(svgNS,"g"); g.setAttribute("class","char-graph-node");
+    g.setAttribute("transform",`translate(${p.x},${p.y})`);
+    g.addEventListener("click", ()=>{ charModalFor=ch.id; render(); });
+    const circle=document.createElementNS(svgNS,"circle"); circle.setAttribute("r","26");
+    circle.setAttribute("fill", TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]);
+    g.appendChild(circle);
+    const text=document.createElementNS(svgNS,"text"); text.setAttribute("y","5");
+    text.textContent=ch.name;
+    g.appendChild(text);
+    svg.appendChild(g);
+  });
+  const inner=document.createElement("div"); inner.className="char-graph-wrap"; inner.appendChild(svg);
+  wrap.appendChild(inner);
+  return wrap;
 }
 
 /* 세계관 */

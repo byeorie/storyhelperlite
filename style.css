@@ -395,6 +395,48 @@ body.logged-in .login-overlay { display: none; }
   background:transparent;border-radius:6px;cursor:pointer;font-size:13px;color:var(--ink);white-space:nowrap}
 .mb-export-menu button:hover{background:var(--accent2)}
 
+/* ===== 캐릭터 설정: 갤러리/관계도 ===== */
+.char-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.char-view-toggle{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.char-view-btn{display:flex;align-items:center;gap:5px;padding:7px 12px;border:none;background:#fff;
+  color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
+.char-view-btn+.char-view-btn{border-left:1px solid var(--line)}
+.char-view-btn.active{background:var(--accent2);color:var(--accent)}
+.char-toolbar .btn{margin-left:auto}
+.char-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.char-card-mini{position:relative;border:1px solid var(--line);border-radius:12px;padding:16px 12px;
+  background:#fcfbf9;cursor:pointer;text-align:center;transition:box-shadow .15s,border-color .15s}
+.char-card-mini:hover{border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.char-avatar{width:52px;height:52px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;
+  justify-content:center;color:#fff;font-size:20px;font-weight:800}
+.char-card-name{font-size:14px;font-weight:800;color:var(--ink)}
+.char-card-role{font-size:11px;color:var(--muted);margin-top:2px}
+.char-card-badges{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;margin-top:8px}
+.char-badge{background:var(--accent2);color:var(--accent);font-size:10px;font-weight:700;
+  border-radius:8px;padding:2px 7px}
+.char-card-rel{margin-top:6px;font-size:10px;color:var(--muted)}
+.char-card-del{position:absolute;top:6px;right:6px;background:transparent;border:none;
+  color:var(--muted);cursor:pointer;padding:3px;border-radius:6px;opacity:0}
+.char-card-mini:hover .char-card-del{opacity:1}
+.char-card-del:hover{color:#b3503a;background:var(--accent2)}
+.char-card-del .icon{width:13px;height:13px}
+.char-modal{width:560px}
+.char-modal-body{overflow-y:auto;flex:1}
+.char-rel-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.char-rel-item{display:flex;align-items:center;gap:8px;background:var(--accent2);border-radius:8px;
+  padding:6px 10px;font-size:12px}
+.char-rel-target{font-weight:800;color:var(--accent);flex-shrink:0}
+.char-rel-label{flex:1;color:var(--ink)}
+.char-rel-add{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.char-rel-add select{flex:1;min-width:120px}
+.char-rel-add input{flex:1;min-width:140px}
+.char-graph-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fcfbf9}
+.char-graph-svg{display:block;margin:0 auto}
+.char-graph-edge{stroke:var(--line);stroke-width:2}
+.char-graph-edge-label{font-size:10px;fill:var(--muted);text-anchor:middle}
+.char-graph-node{cursor:pointer}
+.char-graph-node text{font-size:11px;font-weight:800;fill:#fff;text-anchor:middle}
+
 /* ===== PDF 인쇄용 미리보기(평소엔 숨김, 인쇄 시에만 표시) ===== */
 .print-preview{display:none}
 @media print{
