@@ -131,7 +131,7 @@ function fillPlotDoc(pd){
   };
 }
 function blankChar(){
-  return {id:uid(), name:"",role:"주인공",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:""};
+  return {id:uid(), name:"",role:"영웅",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:""};
 }
 function currentProject(){
   return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
@@ -815,6 +815,7 @@ function charModal(ch){
   const body=document.createElement("div"); body.className="char-modal-body";
   const enOpts=ENNEAGRAM.map(e=>`<option value="${e.n}">${e.n} — ${e.d}</option>`).join("");
   const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m}</option>`).join("");
+  const roleOpts=VOGLER_ROLES.map(r=>`<option value="${r.n}">${r.n} — ${r.d}</option>`).join("");
   body.innerHTML=`
     <div class="char-img-row">
       <div class="char-avatar char-avatar-lg" id="charImgPreview"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
@@ -825,7 +826,7 @@ function charModal(ch){
       </div>
     </div>
     <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
-    <div><label>역할</label><input type="text" data-k="role" placeholder="주인공/조력자/적대자"></div></div>
+    <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
     <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
     <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
