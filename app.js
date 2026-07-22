@@ -240,7 +240,7 @@ function render(){
         +'<p class="hint">이 메뉴는 관리자 계정으로 로그인해야 사용할 수 있습니다.</p></div>';
       return;
     }
-    const renderers={idea:rIdea, explore:rExplore, admin:rAdmin, character:rChar, world:rWorld, background:rBg,
+    const renderers={idea:rIdea, explore:rExplore, admin:rAdmin, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite};
     (renderers[activeTab]||rIdea)();
   }catch(e){
@@ -1111,31 +1111,24 @@ function charRelationshipGraph(){
   return wrap;
 }
 
-/* 세계관 */
-function rWorld(){
+/* 배경 설정 (세계관 + 배경을 하나로 통합) */
+function rBg(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.globe} 세계관 설정</h2>
-    <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기를 정합니다.</p>
+  c.innerHTML=`<div class="card"><h2>${ICONS.building} 배경 설정</h2>
+    <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기, 이야기가 시작되는 구체적 상황을 정합니다.</p>
     <label>한 줄 요약</label><textarea id="w_summary" placeholder="이 세계는 어떤 곳인가"></textarea>
     <div class="row"><div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
     <div><label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…"></div></div>
-    <label>세계의 규칙 (마법·기술·금기 등)</label><textarea id="w_rules"></textarea></div>`;
+    <label>세계의 규칙 (마법·기술·금기 등)</label><textarea id="w_rules"></textarea>
+    <div class="section-title">구체적 상황</div>
+    <label>사회·정치적 배경</label><textarea id="b_social"></textarea>
+    <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
+    <label>세부 묘사</label><textarea id="b_detail"></textarea></div>`;
   app.appendChild(c);
   bind(c.querySelector("#w_summary"),P.world,"summary");
   bind(c.querySelector("#w_era"),P.world,"era");
   bind(c.querySelector("#w_place"),P.world,"place");
   bind(c.querySelector("#w_rules"),P.world,"rules");
-}
-
-/* 배경 */
-function rBg(){
-  const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.building} 배경 설정</h2>
-    <p class="hint">세계관 속에서 이야기가 시작되는 구체적 상황입니다.</p>
-    <label>사회·정치적 배경</label><textarea id="b_social"></textarea>
-    <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
-    <label>세부 묘사</label><textarea id="b_detail"></textarea></div>`;
-  app.appendChild(c);
   bind(c.querySelector("#b_social"),P.background,"social");
   bind(c.querySelector("#b_mood"),P.background,"mood");
   bind(c.querySelector("#b_detail"),P.background,"detail");
