@@ -2,6 +2,22 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-22 (43차) · 배경/캐릭터 라벨 1회 표시 + 상단 툴바를 곰국을끼리오너라 스타일로 개편
+- 요청 3건
+  1. 블록의 배경/캐릭터를 항목마다 "배경: 이름" 반복 대신, 열 맨 앞에 라벨을 한 번만 두고 "배경: 이름1, 이름2" 형식으로
+  2. 상단 툴바를 곰국을끼리오너라 index.html처럼 왼쪽에 새로 만들기·저장·불러오기·내보내기 아이콘 그룹으로 재구성(인터페이스를 그대로 이식)
+  3. 상단 툴바에 내보내기가 생겼으니 왼쪽 사이드 메뉴의 "내보내기" 탭은 제거
+- **app.js** 수정 —
+  - `metaChip()` 제거, `metaCol(label, list, onRemoveAt)` 신설 — 라벨(`배경:`/`캐릭터:`)을 한 번만 렌더하고 이름들을 쉼표로 이어 표시, 이름마다 개별 x 삭제 버튼 유지
+  - 사이드바 "내보내기" 탭이 사라졌으므로 `renderers` 매핑에서 `export:rExport` 제거, `rExport()` 함수 삭제. 대신 `exportPdf()`(미리보기 생성 후 인쇄) 신설 — `exportDocx`/`exportStory`/`importStory`는 그대로 유지하되 전역 `#preview`(항상 DOM에 존재)를 사용하도록 정리
+  - 상단 툴바 새 버튼 이벤트 바인딩: `manualSaveBtn`(수동 저장), `topImportBtn`+`topImportInput`(.story 불러오기), `topExportBtn`+`topExportMenu`(Word/PDF/.story 드롭다운, 문서 클릭 시 자동 닫힘)
+- **index.html** 수정 —
+  - `<header class="topbar">`를 곰국 스타일로 재구성: 왼쪽 `.mb-left`(새 작품/저장/불러오기/내보내기 드롭다운 아이콘 + 구분선), 가운데 `.proj-controls`(작품 선택/이름변경/삭제), 오른쪽 `.user-auth`(기존 유지)
+  - 사이드바에서 "내보내기" nav-group 제거
+  - 인쇄(PDF) 전용 `#preview`를 body 최상위에 항상 존재하도록 고정 배치(평소엔 숨김, 인쇄 시에만 노출)
+- **style.css** 수정 — `.mb-left`/`.mb-icon`/`.mb-sep`/`.mb-export`/`.mb-export-menu`(곰국 톤 유지, 이 프로젝트 CSS 변수 재사용), `.print-preview`+`@media print`(인쇄 시 `#preview`만 보이고 나머지는 숨김 — 기존엔 인쇄 스타일이 아예 없어 전체 화면이 그대로 인쇄되던 문제도 함께 개선됨), `.scene-meta-col`/`.scene-meta-label`/`.scene-meta-comma`/`.scene-meta-item` 추가(기존 `.scene-chip`류는 더 이상 사용 안 함)
+- 검증: jsdom — 사이드바에 "내보내기" 탭 없음(TAB_NAMES 미포함) 확인, 새 상단 버튼 전부 존재, 저장 버튼 동작, 내보내기 드롭다운 토글, 글쓰기/내보내기 탭이 아닌 상태에서도 전역 `#preview`로 PDF/Word/.story 내보내기 정상 동작, 배경·캐릭터 열이 "배경: 학교, 집" / "캐릭터: 철수" 형식으로 렌더 — 콘솔 오류 0건
+
 ## 2026-07-22 (42차) · 배경/캐릭터 라벨, 지문추가 명칭, 섹션 우클릭 메뉴, 브라우저 기본 메뉴 차단
 - 요청 4건
   1. 블록에 추가된 배경/캐릭터 칩 앞에 "배경: "/"캐릭터: " 라벨 표시

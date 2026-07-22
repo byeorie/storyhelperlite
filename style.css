@@ -379,6 +379,29 @@ body.logged-in .login-overlay { display: none; }
 .icon-btn{display:inline-flex;align-items:center;gap:5px}
 .icon-btn .icon{vertical-align:-2px}
 
+/* ===== 상단 툴바 왼쪽 아이콘 그룹 (새로 만들기/저장/불러오기/내보내기) ===== */
+.mb-left{display:flex;align-items:center;gap:2px;flex-shrink:0}
+.mb-icon{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer;
+  flex-shrink:0;color:var(--muted)}
+.mb-icon .icon{width:18px;height:18px;vertical-align:middle}
+.mb-icon:hover{background:var(--accent2);border-color:var(--line);color:var(--ink)}
+.mb-sep{width:1px;height:22px;background:var(--line);margin:0 6px;flex-shrink:0}
+.mb-export{position:relative}
+.mb-export-menu{position:absolute;top:38px;left:0;background:var(--card);border:1px solid var(--line);
+  border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);padding:4px;z-index:30;min-width:170px}
+.mb-export-menu[hidden]{display:none}
+.mb-export-menu button{display:block;width:100%;text-align:left;padding:8px 12px;border:none;
+  background:transparent;border-radius:6px;cursor:pointer;font-size:13px;color:var(--ink);white-space:nowrap}
+.mb-export-menu button:hover{background:var(--accent2)}
+
+/* ===== PDF 인쇄용 미리보기(평소엔 숨김, 인쇄 시에만 표시) ===== */
+.print-preview{display:none}
+@media print{
+  body>*:not(#preview){display:none!important}
+  #preview{display:block!important;position:static}
+}
+
 /* ===== 글쓰기 툴바 ===== */
 .write-toolbar{align-items:center}
 .write-toolbar-right{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
@@ -417,10 +440,12 @@ body.logged-in .login-overlay { display: none; }
   background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:6px;
   cursor:pointer;font-size:11px;font-weight:600;padding:4px 8px}
 .scene-tagbtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
-.scene-meta-row{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:0 0 8px}
-.scene-meta-col{display:flex;flex-wrap:wrap;gap:5px;align-content:flex-start}
-.scene-chip{display:inline-flex;align-items:center;gap:5px;background:var(--accent2);
-  color:var(--ink);border-radius:12px;padding:3px 4px 3px 9px;font-size:11px;font-weight:600}
+.scene-meta-row{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:0 0 8px}
+.scene-meta-col{display:flex;flex-wrap:wrap;align-items:center;gap:0;font-size:11px;
+  background:var(--accent2);border-radius:8px;padding:5px 9px}
+.scene-meta-label{font-weight:800;color:var(--accent);flex-shrink:0;white-space:nowrap}
+.scene-meta-comma{color:var(--muted)}
+.scene-meta-item{display:inline-flex;align-items:center;gap:2px;color:var(--ink);font-weight:600}
 .chip-x{display:inline-flex;align-items:center;justify-content:center;background:transparent;
   border:none;cursor:pointer;color:var(--muted);padding:2px;border-radius:50%}
 .chip-x .icon{width:10px;height:10px}

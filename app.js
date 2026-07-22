@@ -164,6 +164,17 @@ document.getElementById("delProjBtn").onclick=()=>{
   DB.projects=DB.projects.filter(p=>p.id!==P.id);
   DB.current=DB.projects[0].id; P=currentProject(); save(); refreshProjSelect(); render();
 };
+/* 상단 툴바 — 저장 / 불러오기 / 내보내기 */
+document.getElementById("manualSaveBtn").onclick=()=>save();
+document.getElementById("topImportBtn").onclick=()=>document.getElementById("topImportInput").click();
+document.getElementById("topImportInput").onchange=e=>importStory(e);
+const topExportBtn=document.getElementById("topExportBtn");
+const topExportMenu=document.getElementById("topExportMenu");
+topExportBtn.onclick=e=>{ e.stopPropagation(); topExportMenu.hidden=!topExportMenu.hidden; };
+document.getElementById("topExportDocx").onclick=()=>{ topExportMenu.hidden=true; exportDocx(); };
+document.getElementById("topExportPdf").onclick=()=>{ topExportMenu.hidden=true; exportPdf(); };
+document.getElementById("topExportStory").onclick=()=>{ topExportMenu.hidden=true; exportStory(); };
+document.addEventListener("click", ()=>{ topExportMenu.hidden=true; });
 
 /* ===== 탭 ===== */
 const TAB_KEY = "storyhelper_activeTab";
@@ -217,7 +228,7 @@ function render(){
       return;
     }
     const renderers={idea:rIdea, explore:rExplore, admin:rAdmin, character:rChar, world:rWorld, background:rBg,
-      event:rEvent, plot:rPlot, write:rWrite, export:rExport};
+      event:rEvent, plot:rPlot, write:rWrite};
     (renderers[activeTab]||rIdea)();
   }catch(e){
     console.error("렌더링 오류:", e);
@@ -1436,14 +1447,12 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   d.appendChild(head);
   if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
 
-  /* 배경/캐릭터 메모 — 플롯/제목 바로 아래 2열 */
+  /* 배경/캐릭터 메모 — 플롯/제목 바로 아래 2열, "배경: 이름1, 이름2" 형식으로 라벨은 한 번만 표시 */
   if((bl.backgrounds&&bl.backgrounds.length) || (bl.characters&&bl.characters.length)){
     const metaRow=document.createElement("div"); metaRow.className="scene-meta-row";
-    const bgCol=document.createElement("div"); bgCol.className="scene-meta-col";
-    (bl.backgrounds||[]).forEach((bg,i)=>bgCol.appendChild(metaChip("배경: "+bg, ()=>{ bl.backgrounds.splice(i,1); save(); render(); })));
-    const charCol=document.createElement("div"); charCol.className="scene-meta-col";
-    (bl.characters||[]).forEach((nm,i)=>charCol.appendChild(metaChip("캐릭터: "+nm, ()=>{ bl.characters.splice(i,1); save(); render(); })));
-    metaRow.append(bgCol, charCol);
+    const bgCol=metaCol("배경", bl.backgrounds, i=>{ bl.backgrounds.splice(i,1); save(); render(); });
+    const charCol=metaCol("캐릭터", bl.characters, i=>{ bl.characters.splice(i,1); save(); render(); });
+    metaRow.append(bgCol||document.createElement("div"), charCol||document.createElement("div"));
     d.appendChild(metaRow);
   }
 
@@ -1465,14 +1474,22 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   d.appendChild(addRow);
   return d;
 }
-/* 배경/캐릭터 메모 칩 하나 */
-function metaChip(text, onRemove){
-  const chip=document.createElement("span"); chip.className="scene-chip";
-  const txt=document.createElement("span"); txt.className="chip-text"; txt.textContent=text;
-  const xBtn=document.createElement("button"); xBtn.type="button"; xBtn.className="chip-x"; xBtn.innerHTML=ICONS.close; xBtn.title="삭제";
-  xBtn.onclick=e=>{ e.stopPropagation(); onRemove(); };
-  chip.append(txt, xBtn);
-  return chip;
+/* 배경/캐릭터 열 하나 — "라벨: 이름1, 이름2" 형식, 항목마다 x로 개별 삭제 */
+function metaCol(label, list, onRemoveAt){
+  if(!list || !list.length) return null;
+  const col=document.createElement("div"); col.className="scene-meta-col";
+  const lbl=document.createElement("span"); lbl.className="scene-meta-label"; lbl.textContent=label+": ";
+  col.appendChild(lbl);
+  list.forEach((name,i)=>{
+    if(i>0){ const comma=document.createElement("span"); comma.className="scene-meta-comma"; comma.textContent=", "; col.appendChild(comma); }
+    const item=document.createElement("span"); item.className="scene-meta-item";
+    const txt=document.createElement("span"); txt.textContent=name; item.appendChild(txt);
+    const xBtn=document.createElement("button"); xBtn.type="button"; xBtn.className="chip-x"; xBtn.innerHTML=ICONS.close; xBtn.title="삭제";
+    xBtn.onclick=e=>{ e.stopPropagation(); onRemoveAt(i); };
+    item.appendChild(xBtn);
+    col.appendChild(item);
+  });
+  return col;
 }
 /* [+캐릭터] 버튼 — 캐릭터 설정에 등록된 인물 드롭다운(+직접입력) */
 function openCharacterPicker(btn, bl){
@@ -1721,27 +1738,8 @@ function paginatePreview(right){
 }
 
 /* 내보내기 */
-function rExport(){
-  const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>📤 내보내기 / 백업</h2>
-    <p class="hint">완성본을 Word·PDF로 내보내거나, 작품 파일(.story)로 백업·복원할 수 있습니다.</p>
-    <div class="export-btnrow">
-      <button class="btn icon-btn" id="docxBtn">${ICONS.file} Word로 내보내기 (.docx)</button>
-      <button class="btn ghost icon-btn" id="pdfBtn">${ICONS.pdf} PDF로 내보내기</button>
-      <button class="btn ghost icon-btn" id="storyOut">${ICONS.download} 작품 파일 내보내기 (.story)</button>
-      <label class="btn ghost icon-btn" style="display:inline-flex">${ICONS.upload} 작품 파일 불러오기
-        <input type="file" id="storyIn" accept=".story,.json" style="display:none"></label>
-    </div>
-    <p class="muted" style="margin-top:14px;font-size:12px;color:var(--muted)">※ PDF는 인쇄 창에서 '대상'을 'PDF로 저장'으로 선택하세요. 기본 저장은 로그인한 계정으로 서버에 자동 저장됩니다 — .story 내보내기는 별도 백업/이동용입니다.</p>
-    </div>
-    <div id="preview" class="card"></div>`;
-  app.appendChild(c);
-  c.querySelector("#pdfBtn").onclick=()=>{ buildPreview(); window.print(); };
-  c.querySelector("#docxBtn").onclick=exportDocx;
-  c.querySelector("#storyOut").onclick=exportStory;
-  c.querySelector("#storyIn").onchange=importStory;
-  buildPreview();
-}
+/* PDF로 내보내기 — 미리보기를 만든 뒤 인쇄(대상: PDF로 저장) */
+function exportPdf(){ buildPreview(); window.print(); }
 /* Word(.docx)로 내보내기 — html-docx-js로 미리보기 HTML을 변환 */
 function exportDocx(){
   buildPreview();
