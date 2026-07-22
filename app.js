@@ -17,7 +17,18 @@ const ICONS = {
   group:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
   ungroup:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 10 21 3M3 21l7-7" stroke-dasharray="2 2"/></svg>',
   load:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>',
-  network:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5 7 16.5M12 7.5l5 9M7.5 19h9"/></svg>'
+  network:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5 7 16.5M12 7.5l5 9M7.5 19h9"/></svg>',
+  bulb:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-7 7c0 3 1.8 4.5 2.8 6s1.2 2 1.2 3h6c0-1 .2-1.5 1.2-3s2.8-3 2.8-6a7 7 0 0 0-7-7z"/></svg>',
+  search:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>',
+  lock:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  book:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+  globe:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+  building:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="18" height="20" rx="1"/><path d="M9 22v-6h6v6"/><path d="M9 6h1M9 10h1M9 14h1M14 6h1M14 10h1M14 14h1"/></svg>',
+  bolt:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>',
+  user:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  gear:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  grip:'<svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>',
+  cloud:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>'
 };
 function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
 function refreshAdminTabVisibility(){
@@ -225,7 +236,7 @@ function render(){
     if(!P.explore) P.explore=blankExplore();
     if(!DB.workDB) DB.workDB=fillWorkDB();
     if(activeTab==="admin" && !isAdmin()){
-      app.innerHTML='<div class="card"><h2>🔒 접근 권한이 없습니다</h2>'
+      app.innerHTML=`<div class="card"><h2>${ICONS.lock} 접근 권한이 없습니다</h2>`
         +'<p class="hint">이 메뉴는 관리자 계정으로 로그인해야 사용할 수 있습니다.</p></div>';
       return;
     }
@@ -312,7 +323,7 @@ function makeTagChip(tag, opts){
   wrap.appendChild(label);
   if(opts.onClick) wrap.onclick=opts.onClick;
   if(opts.removable){
-    const x=document.createElement("span"); x.className="idea-tag-x"; x.textContent="✕";
+    const x=document.createElement("span"); x.className="idea-tag-x"; x.innerHTML=ICONS.close;
     x.onclick=(e)=>{ e.stopPropagation(); opts.onRemove&&opts.onRemove(); };
     wrap.appendChild(x);
   }
@@ -470,7 +481,7 @@ function ideaBlockCard(b, allTags, list){
   }
 
   const handle=document.createElement("span"); handle.className="idea-handle";
-  handle.textContent="⠿"; handle.title="드래그해서 순서 변경";
+  handle.innerHTML=ICONS.grip; handle.title="드래그해서 순서 변경";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
@@ -488,7 +499,7 @@ function ideaBlockCard(b, allTags, list){
   const head=document.createElement("div"); head.className="idea-block-text";
   head.contentEditable="true"; head.spellcheck=false; head.textContent=b.text;
   head.oninput=()=>{ b.text=head.textContent; save(); };
-  const del=document.createElement("button"); del.className="idea-del"; del.textContent="✕"; del.title="삭제";
+  const del=document.createElement("button"); del.className="idea-del"; del.innerHTML=ICONS.close; del.title="삭제";
   del.onclick=()=>{
     if(!confirm("이 아이디어를 삭제할까요?"))return;
     P.ideaBlocks=P.ideaBlocks.filter(x=>x.id!==b.id); save(); render();
@@ -609,7 +620,7 @@ function rExplore(){
   const wdb=DB.workDB;
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
-    <h2>🔎 아이디어 탐색</h2>
+    <h2>${ICONS.search} 아이디어 탐색</h2>
     <p class="hint">슬롯을 선택해 로그라인을 조합하고, 등록된 작품DB에서 비슷한 작품을 찾아봅니다.</p>
   </div>`;
   app.appendChild(c);
@@ -658,7 +669,7 @@ function rExplore(){
 
   const resultCard=document.createElement("div"); resultCard.className="card";
   resultCard.innerHTML=`<h3>비슷한 작품 찾기</h3>
-    <button class="btn" id="matchBtn">🔍 매칭 작품 찾기</button>
+    <button class="btn" id="matchBtn">${ICONS.search} 매칭 작품 찾기</button>
     <div id="matchResults" class="explore-results"></div>`;
   app.appendChild(resultCard);
   resultCard.querySelector("#matchBtn").onclick=()=>{
@@ -685,12 +696,12 @@ function rAdmin(){
   if(!DB.workDB) DB.workDB=fillWorkDB();
   const wdb=DB.workDB;
   const c=document.createElement("div"); c.className="card";
-  c.innerHTML=`<h2>🔐 작품DB 관리</h2>
+  c.innerHTML=`<h2>${ICONS.lock} 작품DB 관리</h2>
     <p class="hint">관리자 계정(${esc(ADMIN_USERNAME)})으로 로그인된 상태입니다. 여기서 등록한 작품DB는 모든 학생의 "아이디어 탐색" 탭에서 공통으로 사용됩니다.</p>
     <div class="explore-dbstatus">${wdb.works.length
-      ?`📚 <b>${esc(wdb.fileName)}</b> — 작품 ${wdb.works.length}개 (${esc(wdb.uploadedAt)})`
+      ?`${ICONS.book} <b>${esc(wdb.fileName)}</b> — 작품 ${wdb.works.length}개 (${esc(wdb.uploadedAt)})`
       :`아직 작품DB가 없습니다. 아래에서 파일을 업로드하세요.`}</div>
-    <label class="btn ghost" style="display:inline-block;margin-top:8px">📂 작품DB 업로드 (.md / .xlsx)
+    <label class="btn ghost" style="display:inline-block;margin-top:8px">${ICONS.upload} 작품DB 업로드 (.md / .xlsx)
       <input type="file" id="wdbIn" accept=".md,.txt,.xlsx,.xls" style="display:none"></label>
     ${wdb.works.length?`<button class="btn sm danger" id="wdbClear" style="margin-left:8px">DB 비우기</button>`:""}
     <p class="hint" style="margin-top:10px">파일 형식: 첫 행(헤더)에 <b>제목, 주인공 특성, 시대, 공간, 사건 유형, 위기 유형, 원인·동기, 해결 방식, 결말</b> 열을 두고, 한 칸에 키워드가 여러 개면 쉼표(,)로 구분하세요. (md는 표 형식, xlsx는 첫 시트 사용)</p>
@@ -726,7 +737,7 @@ function rChar(){
     charDetailFor=null;
   }
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>👤 캐릭터 설정</h2>
+  c.innerHTML=`<div class="card"><h2>${ICONS.user} 캐릭터 설정</h2>
     <p class="hint">MBTI와 에니어그램으로 성격의 뼈대를 잡고, 목표·결함·변화, 다른 인물과의 관계를 채워보세요.</p>
     <div class="char-toolbar">
       <div class="char-view-toggle">
@@ -814,8 +825,8 @@ function charModal(ch){
   overlay.onclick=e=>{ if(e.target===overlay){ charModalFor=null; render(); } };
   const box=document.createElement("div"); box.className="plot-modal char-modal";
   const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=ch.name?("✎ "+ch.name):"✎ 새 캐릭터";
-  const closeBtn=iconBtn("✕","닫기",()=>{ charModalFor=null; render(); });
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.innerHTML=ICONS.edit+" "+esc(ch.name||"새 캐릭터");
+  const closeBtn=iconBtn(ICONS.close,"닫기",()=>{ charModalFor=null; render(); });
   top.append(ttl, closeBtn);
   box.appendChild(top);
 
@@ -845,7 +856,7 @@ function charModal(ch){
     <div class="char-rel-add" id="charRelAdd"></div>`;
   body.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
   const nameInput=body.querySelector('[data-k="name"]');
-  nameInput.addEventListener("input", ()=>{ ttl.textContent=nameInput.value?("✎ "+nameInput.value):"✎ 새 캐릭터"; });
+  nameInput.addEventListener("input", ()=>{ ttl.innerHTML=ICONS.edit+" "+esc(nameInput.value||"새 캐릭터"); });
 
   const imgPreview=body.querySelector("#charImgPreview");
   const imgInput=body.querySelector("#charImgInput");
@@ -885,7 +896,7 @@ function charModal(ch){
     const mutualWrap=document.createElement("label"); mutualWrap.className="char-rel-mutual";
     const mutualChk=document.createElement("input"); mutualChk.type="checkbox";
     mutualWrap.append(mutualChk, document.createTextNode(" 양방향(서로 같은 관계)"));
-    const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="btn ghost sm"; addBtn.textContent="+ 관계 추가";
+    const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="btn ghost sm"; addBtn.innerHTML=ICONS.plus+" 관계 추가";
     addBtn.onclick=()=>{
       ch.relationships=ch.relationships||[];
       ch.relationships.push({id:uid(), targetId:sel.value, label:txt.value.trim(), mutual:mutualChk.checked});
@@ -907,7 +918,7 @@ function charDetailPage(ch){
   const top=document.createElement("div"); top.className="char-detail-top";
   const backBtn=document.createElement("button"); backBtn.type="button"; backBtn.className="btn ghost sm"; backBtn.textContent="← 캐릭터 목록으로";
   backBtn.onclick=()=>{ charDetailFor=null; render(); window.scrollTo(0,0); };
-  const ttl=document.createElement("h2"); ttl.textContent=ch.name?("✎ "+ch.name):"✎ 새 캐릭터";
+  const ttl=document.createElement("h2"); ttl.innerHTML=ICONS.edit+" "+esc(ch.name||"새 캐릭터");
   top.append(backBtn, ttl);
   wrap.appendChild(top);
 
@@ -932,7 +943,7 @@ function charDetailPage(ch){
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
     <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
     <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
-    <h3 class="char-detail-sub">📖 서사 확장</h3>
+    <h3 class="char-detail-sub">${ICONS.book} 서사 확장</h3>
     <label>외모 상세</label><textarea data-k="appearance" placeholder="키, 체형, 헤어스타일, 옷차림, 특징적 외형 등"></textarea>
     <label>말투 / 버릇</label><textarea data-k="speechHabit" placeholder="자주 쓰는 말, 어투, 습관적 행동 등"></textarea>
     <label>성장배경 / 과거사</label><textarea data-k="backstory" placeholder="자라온 환경, 이야기 이전에 겪은 사건 등"></textarea>
@@ -944,7 +955,7 @@ function charDetailPage(ch){
     <div class="char-rel-add" id="charRelAdd"></div>`;
   body.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
   const nameInput=body.querySelector('[data-k="name"]');
-  nameInput.addEventListener("input", ()=>{ ttl.textContent=nameInput.value?("✎ "+nameInput.value):"✎ 새 캐릭터"; });
+  nameInput.addEventListener("input", ()=>{ ttl.innerHTML=ICONS.edit+" "+esc(nameInput.value||"새 캐릭터"); });
 
   const imgPreview=body.querySelector("#charImgPreview");
   const imgInput=body.querySelector("#charImgInput");
@@ -984,7 +995,7 @@ function charDetailPage(ch){
     const mutualWrap=document.createElement("label"); mutualWrap.className="char-rel-mutual";
     const mutualChk=document.createElement("input"); mutualChk.type="checkbox";
     mutualWrap.append(mutualChk, document.createTextNode(" 양방향(서로 같은 관계)"));
-    const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="btn ghost sm"; addBtn.textContent="+ 관계 추가";
+    const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="btn ghost sm"; addBtn.innerHTML=ICONS.plus+" 관계 추가";
     addBtn.onclick=()=>{
       ch.relationships=ch.relationships||[];
       ch.relationships.push({id:uid(), targetId:sel.value, label:txt.value.trim(), mutual:mutualChk.checked});
@@ -1103,7 +1114,7 @@ function charRelationshipGraph(){
 /* 세계관 */
 function rWorld(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>🌍 세계관 설정</h2>
+  c.innerHTML=`<div class="card"><h2>${ICONS.globe} 세계관 설정</h2>
     <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기를 정합니다.</p>
     <label>한 줄 요약</label><textarea id="w_summary" placeholder="이 세계는 어떤 곳인가"></textarea>
     <div class="row"><div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
@@ -1119,7 +1130,7 @@ function rWorld(){
 /* 배경 */
 function rBg(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>🏙 배경 설정</h2>
+  c.innerHTML=`<div class="card"><h2>${ICONS.building} 배경 설정</h2>
     <p class="hint">세계관 속에서 이야기가 시작되는 구체적 상황입니다.</p>
     <label>사회·정치적 배경</label><textarea id="b_social"></textarea>
     <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
@@ -1133,7 +1144,7 @@ function rBg(){
 /* 사건 */
 function rEvent(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>⚡ 사건 설정</h2>
+  c.innerHTML=`<div class="card"><h2>${ICONS.bolt} 사건 설정</h2>
     <p class="hint">이야기를 굴러가게 하는 핵심 사건과 갈등, 결말 방향입니다.</p>
     <label>주요 사건 (발단)</label><textarea id="e_main" placeholder="이야기를 시작시키는 사건"></textarea>
     <label>핵심 갈등</label><textarea id="e_conflict" placeholder="주인공 vs 무엇/누구"></textarea>
@@ -1181,7 +1192,7 @@ function rPlot(){
   /* 아직 구조를 고르지 않았으면 선택 화면 */
   if(!P.plotDoc.structure){
     const c=document.createElement("div"); c.className="card";
-    c.innerHTML=`<h2>📖 플롯 생성</h2>
+    c.innerHTML=`<h2>${ICONS.book} 플롯 생성</h2>
       <p class="hint">먼저 이야기의 뼈대가 될 플롯 구조를 선택하세요. 선택한 구조에 맞춰 기본 섹션이 만들어지고, 그 안에 <b>아이디어 수집</b>에서 모은 아이디어를 끌어다 배치할 수 있습니다.</p>
       <div class="plot-structure-choices" id="structChoices"></div>`;
     app.appendChild(c);
@@ -1203,8 +1214,8 @@ function rPlot(){
   /* 헤더 */
   const struct=PLOT_STRUCTURES[P.plotDoc.structure];
   const head=document.createElement("div"); head.className="card";
-  head.innerHTML=`<h2>📖 플롯 생성</h2>
-    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 핸들(⠿)로 순서를 바꿀 수 있습니다. 아이디어 텍스트를 클릭하거나 <b>✎</b> 버튼을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
+  head.innerHTML=`<h2>${ICONS.book} 플롯 생성</h2>
+    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 드래그 핸들로 순서를 바꿀 수 있습니다. 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
     <div class="plot-toolbar">
       <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
@@ -1270,14 +1281,14 @@ function plotSectionCard(sec, idx, secWrap){
   const spacer=document.createElement("span"); spacer.className="plot-sec-spacer";
   const cnt=document.createElement("span"); cnt.className="plot-sec-count"; cnt.textContent=`${(sec.ideaIds||[]).length}개`;
   // 이름 수정
-  const editBtn=iconBtn("✎","이름 수정",()=>{
+  const editBtn=iconBtn(ICONS.edit,"이름 수정",()=>{
     const nm=prompt("섹션 이름:",sec.name); if(nm===null)return;
     sec.name=nm||sec.name; save(); render();
   });
   // 아이디어 추가
-  const addBtn=iconBtn("＋","아이디어 추가",()=>togglePicker(sec));
+  const addBtn=iconBtn(ICONS.plus,"아이디어 추가",()=>togglePicker(sec));
   // 섹션 이동 핸들
-  const moveBtn=iconBtn("☰","드래그해서 섹션 순서 변경",null);
+  const moveBtn=iconBtn(ICONS.grip,"드래그해서 섹션 순서 변경",null);
   moveBtn.classList.add("plot-sec-move");
   moveBtn.addEventListener("mousedown", ()=>{ card.draggable=true; });
   moveBtn.addEventListener("touchstart", ()=>{ card.draggable=true; }, {passive:true});
@@ -1297,7 +1308,7 @@ function plotSectionCard(sec, idx, secWrap){
     render();
   });
   // 삭제
-  const delBtn=iconBtn("🗑","섹션 삭제",()=>{
+  const delBtn=iconBtn(ICONS.trash,"섹션 삭제",()=>{
     if((sec.ideaIds||[]).length && !confirm("이 섹션의 아이디어 배치가 해제됩니다. (원본은 유지) 삭제할까요?"))return;
     P.plotDoc.sections=P.plotDoc.sections.filter(x=>x.id!==sec.id); save(); render();
   });
@@ -1353,7 +1364,7 @@ function plotSectionCard(sec, idx, secWrap){
 
 /* 아이콘 버튼 헬퍼 */
 function iconBtn(label, title, onClick){
-  const b=document.createElement("button"); b.className="plot-icon-btn"; b.textContent=label; b.title=title;
+  const b=document.createElement("button"); b.className="plot-icon-btn"; b.innerHTML=label; b.title=title;
   if(onClick) b.onclick=onClick;
   return b;
 }
@@ -1374,7 +1385,7 @@ function plotPickerModal(sec){
 
   const top=document.createElement("div"); top.className="plot-picker-top";
   const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`아이디어 선택 · ${sec.name}`;
-  const closeBtn=iconBtn("✕","닫기",()=>{ plotPickerFor=null; render(); });
+  const closeBtn=iconBtn(ICONS.close,"닫기",()=>{ plotPickerFor=null; render(); });
   top.append(ttl, closeBtn);
   box.appendChild(top);
 
@@ -1452,7 +1463,7 @@ function plotIdeaCard(b, secWrap){
   const d=document.createElement("div"); d.className="plot-idea"; d.dataset.id=b.id; d.draggable=false;
   const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
   d.style.borderLeftColor=color;
-  const handle=document.createElement("span"); handle.className="plot-idea-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동";
+  const handle=document.createElement("span"); handle.className="plot-idea-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 이동";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
@@ -1482,13 +1493,13 @@ function plotIdeaCard(b, secWrap){
     });
     content.appendChild(tags);
   }
-  const editBtn=document.createElement("button"); editBtn.className="plot-idea-edit"; editBtn.textContent="✎"; editBtn.title="아이디어 수정 (원본과 별개)";
+  const editBtn=document.createElement("button"); editBtn.className="plot-idea-edit"; editBtn.innerHTML=ICONS.edit; editBtn.title="아이디어 수정 (원본과 별개)";
   editBtn.onclick=()=>{
     txt.focus();
     try{ const r=document.createRange(); r.selectNodeContents(txt); r.collapse(false);
       const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }catch(e){}
   };
-  const rm=document.createElement("button"); rm.className="plot-idea-rm"; rm.textContent="✕"; rm.title="이 섹션에서 빼기";
+  const rm=document.createElement("button"); rm.className="plot-idea-rm"; rm.innerHTML=ICONS.close; rm.title="이 섹션에서 빼기";
   rm.onclick=()=>{
     P.plotDoc.sections.forEach(s=>{ s.ideaIds=(s.ideaIds||[]).filter(x=>x!==b.id); });
     save(); render();
@@ -1529,7 +1540,7 @@ function rWrite(){
   const pd=P.plotDoc;
   if(!pd || !pd.structure || !pd.sections.length){
     const c=document.createElement("div"); c.className="card";
-    c.innerHTML=`<h2>✍️ 글쓰기</h2><p class="hint">먼저 <b>플롯 생성</b>에서 플롯 구조를 만들어 주세요. 플롯 섹션이 글쓰기의 틀이 됩니다.</p>`;
+    c.innerHTML=`<h2>${ICONS.edit} 글쓰기</h2><p class="hint">먼저 <b>플롯 생성</b>에서 플롯 구조를 만들어 주세요. 플롯 섹션이 글쓰기의 틀이 됩니다.</p>`;
     app.appendChild(c);
     return;
   }
@@ -1770,7 +1781,7 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   /* 블록 왼쪽 컬러 바 — 같은 플롯 단계(섹션)에 속한 블록은 모두 같은 색 */
   d.style.borderLeftColor=getSectionColor(bl.sectionId);
   const head=document.createElement("div"); head.className="scene-head";
-  const handle=document.createElement("span"); handle.className="scene-handle"; handle.textContent="⠿"; handle.title="드래그해서 블록 이동";
+  const handle=document.createElement("span"); handle.className="scene-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 블록 이동";
   const numEl=document.createElement("span"); numEl.className="scene-num"; numEl.textContent=(num!=null?num:"");
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
@@ -1927,7 +1938,7 @@ document.addEventListener("keydown", e=>{ if(e.key==="Escape") hideCtxMenu(); })
 
 function subBlockEl(bl, it, liveRefresh, main){
   const d=document.createElement("div"); d.className="sub-block "+(it.type==="line"?"sub-line":"sub-text"); d.dataset.id=it.id; d.draggable=false;
-  const handle=document.createElement("span"); handle.className="sub-handle"; handle.textContent="⠿"; handle.title="드래그해서 이동(다른 블록으로도)";
+  const handle=document.createElement("span"); handle.className="sub-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 이동(다른 블록으로도)";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{ if(!d.draggable) return; dndDropHandled=false; e.dataTransfer.effectAllowed="move"; setTimeout(()=>d.classList.add("dragging"),0); });
@@ -1936,7 +1947,7 @@ function subBlockEl(bl, it, liveRefresh, main){
     if(!dndDropHandled && main && main.isConnected) commitWriteItemOrder(main);
   });
 
-  const del=document.createElement("button"); del.className="sub-del"; del.textContent="✕"; del.title="삭제";
+  const del=document.createElement("button"); del.className="sub-del"; del.innerHTML=ICONS.close; del.title="삭제";
   del.onclick=()=>{ bl.items=(bl.items||[]).filter(x=>x.id!==it.id); save(); render(); };
 
   if(it.type==="line"){
@@ -2019,7 +2030,7 @@ function dialogueModal(bl){
   const box=document.createElement("div"); box.className="plot-modal dlg-modal";
   const top=document.createElement("div"); top.className="plot-picker-top";
   const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="대사 추가";
-  const closeBtn=iconBtn("✕","닫기",()=>{ writeDlgFor=null; render(); });
+  const closeBtn=iconBtn(ICONS.close,"닫기",()=>{ writeDlgFor=null; render(); });
   top.append(ttl, closeBtn);
   box.appendChild(top);
 

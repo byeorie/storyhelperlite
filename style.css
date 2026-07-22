@@ -13,12 +13,14 @@ a{color:var(--accent)}
   padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);
   position:sticky;top:0;z-index:10;overflow-x:auto}
 .topbar h1{font-size:18px;margin:0;white-space:nowrap;flex-shrink:0}
+.topbar h1 .icon{width:17px;height:17px;vertical-align:-3px;margin-right:1px}
 .proj-controls{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:nowrap;flex-shrink:0}
 .proj-controls select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;max-width:160px}
 .proj-controls button{padding:6px 10px;border:1px solid var(--line);background:#fff;
   border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0}
 .proj-controls button:hover{background:var(--accent2)}
 .save-status{font-size:12px;color:var(--ok);min-width:48px;white-space:nowrap;flex-shrink:0}
+.save-status .icon{width:12px;height:12px;vertical-align:-2px;margin-right:1px}
 .user-auth{display:flex;align-items:center;gap:8px;margin-left:8px;flex-shrink:0}
 .user-menu-wrap{position:relative;flex-shrink:0}
 #userMenuBtn.avatar-btn{padding:0;border:none;background:transparent;border-radius:50%;
@@ -46,6 +48,7 @@ a{color:var(--accent)}
 .nav-group{margin-bottom:6px}
 .nav-label{font-size:11px;font-weight:700;color:var(--muted);padding:8px 16px 4px;
   text-transform:uppercase;letter-spacing:.06em}
+.nav-label .icon{width:12px;height:12px;vertical-align:-2px;margin-right:1px}
 .tab{display:block;width:100%;text-align:left;padding:8px 16px 8px 20px;
   border:none;background:transparent;cursor:pointer;font-size:14px;
   color:var(--ink);border-left:3px solid transparent}
@@ -107,6 +110,7 @@ textarea{resize:vertical;min-height:70px}
   cursor:grab;color:var(--muted);font-size:12px;line-height:1;user-select:none;padding:5px 3px;border-radius:4px}
 .idea-handle:hover{color:var(--ink);background:var(--bg)}
 .idea-handle:active{cursor:grabbing}
+.idea-handle .icon{width:11px;height:11px;vertical-align:middle}
 .idea-block-text{font-size:13px;font-weight:600;white-space:pre-wrap;outline:none;min-height:18px}
 .idea-block-text:focus{background:var(--bg);border-radius:6px}
 .idea-block-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
@@ -117,6 +121,7 @@ textarea{resize:vertical;min-height:70px}
 .tag-color-dot:hover{transform:scale(1.15)}
 .idea-tag-x{cursor:pointer;opacity:.6}
 .idea-tag-x:hover{opacity:1}
+.idea-tag-x .icon{width:9px;height:9px;vertical-align:-1px}
 .idea-tag.add{background:transparent;border:1px dashed var(--line);color:var(--muted);cursor:pointer}
 .idea-tag.add:hover{color:var(--accent);border-color:var(--accent)}
 .idea-tag.filter,.idea-tag.pick{cursor:pointer}
@@ -126,6 +131,7 @@ textarea{resize:vertical;min-height:70px}
 .idea-del{position:absolute;top:6px;right:8px;background:transparent;border:none;
   color:var(--muted);font-size:12px;cursor:pointer;line-height:1;padding:2px}
 .idea-del:hover{color:#b3503a}
+.idea-del .icon{width:11px;height:11px;vertical-align:middle}
 
 /* 플롯 생성 */
 .plot-structure-choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
@@ -148,6 +154,7 @@ textarea{resize:vertical;min-height:70px}
 .plot-icon-btn{background:transparent;border:none;cursor:pointer;color:var(--muted);
   font-size:15px;line-height:1;padding:5px 6px;border-radius:6px;flex-shrink:0}
 .plot-icon-btn:hover{background:var(--bg);color:var(--ink)}
+.plot-icon-btn .icon{vertical-align:middle}
 .plot-sec-move{cursor:grab}
 .plot-sec-move:active{cursor:grabbing}
 .plot-sec-del:hover{color:#b3503a;background:#f7e9e5}
@@ -159,6 +166,7 @@ textarea{resize:vertical;min-height:70px}
 .plot-idea.dragging{opacity:.4}
 .plot-idea-handle{cursor:grab;color:var(--muted);font-size:14px;line-height:1.4;user-select:none;flex-shrink:0}
 .plot-idea-handle:active{cursor:grabbing}
+.plot-idea-handle .icon{width:13px;height:13px;vertical-align:middle}
 .plot-idea-content{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
 .plot-idea-text{font-size:13px;font-weight:600;white-space:pre-wrap;word-break:break-word;outline:none;
   border-radius:5px;cursor:text;padding:3px 6px;border:1px dashed transparent;transition:background .1s,border-color .1s}
@@ -168,11 +176,13 @@ textarea{resize:vertical;min-height:70px}
 .plot-idea-edit{background:transparent;border:none;color:var(--muted);cursor:pointer;
   font-size:13px;line-height:1;padding:2px 5px;flex-shrink:0;border-radius:4px}
 .plot-idea-edit:hover{color:var(--accent);background:var(--accent2)}
+.plot-idea-edit .icon{width:12px;height:12px;vertical-align:middle}
 .plot-idea-tags{display:flex;flex-wrap:wrap;gap:4px}
 .plot-idea-tag{font-size:11px;font-weight:600;border:1px solid transparent;border-radius:999px;padding:1px 7px}
 .plot-idea-rm{background:transparent;border:none;cursor:pointer;color:var(--muted);
   font-size:12px;line-height:1;padding:2px 4px;flex-shrink:0}
 .plot-idea-rm:hover{color:#b3503a}
+.plot-idea-rm .icon{width:11px;height:11px;vertical-align:middle}
 /* ＋ 아이디어 추가 박스 */
 .plot-add-box{display:flex;align-items:center;justify-content:center;gap:6px;
   border:1px dashed var(--line);border-radius:8px;padding:11px;cursor:pointer;
@@ -245,6 +255,7 @@ textarea{resize:vertical;min-height:70px}
 .scene-handle,.scene-num,.scene-hicon,.scene-del-btn{margin-top:2px}
 .scene-handle{cursor:grab;color:var(--muted);font-size:14px;user-select:none}
 .scene-handle:active{cursor:grabbing}
+.scene-handle .icon{width:13px;height:13px;vertical-align:middle}
 .scene-num{background:var(--ok);color:#fff;min-width:22px;height:20px;border-radius:5px;
   display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 6px;flex-shrink:0}
 .scene-spacer{flex:1}
@@ -276,12 +287,14 @@ textarea{resize:vertical;min-height:70px}
 .sub-block.sub-line{background:#fbf8f3}
 .sub-handle{cursor:grab;color:var(--muted);font-size:13px;user-select:none;flex-shrink:0;padding-top:2px}
 .sub-handle:active{cursor:grabbing}
+.sub-handle .icon{width:12px;height:12px;vertical-align:middle}
 .sub-textarea{flex:1;min-width:0;height:auto;min-height:0;border:none;background:transparent;
   font-family:inherit;font-size:11px;line-height:1.5;resize:none;overflow:hidden;color:var(--ink);padding:2px 0}
 .sub-textarea:focus{outline:none}
 .sub-line .dlg-who{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;white-space:nowrap;padding-top:1px}
 .sub-line .dlg-text{flex:1;font-size:11px;min-width:0;word-break:break-word;padding-top:1px}
 .sub-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;flex-shrink:0}
+.sub-del .icon{width:10px;height:10px;vertical-align:middle}
 .sub-del:hover{color:#b3503a}
 .write-add-block{width:100%;margin-top:10px;background:transparent;border:1px dashed var(--line);
   border-radius:8px;padding:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600}
@@ -347,6 +360,7 @@ textarea{resize:vertical;min-height:70px}
   font-size: .85em; color: #9aa0a6; margin: 0 0 4px; letter-spacing: .02em;
 }
 .login-box h1 { margin: 0 0 24px; font-size: 1.7em; font-weight: 700; color: #202124; }
+.login-box h1 .icon{width:22px;height:22px;vertical-align:-4px;margin-right:2px}
 .login-box .login-desc { margin: 0 0 20px; font-size: .88em; line-height: 1.7; color: #80868b; }
 body.logged-in .login-overlay { display: none; }
 

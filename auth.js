@@ -1,6 +1,8 @@
 /* ===== 자체 로그인/회원가입 (서버: Cloudflare Pages Functions + D1) ===== */
 const TOKEN_KEY = "shl_token";
 const USERINFO_KEY = "shl_userinfo";
+/* 서버 상태 표시용 심플라인 구름 아이콘 */
+const CLOUD_ICON = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>';
 
 let authToken = null;
 let currentUser = null; // {username, name, school, email}
@@ -123,7 +125,7 @@ function showAuthPanel(name) {
 async function loadFromServer() {
   if (!getToken()) return;
   const st = document.getElementById("serverStatus");
-  if (st) st.textContent = "☁️ 불러오는 중…";
+  if (st) st.innerHTML = CLOUD_ICON + " 불러오는 중…";
   const res = await apiFetch("data");
   if (res.status === 401) { signOut(); return; }
   if (res.ok && res.body) {
@@ -135,14 +137,14 @@ async function loadFromServer() {
       DB = data;
       P = currentProject();
       render();
-      if (st) st.textContent = "☁️ 서버에서 불러옴";
+      if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
     } else {
       // 서버에 저장된 데이터가 없으면 현재 로컬 데이터를 서버로 업로드
       saveToServer();
-      if (st) st.textContent = "☁️ 서버 연결됨";
+      if (st) st.innerHTML = CLOUD_ICON + " 서버 연결됨";
     }
   } else if (st) {
-    st.textContent = "☁️ 서버 오류";
+    st.innerHTML = CLOUD_ICON + " 서버 오류";
   }
 }
 
@@ -154,7 +156,7 @@ function saveToServer() {
     const st = document.getElementById("serverStatus");
     const res = await apiFetch("data", { method: "POST", body: JSON.stringify({ data: DB }) });
     if (res.status === 401) { signOut(); return; }
-    if (st) st.textContent = res.ok ? "☁️ 서버에 저장됨" : "☁️ 서버 저장 실패";
+    if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
   }, 600);
 }
 

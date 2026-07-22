@@ -2,6 +2,14 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-23 (51차) · 이모티콘 아이콘 전부 심플라인아이콘(SVG)으로 교체
+- 요청: 화면 곳곳의 이모티콘(💡🔒📖✍️🔍🌍🏙⚡👤📚📂💾📝📄⚙🔐☁️)과 텍스트 심볼(✕✎⠿☰🗑)로 되어있는 아이콘을 모두 기존 헤더 툴바에 쓰이던 것과 같은 심플 라인 SVG 아이콘으로 통일
+- **app.js** 수정 — `ICONS` 객체에 `bulb, search, lock, book, globe, building, bolt, user, gear, grip, cloud` 11종 라인 아이콘 추가. `iconBtn()` 헬퍼가 `textContent` 대신 `innerHTML`을 쓰도록 변경(SVG 삽입 지원). 각 탭 h2/h3 타이틀, 캐릭터 모달·상세페이지 제목, 아이디어/플롯/장면/서브블록의 드래그 핸들(⠿→grip)·수정(✎→edit)·삭제(✕/🗑→close/trash) 버튼, 플롯 구조 힌트 문구(글자로 아이콘을 설명하던 부분)를 전부 SVG 아이콘 참조로 교체
+- **index.html** 수정 — 로그인/헤더 타이틀, 내보내기 메뉴(Word/PDF/.story), 설정 버튼, 사이드메뉴 5개 그룹 라벨(아이디어/설정/플롯/글쓰기/관리자)의 이모지를 인라인 SVG로 교체
+- **auth.js** 수정 — 서버 상태 표시(`☁️ 불러오는 중…` 등)를 `CLOUD_ICON` 상수(인라인 SVG) + 텍스트 조합으로 교체
+- **style.css** 수정 — 아이콘이 들어간 각 컴포넌트(nav-label, save-status, idea-handle/del/tag-x, plot-idea-handle/edit/rm, scene-handle, sub-handle/del, 로그인·헤더 h1)에 맞는 `.icon` 크기·정렬 보정 규칙 추가
+- 검증: `node --check`로 app.js/auth.js/data.js 문법 확인, CSS 중괄호·HTML `<svg>` 태그 짝 수 일치 확인. 기존 `smoketest.js`(jsdom)는 이번 변경과 무관하게 원본 커밋(cea726e)에서도 동일하게 `LOGLINE_SLOTS is not defined` 오류가 발생함을 확인해 이번 수정이 원인이 아님을 확인(기존에 있던 별개 이슈, 별도 조치 필요)
+
 ## 2026-07-23 (50차) · 사이드메뉴 캐릭터/배경/사건을 "설정" 그룹으로 통합
 - 요청: 사이드메뉴에서 캐릭터, 배경(세계관+배경 설정), 사건을 하나의 "설정" 섹션으로 묶어달라는 요청
 - **index.html** 수정 — 기존 "👤 캐릭터"/"🌍 배경"/"⚡ 사건" 3개의 `.nav-group`을 "⚙️ 설정" 그룹 하나로 통합(캐릭터 설정 · 세계관 · 배경 설정 · 사건 설정 4개 탭 버튼을 그룹 안에 순서대로 배치). data-tab 값과 탭 로직(app.js)은 변경 없음
