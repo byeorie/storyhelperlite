@@ -200,6 +200,8 @@ function optGroup(container, options, obj, key){
 
 /* ===== 렌더 ===== */
 const app=document.getElementById("app");
+/* 작업 영역에서는 브라우저 기본 우클릭 메뉴 대신 자체 메뉴만 사용 */
+app.addEventListener("contextmenu", e=>{ e.preventDefault(); });
 function render(){
   try{
     refreshProjSelect();
@@ -1212,12 +1214,13 @@ function rWrite(){
     const group=document.createElement("div"); group.className="write-group"; group.id="wsec-"+sec.id;
     const div=document.createElement("div"); div.className="write-divider";
     div.innerHTML=`<span class="wd-num">${i+1}</span><span class="wd-name">${esc(sec.name)}</span><span class="wd-spacer"></span>`;
-    const loadBtn=document.createElement("button"); loadBtn.className="wd-icon"; loadBtn.textContent="📥"; loadBtn.title="아이디어 불러오기";
+    const loadBtn=document.createElement("button"); loadBtn.className="wd-icon"; loadBtn.innerHTML=ICONS.load; loadBtn.title="아이디어 불러오기";
     loadBtn.onclick=()=>loadSectionIdeas(sec);
-    const createBtn=document.createElement("button"); createBtn.className="wd-icon"; createBtn.textContent="＋"; createBtn.title="블럭 생성";
-    createBtn.onclick=()=>{ const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[], groupId:"", backgrounds:[], characters:[]}; P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render(); };
+    const createBtn=document.createElement("button"); createBtn.className="wd-icon"; createBtn.innerHTML=ICONS.plus; createBtn.title="블럭 생성";
+    createBtn.onclick=()=>addSceneBlock(sec);
     div.append(loadBtn, createBtn);
     group.appendChild(div);
+    group.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openSectionCtxMenu(e.clientX, e.clientY, sec); });
     const list=document.createElement("div"); list.className="write-blocklist"; list.dataset.sec=sec.id;
     let curGroupWrap=null, curGroupId=null;
     blocksOfSection(sec.id).forEach((bl)=>{
@@ -1261,6 +1264,11 @@ function loadPlotIntoWrite(){
   });
   if(added){ save(); render(); alert(`플롯에서 ${added}개의 아이디어를 장면 블록으로 불러왔습니다.`); }
   else alert("새로 불러올 아이디어가 없습니다.\n(플롯 생성 탭에서 각 섹션에 아이디어를 배치해 주세요.)");
+}
+/* 특정 플롯 단계(섹션)에 빈 장면 블록 하나 생성 */
+function addSceneBlock(sec){
+  const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[], groupId:"", backgrounds:[], characters:[]};
+  P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render();
 }
 /* 특정 플롯 단계(섹션)의 배치 아이디어만 불러오기 */
 function loadSectionIdeas(sec){
@@ -1432,9 +1440,9 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   if((bl.backgrounds&&bl.backgrounds.length) || (bl.characters&&bl.characters.length)){
     const metaRow=document.createElement("div"); metaRow.className="scene-meta-row";
     const bgCol=document.createElement("div"); bgCol.className="scene-meta-col";
-    (bl.backgrounds||[]).forEach((bg,i)=>bgCol.appendChild(metaChip(bg, ()=>{ bl.backgrounds.splice(i,1); save(); render(); })));
+    (bl.backgrounds||[]).forEach((bg,i)=>bgCol.appendChild(metaChip("배경: "+bg, ()=>{ bl.backgrounds.splice(i,1); save(); render(); })));
     const charCol=document.createElement("div"); charCol.className="scene-meta-col";
-    (bl.characters||[]).forEach((nm,i)=>charCol.appendChild(metaChip(nm, ()=>{ bl.characters.splice(i,1); save(); render(); })));
+    (bl.characters||[]).forEach((nm,i)=>charCol.appendChild(metaChip("캐릭터: "+nm, ()=>{ bl.characters.splice(i,1); save(); render(); })));
     metaRow.append(bgCol, charCol);
     d.appendChild(metaRow);
   }
@@ -1448,7 +1456,7 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   /* 본문 블록 아래 점선 추가 버튼 — 본문/대사 추가를 한 행에 5:5로 배치 */
   const addRow=document.createElement("div"); addRow.className="scene-dashed-row";
   const addTextDashed=document.createElement("button"); addTextDashed.type="button"; addTextDashed.className="scene-dashed-add";
-  addTextDashed.innerHTML=ICONS.plus+" 본문추가"; addTextDashed.title="본문 추가";
+  addTextDashed.innerHTML=ICONS.plus+" 지문추가"; addTextDashed.title="지문 추가";
   addTextDashed.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
   const addDlgDashed=document.createElement("button"); addDlgDashed.type="button"; addDlgDashed.className="scene-dashed-add";
   addDlgDashed.innerHTML=ICONS.plus+" 대사추가"; addDlgDashed.title="대사 추가";
@@ -1494,7 +1502,7 @@ function openBlockCtxMenu(x, y, bl){
   ctxMenuTargetBlock=bl;
   const items=[];
   items.push(["수정",ICONS.edit,()=>{ writeFocusTitle=bl.id; render(); }]);
-  items.push(["본문 추가",ICONS.plus,()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); }]);
+  items.push(["지문 추가",ICONS.plus,()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); }]);
   items.push(["대사 추가",ICONS.chat,()=>{ writeDlgFor=bl.id; render(); }]);
   if(writeSelectMode && writeSelectedIds.size>=2 && writeSelectedIds.has(bl.id)){
     items.push(["그룹으로 묶기",ICONS.group,groupSelectedBlocks]);
@@ -1506,6 +1514,25 @@ function openBlockCtxMenu(x, y, bl){
   m.innerHTML="";
   items.forEach(([label,icon,fn,cls])=>{
     const b=document.createElement("button"); if(cls) b.className=cls;
+    b.innerHTML=icon+" "+label;
+    b.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(b);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
+/* 플롯 단계(섹션) 빈 여백 우클릭 메뉴 — 아이디어 불러오기 / 블럭 생성 */
+function openSectionCtxMenu(x, y, sec){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  const items=[
+    ["아이디어 불러오기",ICONS.load,()=>loadSectionIdeas(sec)],
+    ["블럭 생성",ICONS.plus,()=>addSceneBlock(sec)]
+  ];
+  m.innerHTML="";
+  items.forEach(([label,icon,fn])=>{
+    const b=document.createElement("button");
     b.innerHTML=icon+" "+label;
     b.onclick=()=>{ hideCtxMenu(); fn(); };
     m.appendChild(b);
