@@ -1445,12 +1445,16 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   setupItemDnD(itemsEl, main);
   d.appendChild(itemsEl);
 
-  /* 본문 블록 아래 점선 추가 버튼 — 새 본문(텍스트) 항목 추가. 대사 추가는 우클릭 메뉴에서 */
-  const addDashed=document.createElement("button"); addDashed.type="button"; addDashed.className="scene-dashed-add";
-  addDashed.innerHTML=ICONS.plus+" 추가";
-  addDashed.title="본문 추가 (대사 추가는 우클릭 메뉴)";
-  addDashed.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
-  d.appendChild(addDashed);
+  /* 본문 블록 아래 점선 추가 버튼 — 본문/대사 추가를 한 행에 5:5로 배치 */
+  const addRow=document.createElement("div"); addRow.className="scene-dashed-row";
+  const addTextDashed=document.createElement("button"); addTextDashed.type="button"; addTextDashed.className="scene-dashed-add";
+  addTextDashed.innerHTML=ICONS.plus+" 본문추가"; addTextDashed.title="본문 추가";
+  addTextDashed.onclick=()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); };
+  const addDlgDashed=document.createElement("button"); addDlgDashed.type="button"; addDlgDashed.className="scene-dashed-add";
+  addDlgDashed.innerHTML=ICONS.plus+" 대사추가"; addDlgDashed.title="대사 추가";
+  addDlgDashed.onclick=()=>{ writeDlgFor=bl.id; render(); };
+  addRow.append(addTextDashed, addDlgDashed);
+  d.appendChild(addRow);
   return d;
 }
 /* 배경/캐릭터 메모 칩 하나 */

@@ -425,7 +425,8 @@ body.logged-in .login-overlay { display: none; }
   border:none;cursor:pointer;color:var(--muted);padding:2px;border-radius:50%}
 .chip-x .icon{width:10px;height:10px}
 .chip-x:hover{color:#b3503a;background:#fff}
+.scene-dashed-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .scene-dashed-add{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;
-  margin-top:8px;padding:8px;border:1.5px dashed var(--line);border-radius:8px;background:transparent;
+  padding:8px;border:1.5px dashed var(--line);border-radius:8px;background:transparent;
   color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
 .scene-dashed-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
