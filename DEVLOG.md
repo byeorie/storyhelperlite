@@ -2,6 +2,16 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-26 (54차) · 작품 탭 스타일을 실제 파일탭처럼 변경 + 사이드바/플롯목록/미리보기 접기 + 본문·미리보기 폭 조절 (곰국을끼리오너라 프로젝트 참고)
+- 요청: (1) 상단 탭 구조를 곰국 프로젝트 스크린샷처럼 변경 (2) 사이드메뉴·본문 블럭화면(플롯 목록)·미리보기 화면 접기 기능을 곰국 프로젝트에서 검색해 그대로 적용 (3) 본문 블럭화면과 미리보기 화면 사이 경계를 드래그해 폭 조절하는 기능도 곰국 프로젝트에서 검색해 적용
+- **탭 스타일** — `.ptab`을 둥근 알약형 칩에서 곰국의 `.file-tab`과 동일한 "실제 파일탭" 모양으로 변경: 위쪽만 둥글고 아래는 테두리 없이 열려 본문 영역에 붙어 보임(`border-radius:8px 8px 0 0`, `border-bottom:none`). `.ptabs`가 `align-self:stretch`+`align-items:flex-end`로 상단바 높이 전체를 채운 뒤 탭을 바닥에 붙임(상단바가 grid가 아닌 flex라 곰국과 다른 방식으로 구현). 활성 탭은 배경을 `--card`(페이지 배경과 동일)로 칠해 아래 콘텐츠와 이어지는 느낌
+- **접기/펼치기(곰국 방식 그대로: sb-collapsed/toc-collapsed/preview-collapsed 3개 body 클래스 + 각 패널 옆 고정 위치 토글 버튼)** —
+  - **style.css** 수정 — `--topbar-h` CSS 변수 신설(기존 하드코딩된 56px 대체), `.sb-toggle`/`.panel-toggle`/`.toc-toggle`/`.preview-toggle` 버튼 스타일과 `body.sb-collapsed .sidebar{display:none}` 등 3개 접기 규칙, `.write-resizer` 드래그 핸들 스타일 추가. 단, 곰국은 사이드바가 `position:fixed`라 접었을 때 `main`에 `margin-left`를 줘야 했지만 이야기 도우미는 `.sidebar`가 flex 자식이라 `display:none`만으로 자동으로 폭이 채워짐 — 대신 접힌 자리의 고정 토글 버튼과 겹치지 않도록 `body.sb-collapsed main{padding-left:44px}`만 추가
+  - **app.js** 수정 — `UI_KEY`/`loadUiCollapse`/`UICOL`/`saveUiCollapse`/`applyUiCollapse` 상태 관리 신설(localStorage에 저장돼 다음 방문에도 유지). `sbToggleBtn` 클릭 연결 + 페이지 로드 시 `applyUiCollapse()` 1회 호출. 상단바 실제 높이를 재서 `--topbar-h`에 반영하는 `syncTopbarHeight()` 추가(탭 줄바꿈 등으로 높이가 달라져도 사이드바가 툴바에 딱 붙도록). `rWrite()`에 목차(플롯목록) 접기 버튼(`toc-toggle`)과 미리보기 접기 버튼(`preview-toggle`)을 각 패널 앞/뒤에 추가
+- **본문·미리보기 폭 조절** — `MAINW_KEY`/`loadMainWidth`/`saveMainWidth`/`setupPanelResizer(resizer, mainEl)` 함수를 곰국 코드 그대로 이식(드래그로 `write-main`의 `flex-basis`를 px로 고정, 최소 360px~최대 `window.innerWidth-420px`, 결과를 localStorage에 저장해 다음에도 유지). `rWrite()`의 `write-main`과 `write-preview` 사이에 `.write-resizer` 핸들 삽입. 미리보기를 접으면 리사이저도 함께 숨기고 본문이 남은 폭을 채우도록(`flex:1 1 auto!important`) 처리
+- 참고: 곰국 프로젝트의 미리보기 확대/축소(`preview-zoom`, 50~200%) 기능은 이번 요청 범위(접기·폭 조절)에 포함되지 않아 이식하지 않음
+- 검증: `node --check`로 app.js/auth.js 문법 확인. jsdom으로 (1) 기존 탭/저장점/실행취소·단축키 24개 항목 재통과 (2) 사이드바 접기 토글·localStorage 저장 (3) `write` 탭 진입 시 toc-toggle/preview-toggle/write-resizer 요소 생성 (4) 두 토글 클릭 시 UICOL 값과 body 클래스 반영 (5) 리사이저 mousedown→mousemove→mouseup 시뮬레이션으로 `write-main`의 flex-basis가 드래그 거리만큼 늘어나고 localStorage에 저장됨을 확인 — 총 18개 항목 추가 통과
+
 ## 2026-07-26 (53차) · 상단 툴바 작품 탭 + 저장상태 점 + 단축키 (곰국을끼리오너라 참고)
 - 요청: 상단 툴바에 탭 기능(저장여부 표시 컬러 점 포함) 구현, 단축키(Ctrl+S 즉시저장, Ctrl+Z/Y 실행취소·다시실행) 구현. `곰국을끼리오너라` 프로젝트의 파일탭 UI를 참고
 - 탭 닫기(×) 정책은 곰국 프로젝트 방식을 따름: **삭제가 아니라 "닫기"** — 닫아도 작품 데이터는 `DB.projects`에 그대로 남고, 상단 select("다른 작품 열기")로 언제든 다시 열 수 있음

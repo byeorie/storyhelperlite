@@ -46,6 +46,44 @@ function onAuthChanged(){
   }
   render();
 }
+/* ===== 왼쪽 메뉴·플롯 목록·미리보기 접기/펼치기 (곰국을끼리오너라 프로젝트 참고) =====
+   작업 공간을 넓게 쓰고 싶을 때 각 패널을 접을 수 있다. 상태는 localStorage에 저장해 다음에도 유지 */
+const UI_KEY="storyhelper_ui_v1";
+function loadUiCollapse(){ try{ const u=JSON.parse(localStorage.getItem(UI_KEY)); return {sb:!!(u&&u.sb), toc:!!(u&&u.toc), preview:!!(u&&u.preview)}; }catch(e){ return {sb:false, toc:false, preview:false}; } }
+let UICOL=loadUiCollapse();
+function saveUiCollapse(){ localStorage.setItem(UI_KEY, JSON.stringify(UICOL)); }
+function applyUiCollapse(){
+  document.body.classList.toggle("sb-collapsed", UICOL.sb);
+  document.body.classList.toggle("toc-collapsed", UICOL.toc);
+  document.body.classList.toggle("preview-collapsed", UICOL.preview);
+}
+/* 본문(write-main)·미리보기(write-preview) 경계 드래그로 폭 조절 — 본문 너비를 px로 고정하고
+   미리보기(flex:1)가 남은 폭을 자동으로 채우게 둔다. 드래그로 정한 폭은 localStorage에 저장 */
+const MAINW_KEY="storyhelper_mainw_v1";
+function loadMainWidth(){ const v=parseInt(localStorage.getItem(MAINW_KEY),10); return (v&&v>=360)?v:null; }
+function saveMainWidth(w){ localStorage.setItem(MAINW_KEY, String(Math.round(w))); }
+function setupPanelResizer(resizer, mainEl){
+  resizer.addEventListener("mousedown", e=>{
+    e.preventDefault();
+    const startX=e.clientX, startW=mainEl.getBoundingClientRect().width;
+    document.body.style.cursor="col-resize";
+    resizer.classList.add("dragging");
+    function onMove(ev){
+      const w=Math.max(360, Math.min(startW+(ev.clientX-startX), window.innerWidth-420));
+      mainEl.style.flex="0 0 "+w+"px";
+    }
+    function onUp(){
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor="";
+      resizer.classList.remove("dragging");
+      saveMainWidth(mainEl.getBoundingClientRect().width);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+
 let DB = load();
 let P = currentProject();
 
@@ -1675,6 +1713,13 @@ function rWrite(){
   const layout=document.createElement("div"); layout.className="write-layout";
   app.appendChild(layout);
 
+  /* 목차(플롯 목록)·미리보기 접기/펼치기 버튼 — 각 패널 바로 앞/뒤에 붙여서, 패널이 display:none으로
+     접혀도 이 버튼만은 그 자리에 그대로 남는다 (곰국을끼리오너라 프로젝트 참고) */
+  const tocToggleBtn=document.createElement("button"); tocToggleBtn.className="panel-toggle toc-toggle"; tocToggleBtn.title="플롯 목록 접기/펼치기";
+  tocToggleBtn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+  tocToggleBtn.onclick=()=>{ UICOL.toc=!UICOL.toc; saveUiCollapse(); applyUiCollapse(); };
+  layout.appendChild(tocToggleBtn);
+
   /* 좌: 플롯 목록 + 글자수/% */
   const left=document.createElement("div"); left.className="write-plotlist";
   renderLeftInto(left);
@@ -1682,6 +1727,7 @@ function rWrite(){
 
   /* 중앙: 장면 블록 */
   const main=document.createElement("div"); main.className="write-main";
+  { const savedMainW=loadMainWidth(); if(savedMainW) main.style.flex="0 0 "+savedMainW+"px"; }
   const bar=document.createElement("div"); bar.className="write-toolbar";
   const loadBtn=document.createElement("button"); loadBtn.className="btn ghost sm icon-btn";
   loadBtn.innerHTML=ICONS.load+" 플롯 불러오기";
@@ -1743,8 +1789,15 @@ function rWrite(){
     main.appendChild(group);
   });
   layout.appendChild(main);
+  const resizer=document.createElement("div"); resizer.className="write-resizer"; resizer.title="드래그해서 폭 조절";
+  layout.appendChild(resizer);
+  setupPanelResizer(resizer, main);
   renderPreviewInto(right);
   layout.appendChild(right);
+  const previewToggleBtn=document.createElement("button"); previewToggleBtn.className="panel-toggle preview-toggle"; previewToggleBtn.title="미리보기 접기/펼치기";
+  previewToggleBtn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
+  previewToggleBtn.onclick=()=>{ UICOL.preview=!UICOL.preview; saveUiCollapse(); applyUiCollapse(); };
+  layout.appendChild(previewToggleBtn);
   requestAnimationFrame(()=>{ main.querySelectorAll(".sub-textarea").forEach(autoGrowTextarea); });
 
   /* 대사 추가 팝업 */
@@ -2298,6 +2351,15 @@ document.getElementById("aboutLink").onclick=e=>{
   e.preventDefault();
   alert("글쓰기도우미\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
 };
+
+/* 왼쪽 메뉴 접기/펼치기 버튼 + 저장된 접힘 상태 적용 */
+document.getElementById("sbToggleBtn").onclick=()=>{ UICOL.sb=!UICOL.sb; saveUiCollapse(); applyUiCollapse(); };
+applyUiCollapse();
+/* 상단바 실제 높이를 재서 --topbar-h에 반영 — 사이드바·접기 버튼이 툴바에 딱 붙도록 */
+(function syncTopbarHeight(){
+  const tb=document.querySelector(".topbar");
+  if(tb) document.documentElement.style.setProperty("--topbar-h", tb.offsetHeight+"px");
+})();
 
 /* 초기 렌더 */
 refreshProjSelect();
