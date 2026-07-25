@@ -49,6 +49,56 @@ function onAuthChanged(){
 let DB = load();
 let P = currentProject();
 
+/* ===== 실행취소/다시실행 (프로젝트 단위 스냅샷) =====
+   저장 여부와 무관하게 편집 이력을 되돌리는 기능. save()가 거의 모든 편집 지점에서 호출되므로
+   그 안에서 800ms 코얼레싱 타이머를 걸어, 짧게 이어지는 타이핑을 한 번의 되돌리기 단계로 묶는다. */
+const UNDO_LIMIT=60, UNDO_COALESCE_MS=800;
+let undoStack=[], redoStack=[], undoBaseline=null, undoTimer=null;
+function resetUndoHistory(){
+  undoBaseline = P ? JSON.stringify(P) : null;
+  undoStack=[]; redoStack=[]; clearTimeout(undoTimer); updateUndoButtons();
+}
+function scheduleUndoCheckpoint(){ clearTimeout(undoTimer); undoTimer=setTimeout(commitUndoCheckpoint, UNDO_COALESCE_MS); }
+function commitUndoCheckpoint(){
+  clearTimeout(undoTimer);
+  const now=JSON.stringify(P);
+  if(now===undoBaseline) return;
+  undoStack.push(undoBaseline); if(undoStack.length>UNDO_LIMIT) undoStack.shift();
+  redoStack=[]; undoBaseline=now; updateUndoButtons();
+}
+function restoreUndoSnapshot(json){
+  const obj=JSON.parse(json);
+  Object.keys(P).forEach(k=>delete P[k]); Object.assign(P,obj);
+  undoBaseline=json; save(); render();
+}
+function doUndo(){
+  commitUndoCheckpoint();
+  if(!undoStack.length) return;
+  const prev=undoStack.pop();
+  redoStack.push(undoBaseline); if(redoStack.length>UNDO_LIMIT) redoStack.shift();
+  restoreUndoSnapshot(prev);
+}
+function doRedo(){
+  if(!redoStack.length) return;
+  const next=redoStack.pop();
+  undoStack.push(undoBaseline); if(undoStack.length>UNDO_LIMIT) undoStack.shift();
+  restoreUndoSnapshot(next);
+}
+function updateUndoButtons(){
+  const ub=document.getElementById("undoBtn"), rb=document.getElementById("redoBtn");
+  if(ub) ub.disabled=!undoStack.length;
+  if(rb) rb.disabled=!redoStack.length;
+}
+resetUndoHistory();
+
+/* openIds: 상단 탭에 열려 보이는 작품 id 목록. 탭 닫기는 이 목록에서만 빠지고
+   DB.projects엔 그대로 남아 있어 상단 select("다른 작품 열기")로 언제든 다시 열 수 있다 */
+function fillOpenIds(d){
+  if(!Array.isArray(d.openIds)||!d.openIds.length) d.openIds=d.projects.map(p=>p.id);
+  d.openIds=d.openIds.filter(id=>d.projects.some(p=>p.id===id));
+  if(!d.openIds.includes(d.current)) d.openIds.push(d.current);
+  return d.openIds;
+}
 function load(){
   try{
     const d=JSON.parse(localStorage.getItem(LS_KEY));
@@ -56,11 +106,12 @@ function load(){
       d.projects=d.projects.map(fillProject);
       if(!d.projects.some(p=>p.id===d.current)) d.current=d.projects[0].id;
       d.workDB=fillWorkDB(d.workDB);
+      fillOpenIds(d);
       return d;
     }
   }catch(e){}
   const id=uid();
-  return {current:id, projects:[blankProject(id,"내 첫 작품")], workDB:fillWorkDB()};
+  return {current:id, projects:[blankProject(id,"내 첫 작품")], workDB:fillWorkDB(), openIds:[id]};
 }
 /* 작품DB(아이디어 탐색용) 기본값 보정 */
 function fillWorkDB(w){
@@ -87,11 +138,30 @@ function fillProject(p){
     explore: Object.assign({}, b.explore, p.explore||{}),
   });
 }
+/* ===== 탭 저장상태 점(dot) =====
+   로컬(localStorage)은 save()마다 바로 기록되므로 항상 최신이지만, 서버 동기화는 디바운스 후
+   비동기로 진행된다. 탭의 점 색은 "서버 동기화" 기준: pending(주황)→saved(초록)/error(빨강).
+   로그인하지 않은 상태(로컬 전용)에서는 항상 saved로 취급한다. */
+let projSaveState={};
+function updateTabDot(id){
+  const t=document.querySelector(`.ptab-dot[data-pid="${id}"]`); if(!t) return;
+  const state=projSaveState[id]||"saved";
+  const loggedIn=typeof getToken==="function" && !!getToken();
+  const color = state==="pending" ? "#d9a441" : state==="error" ? "#e05050" : "var(--ok)";
+  const title = state==="pending" ? "서버에 저장 중…" : state==="error" ? "서버 저장 실패 (로컬에는 저장됨)" : (loggedIn?"서버에 저장됨":"로컬에 저장됨");
+  t.style.background=color; t.title=title;
+}
+function updateAllTabDots(){ (DB.openIds||[]).forEach(id=>updateTabDot(id)); }
+
 function save(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
+  if(typeof getToken==="function" && getToken()){
+    projSaveState[DB.current]="pending"; updateTabDot(DB.current);
+  }
   if(typeof saveToServer==="function") saveToServer();
+  scheduleUndoCheckpoint();
 }
 function uid(){ return "p"+Date.now()+Math.floor(Math.random()*1000); }
 function blankProject(id,name){
@@ -149,23 +219,59 @@ function currentProject(){
   return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
 }
 
-/* ===== 프로젝트 UI ===== */
+/* ===== 프로젝트 UI (상단 탭 + "다른 작품 열기" select) =====
+   탭의 ×는 작품을 지우지 않고 화면(탭)에서만 뺀다 — DB.openIds에서 id만 제거,
+   DB.projects는 그대로 두어 select("다른 작품 열기")로 언제든 다시 열 수 있다. */
 function refreshProjSelect(){
   const sel=document.getElementById("projSelect");
-  sel.innerHTML="";
+  sel.innerHTML=`<option value="" disabled selected hidden>다른 작품 열기…</option>`;
   DB.projects.forEach(p=>{
     const o=document.createElement("option");
-    o.value=p.id; o.textContent=p.name; if(p.id===DB.current)o.selected=true;
+    o.value=p.id; o.textContent=(DB.openIds.includes(p.id)?"":"◦ ")+p.name;
     sel.appendChild(o);
   });
+
+  const wrap=document.getElementById("projTabs");
+  wrap.innerHTML="";
+  DB.projects.filter(p=>DB.openIds.includes(p.id)).forEach(p=>{
+    const tab=document.createElement("div");
+    tab.className="ptab"+(p.id===DB.current?" active":"");
+    tab.title=p.name;
+    const dot=document.createElement("span"); dot.className="ptab-dot"; dot.dataset.pid=p.id;
+    tab.appendChild(dot);
+    const label=document.createElement("span"); label.className="ptab-label"; label.textContent=p.name;
+    tab.appendChild(label);
+    const close=document.createElement("button"); close.type="button"; close.className="ptab-close";
+    close.title="닫기 (삭제 아님)"; close.innerHTML=ICONS.close;
+    close.onclick=e=>{ e.stopPropagation(); closeProjTab(p.id); };
+    tab.appendChild(close);
+    tab.onclick=()=>{ if(p.id!==DB.current) switchProject(p.id); };
+    wrap.appendChild(tab);
+  });
+  updateAllTabDots();
+}
+function switchProject(id){
+  DB.current=id; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
+}
+function openProjectTab(id){
+  if(!DB.openIds.includes(id)) DB.openIds.push(id);
+  switchProject(id);
+}
+function closeProjTab(id){
+  if(DB.openIds.length<=1){ alert("마지막 탭입니다. 다른 작품을 먼저 열어주세요."); return; }
+  DB.openIds=DB.openIds.filter(x=>x!==id);
+  if(DB.current===id){ DB.current=DB.openIds[DB.openIds.length-1]; P=currentProject(); resetUndoHistory(); }
+  save(); refreshProjSelect(); render();
 }
 document.getElementById("projSelect").onchange=e=>{
-  DB.current=e.target.value; P=currentProject(); save(); render();
+  const id=e.target.value; e.target.value="";
+  if(id) openProjectTab(id);
 };
 document.getElementById("newProjBtn").onclick=()=>{
   const name=prompt("새 작품 이름:","제목 없음"); if(name===null)return;
   const id=uid(); DB.projects.push(blankProject(id,name||"제목 없음"));
-  DB.current=id; P=currentProject(); save(); refreshProjSelect(); render();
+  DB.openIds.push(id);
+  DB.current=id; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
 };
 document.getElementById("renameProjBtn").onclick=()=>{
   const name=prompt("작품 이름 변경:",P.name); if(name===null)return;
@@ -174,11 +280,32 @@ document.getElementById("renameProjBtn").onclick=()=>{
 document.getElementById("delProjBtn").onclick=()=>{
   if(DB.projects.length<=1){alert("최소 1개의 작품은 있어야 합니다.");return;}
   if(!confirm(`'${P.name}'을(를) 삭제할까요? 되돌릴 수 없습니다.`))return;
-  DB.projects=DB.projects.filter(p=>p.id!==P.id);
-  DB.current=DB.projects[0].id; P=currentProject(); save(); refreshProjSelect(); render();
+  const wasId=P.id;
+  DB.projects=DB.projects.filter(p=>p.id!==wasId);
+  DB.openIds=DB.openIds.filter(id=>id!==wasId);
+  if(!DB.openIds.length) DB.openIds=[DB.projects[0].id];
+  DB.current=DB.openIds[0]; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
 };
+
+/* ===== 실행취소/다시실행 버튼 + 단축키 (Ctrl/Cmd+S 즉시저장, +Z 실행취소, +Shift+Z 또는 +Y 다시실행) ===== */
+document.getElementById("undoBtn").onclick=doUndo;
+document.getElementById("redoBtn").onclick=doRedo;
+function forceSaveNow(){
+  localStorage.setItem(LS_KEY, JSON.stringify(DB));
+  const el=document.getElementById("saveStatus");
+  if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
+  if(typeof getToken==="function" && getToken() && typeof forceSaveToServer==="function") forceSaveToServer();
+}
+window.addEventListener("keydown", e=>{
+  if(!(e.ctrlKey||e.metaKey)) return;
+  const k=e.key.toLowerCase();
+  if(k==="s"){ e.preventDefault(); forceSaveNow(); }
+  else if(k==="z" && !e.shiftKey){ e.preventDefault(); doUndo(); }
+  else if((k==="z" && e.shiftKey) || k==="y"){ e.preventDefault(); doRedo(); }
+});
+
 /* 상단 툴바 — 저장 / 불러오기 / 내보내기 */
-document.getElementById("manualSaveBtn").onclick=()=>save();
+document.getElementById("manualSaveBtn").onclick=()=>forceSaveNow();
 document.getElementById("topImportBtn").onclick=()=>document.getElementById("topImportInput").click();
 document.getElementById("topImportInput").onchange=e=>importStory(e);
 const topExportBtn=document.getElementById("topExportBtn");
@@ -253,7 +380,7 @@ function render(){
       const i=DB.projects.findIndex(x=>x.id===P.id);
       const fresh=blankProject(P.id,P.name);
       if(i>=0) DB.projects[i]=fresh; else DB.projects.push(fresh);
-      P=fresh; save(); render();
+      P=fresh; resetUndoHistory(); save(); render();
     };
   }
 }
@@ -2158,8 +2285,8 @@ function importStory(e){
       const obj=JSON.parse(rd.result);
       if(!obj.plot||!obj.characters)throw 0;
       obj.id=uid(); obj.name=(obj.name||"가져온 작품")+" (복원)";
-      DB.projects.push(obj); DB.current=obj.id; P=currentProject();
-      save(); refreshProjSelect(); render();
+      DB.projects.push(obj); DB.openIds.push(obj.id); DB.current=obj.id; P=currentProject();
+      resetUndoHistory(); save(); refreshProjSelect(); render();
       alert("불러오기 완료!");
     }catch(_){ alert("올바른 작품 파일(.story)이 아닙니다."); }
   };

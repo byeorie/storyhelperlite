@@ -14,8 +14,8 @@ a{color:var(--accent)}
   position:sticky;top:0;z-index:10;overflow-x:auto}
 .topbar h1{font-size:18px;margin:0;white-space:nowrap;flex-shrink:0}
 .topbar h1 .icon{width:17px;height:17px;vertical-align:-3px;margin-right:1px}
-.proj-controls{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:nowrap;flex-shrink:0}
-.proj-controls select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;max-width:160px}
+.proj-controls{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;flex-shrink:0}
+.proj-controls select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;max-width:150px}
 .proj-controls button{padding:6px 10px;border:1px solid var(--line);background:#fff;
   border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;flex-shrink:0}
 .proj-controls button:hover{background:var(--accent2)}
@@ -400,6 +400,8 @@ body.logged-in .login-overlay { display: none; }
   flex-shrink:0;color:var(--muted)}
 .mb-icon .icon{width:18px;height:18px;vertical-align:middle}
 .mb-icon:hover{background:var(--accent2);border-color:var(--line);color:var(--ink)}
+.mb-icon:disabled{opacity:.35;cursor:default}
+.mb-icon:disabled:hover{background:transparent;border-color:transparent}
 .mb-sep{width:1px;height:22px;background:var(--line);margin:0 6px;flex-shrink:0}
 .mb-export{position:relative}
 .mb-export-menu{position:absolute;top:38px;left:0;background:var(--card);border:1px solid var(--line);
@@ -408,6 +410,22 @@ body.logged-in .login-overlay { display: none; }
 .mb-export-menu button{display:block;width:100%;text-align:left;padding:8px 12px;border:none;
   background:transparent;border-radius:6px;cursor:pointer;font-size:13px;color:var(--ink);white-space:nowrap}
 .mb-export-menu button:hover{background:var(--accent2)}
+
+/* ===== 상단바 작품 탭 ===== */
+.ptabs{flex:1 1 auto;min-width:40px;display:flex;align-items:center;gap:2px;
+  overflow-x:auto;height:34px;scrollbar-width:thin}
+.ptab{display:flex;align-items:center;gap:6px;max-width:180px;padding:6px 8px 6px 10px;
+  border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--muted);
+  font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:background .12s,color .12s}
+.ptab:hover{background:var(--accent2);color:var(--ink)}
+.ptab.active{background:var(--card);color:var(--ink);font-weight:600;border-color:var(--accent)}
+.ptab-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;transition:background .2s}
+.ptab-label{overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:120px}
+.ptab-close{width:16px;height:16px;flex-shrink:0;border:none;border-radius:4px;background:transparent;
+  color:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  opacity:.5;padding:0}
+.ptab-close .icon{width:10px;height:10px;vertical-align:middle}
+.ptab-close:hover{background:var(--line);opacity:1}
 
 /* ===== 캐릭터 설정: 갤러리/관계도 ===== */
 .char-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}

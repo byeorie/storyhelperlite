@@ -2,6 +2,23 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-26 (53차) · 상단 툴바 작품 탭 + 저장상태 점 + 단축키 (곰국을끼리오너라 참고)
+- 요청: 상단 툴바에 탭 기능(저장여부 표시 컬러 점 포함) 구현, 단축키(Ctrl+S 즉시저장, Ctrl+Z/Y 실행취소·다시실행) 구현. `곰국을끼리오너라` 프로젝트의 파일탭 UI를 참고
+- 탭 닫기(×) 정책은 곰국 프로젝트 방식을 따름: **삭제가 아니라 "닫기"** — 닫아도 작품 데이터는 `DB.projects`에 그대로 남고, 상단 select("다른 작품 열기")로 언제든 다시 열 수 있음
+- **app.js** 수정 —
+  - `DB.openIds` 필드 신설(현재 탭에 열려 있는 작품 id 목록). `fillOpenIds()`로 구버전 데이터(필드 없음) 보정 — 기존 사용자는 첫 로드 시 보유한 모든 작품이 탭으로 열린 상태로 시작
+  - `refreshProjSelect()`를 확장 — `#projTabs`에 열린 작품만 탭으로 렌더(이름+저장상태 점+ICONS.close 닫기), `#projSelect`는 "다른 작품 열기" 메뉴로 역할 변경(닫힌 작품은 앞에 ◦ 표시)
+  - `switchProject()`/`openProjectTab()`/`closeProjTab()` 신설. 마지막 탭은 닫을 수 없도록 방지(안내 alert)
+  - `newProjBtn`/`delProjBtn`/`importStory`를 openIds와 연동, 렌더 오류 복구 버튼에도 `resetUndoHistory()` 연동
+  - **저장상태 컬러 점** — `projSaveState`(pending/saved/error) + `updateTabDot()`. 로컬(localStorage)은 save() 즉시 반영되어 항상 최신이므로, 점 색은 **서버 동기화** 기준으로 표시: 주황(저장 중)→초록(저장됨)/빨강(실패). 비로그인(로컬 전용) 상태에서는 항상 초록
+  - **실행취소/다시실행** — 곰국 프로젝트와 동일한 방식(현재 작품 전체를 JSON 스냅샷, 800ms 코얼레싱, 최대 60단계). `resetUndoHistory()`를 프로젝트 전환·생성·삭제·서버 데이터 로드 시점마다 호출해 작품이 바뀌면 이력도 초기화되도록 함
+  - **단축키** — 전역 keydown에서 Ctrl/Cmd+S(즉시저장), Ctrl/Cmd+Z(실행취소), Ctrl/Cmd+Shift+Z 또는 Ctrl/Cmd+Y(다시실행)를 가로채 브라우저 기본 동작(인쇄창 등)을 막고 처리. 기존 상단바 "저장" 버튼(`manualSaveBtn`)도 디바운스 없이 즉시 저장하도록 `forceSaveNow()`로 교체
+- **auth.js** 수정 — `saveToServer()`를 `doServerSave(pid)` 공용 로직으로 분리, 응답 결과에 따라 해당 작품 탭의 점 색을 갱신. `forceSaveToServer()` 신설(디바운스 없이 즉시 저장, Ctrl+S/수동저장 버튼용). `loadFromServer()`에 openIds 보정 및 실행취소 이력 초기화 추가
+- **index.html** 수정 — 상단바 `.mb-left`에 `#undoBtn`/`#redoBtn`(SVG 아이콘) 추가, `#projTabs`(탭 스트립)를 `.mb-left`와 `.proj-controls` 사이에 추가
+- **style.css** 수정 — `.ptabs`/`.ptab`/`.ptab-dot`/`.ptab-close` 탭 스타일과 `.mb-icon:disabled` 비활성 스타일 추가
+- 주의: 이번 작업 시작 시 로컬 프로젝트 폴더가 GitHub 원격보다 14회치(38차→52차, 아이콘 SVG 전환·캐릭터 상세페이지·탭 구조 개편 등) 뒤처져 있음을 발견 — 원격 최신본(52차)을 먼저 로컬로 가져온 뒤, 그 위에 이번 탭 기능을 다시 적용함(이전에 38차 기준으로 만들었던 버전은 폐기)
+- 검증: `node --check`로 app.js/auth.js 문법 확인. jsdom으로 초기 탭 1개 상태, 새 작품 생성 시 자동 탭 오픈, 탭 닫기(마지막 탭은 차단)/select로 재오픈, 실행취소·다시실행 스냅샷 복원, Ctrl+S/Z/Y 단축키가 preventDefault와 함께 올바른 함수를 호출하는지 총 24개 항목 모두 통과 확인
+
 ## 2026-07-23 (52차) · 세계관 + 배경 설정 탭을 "배경 설정" 하나로 통합
 - 요청: 사이드메뉴의 "세계관"과 "배경 설정" 탭을 하나로 합쳐 "배경 설정"으로
 - **app.js** 수정 — `rWorld()`와 `rBg()`를 하나의 `rBg()`로 통합: 기존 세계관 항목(한 줄 요약/시대/장소/규칙)과 배경 항목(사회·정치적 배경/분위기/세부 묘사)을 "배경 설정" 카드 한 장에 순서대로 배치하고 중간에 `구체적 상황` 구분선(`.section-title`) 추가. 데이터는 기존 `P.world`/`P.background` 두 필드를 그대로 사용해 기존 저장 데이터 손실 없이 바인딩. 렌더러 매핑(`renderers`)에서 `world` 항목 제거

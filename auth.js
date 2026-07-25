@@ -134,8 +134,10 @@ async function loadFromServer() {
       data.projects = data.projects.map(fillProject);
       if (!data.projects.some((p) => p.id === data.current)) data.current = data.projects[0].id;
       if (typeof fillWorkDB === "function") data.workDB = fillWorkDB(data.workDB);
+      if (typeof fillOpenIds === "function") fillOpenIds(data);
       DB = data;
       P = currentProject();
+      if (typeof resetUndoHistory === "function") resetUndoHistory();
       render();
       if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
     } else {
@@ -149,15 +151,25 @@ async function loadFromServer() {
 }
 
 let saveToServerTimer = null;
+async function doServerSave(pid) {
+  const st = document.getElementById("serverStatus");
+  const res = await apiFetch("data", { method: "POST", body: JSON.stringify({ data: DB }) });
+  if (res.status === 401) { signOut(); return; }
+  if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
+  if (typeof projSaveState === "object") projSaveState[pid] = res.ok ? "saved" : "error";
+  if (typeof updateTabDot === "function") updateTabDot(pid);
+}
 function saveToServer() {
   if (!getToken()) return;
+  const pid = DB.current;
   clearTimeout(saveToServerTimer);
-  saveToServerTimer = setTimeout(async () => {
-    const st = document.getElementById("serverStatus");
-    const res = await apiFetch("data", { method: "POST", body: JSON.stringify({ data: DB }) });
-    if (res.status === 401) { signOut(); return; }
-    if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
-  }, 600);
+  saveToServerTimer = setTimeout(() => doServerSave(pid), 600);
+}
+/* Ctrl+S 등 즉시저장 — 디바운스를 건너뛰고 바로 서버에 저장 */
+function forceSaveToServer() {
+  if (!getToken()) return;
+  clearTimeout(saveToServerTimer);
+  doServerSave(DB.current);
 }
 
 /* ===== 폼 바인딩 ===== */
