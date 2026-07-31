@@ -2,6 +2,17 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-31 (57차) · 분기 블록 순서 이동을 화살표 버튼 → 드래그 핸들로 교체
+- 요청: 56차에서 넣은 ▲▼ 이동 버튼 대신, 앱의 다른 블록들처럼 그립(grip) 핸들을 드래그해서 순서를 바꾸도록 변경
+- **app.js**
+  - 분기 셀(`.sub-branch`)에 `dataset.id`, `draggable` 상태, `ICONS.grip` 핸들(`branch-handle`) 추가 — 핸들 mousedown/touchstart 시에만 draggable=true (다른 블록들과 동일한 패턴)
+  - `setupBranchDnD(container, it)` 신설 — 2열 그리드이므로 Y좌표만 쓰는 기존 `getDragAfterEl` 대신, 커서와 가장 가까운 칸을 유클리드 거리로 찾고 그 칸의 중심보다 위/왼쪽이면 앞에, 아니면 뒤에 삽입
+  - `commitBranchOrder(container, it)` 신설 — 드롭 후 DOM 순서를 `it.branches` 배열에 반영(다른 `commit*Order` 함수들과 동일한 패턴), `dndDropHandled` 플래그로 dragend 중복 커밋 방지
+  - 전역 `mouseup` 안전장치 선택자에 `.sub-branch[draggable=true]` 추가(다른 드래그 요소들과 동일하게 놓친 드래그 상태 초기화)
+  - 56차의 ▲▼ index±2 스왑 로직/버튼 제거
+- **style.css** — `.branch-move`/`.branch-move-wrap` 제거, `.sub-branch.dragging{opacity:.4}` + `.branch-handle`(그립 아이콘, 다른 `.sub-handle`보다 살짝 작게) 추가
+- 검증: `node --check app.js` 통과, `setupBranchDnD`/`commitBranchOrder` 호출부·정의부 개수 일치 확인
+
 ## 2026-07-31 (56차) · 분기 기능 보완 4건 + 대사 블록 클릭편집
 - 요청: (1) [분기 블럭 추가]는 1개가 아니라 한 줄(2개)씩 생성 (2) 본문 블럭 우클릭 메뉴에서 사라진 지문추가/대사추가 복원 (3) 분기 블럭 두 열 사이 세로 구분선 (4) 분기 블럭도 위/아래 이동 가능 (5) 대사 블럭 우클릭 메뉴의 "수정" 삭제, 대신 대사 텍스트를 클릭하면 바로 편집
 - **app.js**

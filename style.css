@@ -330,12 +330,12 @@ textarea{resize:vertical;min-height:70px}
 .sub-branches::before{content:"";position:absolute;top:6px;bottom:0;left:50%;width:1px;
   background:var(--line);transform:translateX(-.5px)}
 .sub-branch{display:flex;align-items:flex-start;gap:4px;border:1px solid var(--line);
-  border-radius:6px;padding:5px 7px;background:#fbfbf9}
+  border-radius:6px;padding:5px 7px;background:#fbfbf9;transition:opacity .15s}
+.sub-branch.dragging{opacity:.4}
 .sub-branch .branch-textarea{font-size:calc(11px - 1pt)}
 .branch-del{padding:1px 3px}
-.branch-move-wrap{display:flex;flex-direction:column;flex-shrink:0}
-.branch-move{font-size:9px;line-height:1;padding:1px 3px}
-.branch-move:disabled{opacity:.25;cursor:default}
+.branch-handle{padding-top:1px}
+.branch-handle .icon{width:10px;height:10px}
 .sub-line .dlg-who{font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;white-space:nowrap;padding-top:1px}
 .sub-line .dlg-text{flex:1;font-size:11px;min-width:0;word-break:break-word;padding-top:1px;cursor:text;border-radius:3px}
 .sub-line .dlg-text[contenteditable="true"]{outline:1px solid var(--accent);background:#fff;box-shadow:0 0 0 2px var(--accent2)}

@@ -514,7 +514,7 @@ function reorderIdeaBlocks(orderedIdsTopToBottom){
   P.ideaBlocks=P.ideaBlocks.map(b=> shownIds.has(b.id) ? idToBlock[newShownStorageOrder[si++]] : b);
 }
 document.addEventListener("mouseup", ()=>{
-  document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true], .scene-block[draggable=true], .sub-block[draggable=true]").forEach(el=>el.draggable=false);
+  document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true], .scene-block[draggable=true], .sub-block[draggable=true], .sub-branch[draggable=true]").forEach(el=>el.draggable=false);
 });
 
 function rIdea(){
@@ -2207,26 +2207,27 @@ function subBlockEl(bl, it, liveRefresh, main){
     ta.oninput=()=>{ it.text=ta.value; save(); autoGrowTextarea(ta); liveRefresh&&liveRefresh(); };
     mainRow.append(handle, ta, del);
     d.appendChild(mainRow);
-    /* 분기 본문 블록 — 2열로 나열, 폰트 1pt 작게, 위/아래(같은 열의 앞뒤 줄)로 이동 가능 */
+    /* 분기 본문 블록 — 2열로 나열, 폰트 1pt 작게, 핸들을 드래그해서 순서 이동 가능 */
     if(it.branches && it.branches.length){
       const brWrap=document.createElement("div"); brWrap.className="sub-branches";
-      it.branches.forEach((br,bi)=>{
-        const cell=document.createElement("div"); cell.className="sub-branch";
+      it.branches.forEach(br=>{
+        const cell=document.createElement("div"); cell.className="sub-branch"; cell.dataset.id=br.id; cell.draggable=false;
+        const bHandle=document.createElement("span"); bHandle.className="sub-handle branch-handle"; bHandle.innerHTML=ICONS.grip; bHandle.title="드래그해서 순서 이동";
+        bHandle.addEventListener("mousedown", ()=>{ cell.draggable=true; });
+        bHandle.addEventListener("touchstart", ()=>{ cell.draggable=true; }, {passive:true});
+        cell.addEventListener("dragstart", e=>{ if(!cell.draggable) return; dndDropHandled=false; e.dataTransfer.effectAllowed="move"; setTimeout(()=>cell.classList.add("dragging"),0); });
+        cell.addEventListener("dragend", ()=>{
+          cell.draggable=false; cell.classList.remove("dragging");
+          if(!dndDropHandled && brWrap.isConnected) commitBranchOrder(brWrap, it);
+        });
         const bta=document.createElement("textarea"); bta.className="sub-textarea branch-textarea"; bta.placeholder="분기 내용을 써보세요"; bta.rows=1; bta.value=br.text||"";
         bta.oninput=()=>{ br.text=bta.value; save(); autoGrowTextarea(bta); liveRefresh&&liveRefresh(); };
-        const moveWrap=document.createElement("span"); moveWrap.className="branch-move-wrap";
-        const upBtn=document.createElement("button"); upBtn.type="button"; upBtn.className="sub-del branch-move"; upBtn.textContent="▲"; upBtn.title="위로 이동";
-        upBtn.disabled=(bi<2);
-        upBtn.onclick=()=>{ const arr=it.branches; if(bi>=2){ [arr[bi-2],arr[bi]]=[arr[bi],arr[bi-2]]; save(); render(); } };
-        const downBtn=document.createElement("button"); downBtn.type="button"; downBtn.className="sub-del branch-move"; downBtn.textContent="▼"; downBtn.title="아래로 이동";
-        downBtn.disabled=(bi+2>=it.branches.length);
-        downBtn.onclick=()=>{ const arr=it.branches; if(bi+2<arr.length){ [arr[bi],arr[bi+2]]=[arr[bi+2],arr[bi]]; save(); render(); } };
-        moveWrap.append(upBtn, downBtn);
         const bdel=document.createElement("button"); bdel.className="sub-del branch-del"; bdel.innerHTML=ICONS.close; bdel.title="분기 삭제";
         bdel.onclick=()=>{ it.branches=it.branches.filter(x=>x.id!==br.id); save(); render(); };
-        cell.append(bta, moveWrap, bdel);
+        cell.append(bHandle, bta, bdel);
         brWrap.appendChild(cell);
       });
+      setupBranchDnD(brWrap, it);
       d.appendChild(brWrap);
     }
     d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openTextBlockCtxMenu(e.clientX, e.clientY, bl, it); });
@@ -2291,6 +2292,40 @@ function rebuildItemsFromDOM(main){
 }
 function commitWriteItemOrder(main){
   rebuildItemsFromDOM(main);
+  dndDropHandled=true;
+  save(); render();
+}
+
+/* 분기 블록 드래그앤드롭 (2열 그리드 — 커서와 가장 가까운 칸을 기준으로 앞/뒤 삽입) */
+function setupBranchDnD(container, it){
+  container.addEventListener("dragover", e=>{
+    const dragging=container.querySelector(".sub-branch.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const els=[...container.querySelectorAll(".sub-branch:not(.dragging)")];
+    let closest=null, closestDist=Infinity, insertBefore=true;
+    els.forEach(el=>{
+      const box=el.getBoundingClientRect();
+      const cx=box.left+box.width/2, cy=box.top+box.height/2;
+      const dist=Math.hypot(e.clientX-cx, e.clientY-cy);
+      if(dist<closestDist){
+        closestDist=dist; closest=el;
+        insertBefore=(e.clientY<cy) || (Math.abs(e.clientY-cy)<box.height/2 && e.clientX<cx);
+      }
+    });
+    if(!closest) container.appendChild(dragging);
+    else if(insertBefore) container.insertBefore(dragging, closest);
+    else container.insertBefore(dragging, closest.nextSibling);
+  });
+  container.addEventListener("drop", e=>{
+    if(!container.querySelector(".sub-branch.dragging")) return;
+    e.preventDefault();
+    commitBranchOrder(container, it);
+  });
+}
+function commitBranchOrder(container, it){
+  const map={}; (it.branches||[]).forEach(b=>map[b.id]=b);
+  it.branches=[...container.querySelectorAll(".sub-branch")].map(el=>map[el.dataset.id]).filter(Boolean);
   dndDropHandled=true;
   save(); render();
 }
