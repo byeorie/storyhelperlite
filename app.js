@@ -2108,10 +2108,14 @@ function openSectionCtxMenu(x, y, sec){
 /* 본문(지문) 블록 우클릭 메뉴 — 분기 만들기 / 분기 블럭 추가
    - 아직 분기가 없으면 [분기 만들기] (누르면 절반 크기 본문 블록 2개를 2열로 생성)
    - 이미 분기된 블록이면 [분기 블럭 추가]만 표시 (분기 나누기는 한 번만) */
-function openTextBlockCtxMenu(x, y, it){
+function openTextBlockCtxMenu(x, y, bl, it){
   const m=document.getElementById("ctxMenu"); if(!m) return;
-  const hasBranches=!!(it.branches && it.branches.length);
+  ctxMenuTargetBlock=bl;
   const items=[];
+  items.push(["수정",ICONS.edit,()=>{ writeFocusTitle=bl.id; render(); }]);
+  items.push(["지문 추가",ICONS.plus,()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); }]);
+  items.push(["대사 추가",ICONS.chat,()=>{ writeDlgFor=bl.id; render(); }]);
+  const hasBranches=!!(it.branches && it.branches.length);
   if(!hasBranches){
     items.push(["분기 만들기",ICONS.plus,()=>{
       it.branches=[{id:uid(), text:""},{id:uid(), text:""}];
@@ -2119,13 +2123,47 @@ function openTextBlockCtxMenu(x, y, it){
     }]);
   }else{
     items.push(["분기 블럭 추가",ICONS.plus,()=>{
-      it.branches.push({id:uid(), text:""});
+      /* 한 줄(2개)씩 생성 */
+      it.branches.push({id:uid(), text:""},{id:uid(), text:""});
       save(); render();
     }]);
   }
+  if(writeSelectMode && writeSelectedIds.size>=2 && writeSelectedIds.has(bl.id)){
+    items.push(["그룹으로 묶기",ICONS.group,groupSelectedBlocks]);
+  }
+  if(bl.groupId){
+    items.push(["그룹 해제",ICONS.ungroup,()=>ungroupBlocks(bl.groupId)]);
+  }
+  items.push(["삭제",ICONS.trash,()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(b=>b.id!==bl.id); save(); render(); },"danger"]);
   m.innerHTML="";
-  items.forEach(([label,icon,fn])=>{
-    const b=document.createElement("button");
+  items.forEach(([label,icon,fn,cls])=>{
+    const b=document.createElement("button"); if(cls) b.className=cls;
+    b.innerHTML=icon+" "+label;
+    b.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(b);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
+/* 대사 블록 우클릭 메뉴 — 텍스트는 클릭으로 바로 편집하므로 "수정" 항목은 없음 */
+function openLineBlockCtxMenu(x, y, bl){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  ctxMenuTargetBlock=bl;
+  const items=[];
+  items.push(["지문 추가",ICONS.plus,()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); }]);
+  items.push(["대사 추가",ICONS.chat,()=>{ writeDlgFor=bl.id; render(); }]);
+  if(writeSelectMode && writeSelectedIds.size>=2 && writeSelectedIds.has(bl.id)){
+    items.push(["그룹으로 묶기",ICONS.group,groupSelectedBlocks]);
+  }
+  if(bl.groupId){
+    items.push(["그룹 해제",ICONS.ungroup,()=>ungroupBlocks(bl.groupId)]);
+  }
+  items.push(["삭제",ICONS.trash,()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(b=>b.id!==bl.id); save(); render(); },"danger"]);
+  m.innerHTML="";
+  items.forEach(([label,icon,fn,cls])=>{
+    const b=document.createElement("button"); if(cls) b.className=cls;
     b.innerHTML=icon+" "+label;
     b.onclick=()=>{ hideCtxMenu(); fn(); };
     m.appendChild(b);
@@ -2155,29 +2193,43 @@ function subBlockEl(bl, it, liveRefresh, main){
 
   if(it.type==="line"){
     const who=document.createElement("span"); who.className="dlg-who"; who.textContent=it.char||"(미지정)";
-    const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=it.text;
+    /* 대사 텍스트 — 클릭하면 바로 편집(플롯/제목과 동일한 방식) */
+    const tx=document.createElement("span"); tx.className="dlg-text"; tx.contentEditable="false"; tx.spellcheck=false;
+    tx.textContent=it.text;
+    tx.oninput=()=>{ it.text=tx.textContent; save(); liveRefresh&&liveRefresh(); };
+    tx.addEventListener("blur", ()=>{ tx.contentEditable="false"; });
+    tx.addEventListener("click", ()=>{ if(tx.contentEditable!=="true"){ tx.contentEditable="true"; tx.focus(); selectAllEditable(tx); } });
     d.append(handle, who, tx, del);
+    d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openLineBlockCtxMenu(e.clientX, e.clientY, bl); });
   }else{
     const mainRow=document.createElement("div"); mainRow.className="sub-main-row";
     const ta=document.createElement("textarea"); ta.className="sub-textarea"; ta.placeholder="본문을 써보세요"; ta.rows=1; ta.value=it.text||"";
     ta.oninput=()=>{ it.text=ta.value; save(); autoGrowTextarea(ta); liveRefresh&&liveRefresh(); };
     mainRow.append(handle, ta, del);
     d.appendChild(mainRow);
-    /* 분기 본문 블록 — 2열로 나열, 폰트 1pt 작게 */
+    /* 분기 본문 블록 — 2열로 나열, 폰트 1pt 작게, 위/아래(같은 열의 앞뒤 줄)로 이동 가능 */
     if(it.branches && it.branches.length){
       const brWrap=document.createElement("div"); brWrap.className="sub-branches";
-      it.branches.forEach(br=>{
+      it.branches.forEach((br,bi)=>{
         const cell=document.createElement("div"); cell.className="sub-branch";
         const bta=document.createElement("textarea"); bta.className="sub-textarea branch-textarea"; bta.placeholder="분기 내용을 써보세요"; bta.rows=1; bta.value=br.text||"";
         bta.oninput=()=>{ br.text=bta.value; save(); autoGrowTextarea(bta); liveRefresh&&liveRefresh(); };
+        const moveWrap=document.createElement("span"); moveWrap.className="branch-move-wrap";
+        const upBtn=document.createElement("button"); upBtn.type="button"; upBtn.className="sub-del branch-move"; upBtn.textContent="▲"; upBtn.title="위로 이동";
+        upBtn.disabled=(bi<2);
+        upBtn.onclick=()=>{ const arr=it.branches; if(bi>=2){ [arr[bi-2],arr[bi]]=[arr[bi],arr[bi-2]]; save(); render(); } };
+        const downBtn=document.createElement("button"); downBtn.type="button"; downBtn.className="sub-del branch-move"; downBtn.textContent="▼"; downBtn.title="아래로 이동";
+        downBtn.disabled=(bi+2>=it.branches.length);
+        downBtn.onclick=()=>{ const arr=it.branches; if(bi+2<arr.length){ [arr[bi],arr[bi+2]]=[arr[bi+2],arr[bi]]; save(); render(); } };
+        moveWrap.append(upBtn, downBtn);
         const bdel=document.createElement("button"); bdel.className="sub-del branch-del"; bdel.innerHTML=ICONS.close; bdel.title="분기 삭제";
         bdel.onclick=()=>{ it.branches=it.branches.filter(x=>x.id!==br.id); save(); render(); };
-        cell.append(bta, bdel);
+        cell.append(bta, moveWrap, bdel);
         brWrap.appendChild(cell);
       });
       d.appendChild(brWrap);
     }
-    d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openTextBlockCtxMenu(e.clientX, e.clientY, it); });
+    d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openTextBlockCtxMenu(e.clientX, e.clientY, bl, it); });
   }
   return d;
 }
