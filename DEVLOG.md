@@ -2,6 +2,17 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-07-31 (55차) · 본문 블럭 분기 글쓰기 기능 추가
+- 요청: (1) 본문 블럭 우클릭 시 [분기 만들기] 메뉴 (2) 클릭하면 아래에 절반 크기 본문 블럭 2개를 2열로 배치 (3) 분기 블럭 폰트는 1pt 작게 (4) 이미 분기된 블럭은 [분기 만들기] 대신 [분기 블럭 추가]만 표시(분기 나누기는 최초 1회만, 이후는 블럭 추가만 가능)
+- **app.js**
+  - `subBlockEl()`의 본문(text) 타입 렌더링 구조 변경 — 기존엔 핸들·textarea·삭제버튼을 `.sub-block`에 바로 append했으나, 이제 이 셋을 `.sub-main-row`로 감싸고 그 아래에 `it.branches` 배열이 있으면 `.sub-branches`(2열 그리드) 컨테이너를 형제로 추가. 대사(line) 타입 구조는 그대로 유지
+  - 드래그앤드롭 순서 저장(`rebuildItemsFromDOM`)은 `.sub-block` 클래스만 기준으로 항목을 다시 읽으므로, 분기 내부 요소에는 그 클래스를 주지 않아 기존 로직과 충돌 없음
+  - 본문 블럭(`d`)에 `contextmenu` 리스너 추가 → `openTextBlockCtxMenu(x, y, it)` 호출(부모 장면블록의 우클릭 메뉴로 전파되지 않도록 stopPropagation)
+  - `openTextBlockCtxMenu()` 신설 — `it.branches`가 없으면 [분기 만들기](클릭 시 `it.branches=[{}, {}]`로 분기 블럭 2개 생성), 있으면 [분기 블럭 추가](클릭 시 배열에 1개 push)만 노출
+  - 분기 블럭 각각에도 자체 textarea(`branch-textarea`, oninput으로 `br.text` 저장) + 개별 삭제(x) 버튼 부여
+- **style.css** — `.sub-block.sub-text{flex-direction:column}` + `.sub-main-row`(기존 flex row 그대로 이동) + `.sub-branches{display:grid;grid-template-columns:1fr 1fr}` + `.sub-branch`(카드형) + `.branch-textarea{font-size:calc(11px - 1pt)}` (기존 본문 11px 대비 정확히 1pt 작게)
+- 검증: `node --check app.js` 통과. 데이터 구조상 `it.branches`는 옵셔널이라 기존 저장 데이터(분기 없음)는 영향 없음
+
 ## 2026-07-26 (54차) · 작품 탭 스타일을 실제 파일탭처럼 변경 + 사이드바/플롯목록/미리보기 접기 + 본문·미리보기 폭 조절 (곰국을끼리오너라 프로젝트 참고)
 - 요청: (1) 상단 탭 구조를 곰국 프로젝트 스크린샷처럼 변경 (2) 사이드메뉴·본문 블럭화면(플롯 목록)·미리보기 화면 접기 기능을 곰국 프로젝트에서 검색해 그대로 적용 (3) 본문 블럭화면과 미리보기 화면 사이 경계를 드래그해 폭 조절하는 기능도 곰국 프로젝트에서 검색해 적용
 - **탭 스타일** — `.ptab`을 둥근 알약형 칩에서 곰국의 `.file-tab`과 동일한 "실제 파일탭" 모양으로 변경: 위쪽만 둥글고 아래는 테두리 없이 열려 본문 영역에 붙어 보임(`border-radius:8px 8px 0 0`, `border-bottom:none`). `.ptabs`가 `align-self:stretch`+`align-items:flex-end`로 상단바 높이 전체를 채운 뒤 탭을 바닥에 붙임(상단바가 grid가 아닌 flex라 곰국과 다른 방식으로 구현). 활성 탭은 배경을 `--card`(페이지 배경과 동일)로 칠해 아래 콘텐츠와 이어지는 느낌

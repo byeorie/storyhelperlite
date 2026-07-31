@@ -2105,6 +2105,36 @@ function openSectionCtxMenu(x, y, sec){
   m.style.left=Math.min(x, vw-190)+"px";
   m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
 }
+/* 본문(지문) 블록 우클릭 메뉴 — 분기 만들기 / 분기 블럭 추가
+   - 아직 분기가 없으면 [분기 만들기] (누르면 절반 크기 본문 블록 2개를 2열로 생성)
+   - 이미 분기된 블록이면 [분기 블럭 추가]만 표시 (분기 나누기는 한 번만) */
+function openTextBlockCtxMenu(x, y, it){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  const hasBranches=!!(it.branches && it.branches.length);
+  const items=[];
+  if(!hasBranches){
+    items.push(["분기 만들기",ICONS.plus,()=>{
+      it.branches=[{id:uid(), text:""},{id:uid(), text:""}];
+      save(); render();
+    }]);
+  }else{
+    items.push(["분기 블럭 추가",ICONS.plus,()=>{
+      it.branches.push({id:uid(), text:""});
+      save(); render();
+    }]);
+  }
+  m.innerHTML="";
+  items.forEach(([label,icon,fn])=>{
+    const b=document.createElement("button");
+    b.innerHTML=icon+" "+label;
+    b.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(b);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
 function hideCtxMenu(){ const m=document.getElementById("ctxMenu"); if(m){ m.hidden=true; m.innerHTML=""; } ctxMenuTargetBlock=null; }
 document.addEventListener("click", ()=>hideCtxMenu());
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") hideCtxMenu(); });
@@ -2128,9 +2158,26 @@ function subBlockEl(bl, it, liveRefresh, main){
     const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=it.text;
     d.append(handle, who, tx, del);
   }else{
+    const mainRow=document.createElement("div"); mainRow.className="sub-main-row";
     const ta=document.createElement("textarea"); ta.className="sub-textarea"; ta.placeholder="본문을 써보세요"; ta.rows=1; ta.value=it.text||"";
     ta.oninput=()=>{ it.text=ta.value; save(); autoGrowTextarea(ta); liveRefresh&&liveRefresh(); };
-    d.append(handle, ta, del);
+    mainRow.append(handle, ta, del);
+    d.appendChild(mainRow);
+    /* 분기 본문 블록 — 2열로 나열, 폰트 1pt 작게 */
+    if(it.branches && it.branches.length){
+      const brWrap=document.createElement("div"); brWrap.className="sub-branches";
+      it.branches.forEach(br=>{
+        const cell=document.createElement("div"); cell.className="sub-branch";
+        const bta=document.createElement("textarea"); bta.className="sub-textarea branch-textarea"; bta.placeholder="분기 내용을 써보세요"; bta.rows=1; bta.value=br.text||"";
+        bta.oninput=()=>{ br.text=bta.value; save(); autoGrowTextarea(bta); liveRefresh&&liveRefresh(); };
+        const bdel=document.createElement("button"); bdel.className="sub-del branch-del"; bdel.innerHTML=ICONS.close; bdel.title="분기 삭제";
+        bdel.onclick=()=>{ it.branches=it.branches.filter(x=>x.id!==br.id); save(); render(); };
+        cell.append(bta, bdel);
+        brWrap.appendChild(cell);
+      });
+      d.appendChild(brWrap);
+    }
+    d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openTextBlockCtxMenu(e.clientX, e.clientY, it); });
   }
   return d;
 }
