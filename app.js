@@ -46,9 +46,97 @@ function onAuthChanged(){
   }
   render();
 }
+/* ===== 왼쪽 메뉴·플롯 목록·미리보기 접기/펼치기 (곰국을끼리오너라 프로젝트 참고) =====
+   작업 공간을 넓게 쓰고 싶을 때 각 패널을 접을 수 있다. 상태는 localStorage에 저장해 다음에도 유지 */
+const UI_KEY="storyhelper_ui_v1";
+function loadUiCollapse(){ try{ const u=JSON.parse(localStorage.getItem(UI_KEY)); return {sb:!!(u&&u.sb), toc:!!(u&&u.toc), preview:!!(u&&u.preview)}; }catch(e){ return {sb:false, toc:false, preview:false}; } }
+let UICOL=loadUiCollapse();
+function saveUiCollapse(){ localStorage.setItem(UI_KEY, JSON.stringify(UICOL)); }
+function applyUiCollapse(){
+  document.body.classList.toggle("sb-collapsed", UICOL.sb);
+  document.body.classList.toggle("toc-collapsed", UICOL.toc);
+  document.body.classList.toggle("preview-collapsed", UICOL.preview);
+}
+/* 본문(write-main)·미리보기(write-preview) 경계 드래그로 폭 조절 — 본문 너비를 px로 고정하고
+   미리보기(flex:1)가 남은 폭을 자동으로 채우게 둔다. 드래그로 정한 폭은 localStorage에 저장 */
+const MAINW_KEY="storyhelper_mainw_v1";
+function loadMainWidth(){ const v=parseInt(localStorage.getItem(MAINW_KEY),10); return (v&&v>=360)?v:null; }
+function saveMainWidth(w){ localStorage.setItem(MAINW_KEY, String(Math.round(w))); }
+function setupPanelResizer(resizer, mainEl){
+  resizer.addEventListener("mousedown", e=>{
+    e.preventDefault();
+    const startX=e.clientX, startW=mainEl.getBoundingClientRect().width;
+    document.body.style.cursor="col-resize";
+    resizer.classList.add("dragging");
+    function onMove(ev){
+      const w=Math.max(360, Math.min(startW+(ev.clientX-startX), window.innerWidth-420));
+      mainEl.style.flex="0 0 "+w+"px";
+    }
+    function onUp(){
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor="";
+      resizer.classList.remove("dragging");
+      saveMainWidth(mainEl.getBoundingClientRect().width);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+
 let DB = load();
 let P = currentProject();
 
+/* ===== 실행취소/다시실행 (프로젝트 단위 스냅샷) =====
+   저장 여부와 무관하게 편집 이력을 되돌리는 기능. save()가 거의 모든 편집 지점에서 호출되므로
+   그 안에서 800ms 코얼레싱 타이머를 걸어, 짧게 이어지는 타이핑을 한 번의 되돌리기 단계로 묶는다. */
+const UNDO_LIMIT=60, UNDO_COALESCE_MS=800;
+let undoStack=[], redoStack=[], undoBaseline=null, undoTimer=null;
+function resetUndoHistory(){
+  undoBaseline = P ? JSON.stringify(P) : null;
+  undoStack=[]; redoStack=[]; clearTimeout(undoTimer); updateUndoButtons();
+}
+function scheduleUndoCheckpoint(){ clearTimeout(undoTimer); undoTimer=setTimeout(commitUndoCheckpoint, UNDO_COALESCE_MS); }
+function commitUndoCheckpoint(){
+  clearTimeout(undoTimer);
+  const now=JSON.stringify(P);
+  if(now===undoBaseline) return;
+  undoStack.push(undoBaseline); if(undoStack.length>UNDO_LIMIT) undoStack.shift();
+  redoStack=[]; undoBaseline=now; updateUndoButtons();
+}
+function restoreUndoSnapshot(json){
+  const obj=JSON.parse(json);
+  Object.keys(P).forEach(k=>delete P[k]); Object.assign(P,obj);
+  undoBaseline=json; save(); render();
+}
+function doUndo(){
+  commitUndoCheckpoint();
+  if(!undoStack.length) return;
+  const prev=undoStack.pop();
+  redoStack.push(undoBaseline); if(redoStack.length>UNDO_LIMIT) redoStack.shift();
+  restoreUndoSnapshot(prev);
+}
+function doRedo(){
+  if(!redoStack.length) return;
+  const next=redoStack.pop();
+  undoStack.push(undoBaseline); if(undoStack.length>UNDO_LIMIT) undoStack.shift();
+  restoreUndoSnapshot(next);
+}
+function updateUndoButtons(){
+  const ub=document.getElementById("undoBtn"), rb=document.getElementById("redoBtn");
+  if(ub) ub.disabled=!undoStack.length;
+  if(rb) rb.disabled=!redoStack.length;
+}
+resetUndoHistory();
+
+/* openIds: 상단 탭에 열려 보이는 작품 id 목록. 탭 닫기는 이 목록에서만 빠지고
+   DB.projects엔 그대로 남아 있어 상단 select("다른 작품 열기")로 언제든 다시 열 수 있다 */
+function fillOpenIds(d){
+  if(!Array.isArray(d.openIds)||!d.openIds.length) d.openIds=d.projects.map(p=>p.id);
+  d.openIds=d.openIds.filter(id=>d.projects.some(p=>p.id===id));
+  if(!d.openIds.includes(d.current)) d.openIds.push(d.current);
+  return d.openIds;
+}
 function load(){
   try{
     const d=JSON.parse(localStorage.getItem(LS_KEY));
@@ -56,11 +144,12 @@ function load(){
       d.projects=d.projects.map(fillProject);
       if(!d.projects.some(p=>p.id===d.current)) d.current=d.projects[0].id;
       d.workDB=fillWorkDB(d.workDB);
+      fillOpenIds(d);
       return d;
     }
   }catch(e){}
   const id=uid();
-  return {current:id, projects:[blankProject(id,"내 첫 작품")], workDB:fillWorkDB()};
+  return {current:id, projects:[blankProject(id,"내 첫 작품")], workDB:fillWorkDB(), openIds:[id]};
 }
 /* 작품DB(아이디어 탐색용) 기본값 보정 */
 function fillWorkDB(w){
@@ -77,12 +166,7 @@ function fillProject(p){
     world: Object.assign({}, b.world, p.world||{}),
     background: Object.assign({}, b.background, p.background||{}),
     event: Object.assign({}, b.event, p.event||{}),
-    characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>{
-      const m=Object.assign({},blankChar(),c);
-      /* 예전 "인물 변화(아크)" 단일 필드에 값이 있고 전/후 필드가 비어 있으면 "변화 전"으로 이전 */
-      if(m.arc && !m.arcBefore && !m.arcAfter) m.arcBefore=m.arc;
-      return m;
-    }):b.characters,
+    characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>Object.assign({},blankChar(),c)):b.characters,
     plot: Array.isArray(p.plot)?Object.assign([...b.plot],p.plot):b.plot,
     genres: Array.isArray(p.genres)?p.genres:b.genres,
     ideaBlocks: Array.isArray(p.ideaBlocks)?p.ideaBlocks.map(x=>Object.assign({id:uid(),text:"",tags:[]},x)):b.ideaBlocks,
@@ -92,11 +176,30 @@ function fillProject(p){
     explore: Object.assign({}, b.explore, p.explore||{}),
   });
 }
+/* ===== 탭 저장상태 점(dot) =====
+   로컬(localStorage)은 save()마다 바로 기록되므로 항상 최신이지만, 서버 동기화는 디바운스 후
+   비동기로 진행된다. 탭의 점 색은 "서버 동기화" 기준: pending(주황)→saved(초록)/error(빨강).
+   로그인하지 않은 상태(로컬 전용)에서는 항상 saved로 취급한다. */
+let projSaveState={};
+function updateTabDot(id){
+  const t=document.querySelector(`.ptab-dot[data-pid="${id}"]`); if(!t) return;
+  const state=projSaveState[id]||"saved";
+  const loggedIn=typeof getToken==="function" && !!getToken();
+  const color = state==="pending" ? "#d9a441" : state==="error" ? "#e05050" : "var(--ok)";
+  const title = state==="pending" ? "서버에 저장 중…" : state==="error" ? "서버 저장 실패 (로컬에는 저장됨)" : (loggedIn?"서버에 저장됨":"로컬에 저장됨");
+  t.style.background=color; t.title=title;
+}
+function updateAllTabDots(){ (DB.openIds||[]).forEach(id=>updateTabDot(id)); }
+
 function save(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
+  if(typeof getToken==="function" && getToken()){
+    projSaveState[DB.current]="pending"; updateTabDot(DB.current);
+  }
   if(typeof saveToServer==="function") saveToServer();
+  scheduleUndoCheckpoint();
 }
 function uid(){ return "p"+Date.now()+Math.floor(Math.random()*1000); }
 function blankProject(id,name){
@@ -147,31 +250,66 @@ function fillPlotDoc(pd){
   };
 }
 function blankChar(){
-  return {id:uid(), name:"",role:"영웅",age:"",gender:"",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:"",
-    parentsInfo:"", familyRelations:"", arcBefore:"", arcAfter:"",
+  return {id:uid(), name:"",role:"영웅",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:"",
     appearance:"", speechHabit:"", backstory:"", likes:"", dislikes:"", dialogueSample:""};
 }
 function currentProject(){
   return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
 }
 
-/* ===== 프로젝트 UI ===== */
+/* ===== 프로젝트 UI (상단 탭 + "다른 작품 열기" select) =====
+   탭의 ×는 작품을 지우지 않고 화면(탭)에서만 뺀다 — DB.openIds에서 id만 제거,
+   DB.projects는 그대로 두어 select("다른 작품 열기")로 언제든 다시 열 수 있다. */
 function refreshProjSelect(){
   const sel=document.getElementById("projSelect");
-  sel.innerHTML="";
+  sel.innerHTML=`<option value="" disabled selected hidden>다른 작품 열기…</option>`;
   DB.projects.forEach(p=>{
     const o=document.createElement("option");
-    o.value=p.id; o.textContent=p.name; if(p.id===DB.current)o.selected=true;
+    o.value=p.id; o.textContent=(DB.openIds.includes(p.id)?"":"◦ ")+p.name;
     sel.appendChild(o);
   });
+
+  const wrap=document.getElementById("projTabs");
+  wrap.innerHTML="";
+  DB.projects.filter(p=>DB.openIds.includes(p.id)).forEach(p=>{
+    const tab=document.createElement("div");
+    tab.className="ptab"+(p.id===DB.current?" active":"");
+    tab.title=p.name;
+    const dot=document.createElement("span"); dot.className="ptab-dot"; dot.dataset.pid=p.id;
+    tab.appendChild(dot);
+    const label=document.createElement("span"); label.className="ptab-label"; label.textContent=p.name;
+    tab.appendChild(label);
+    const close=document.createElement("button"); close.type="button"; close.className="ptab-close";
+    close.title="닫기 (삭제 아님)"; close.innerHTML=ICONS.close;
+    close.onclick=e=>{ e.stopPropagation(); closeProjTab(p.id); };
+    tab.appendChild(close);
+    tab.onclick=()=>{ if(p.id!==DB.current) switchProject(p.id); };
+    wrap.appendChild(tab);
+  });
+  updateAllTabDots();
+}
+function switchProject(id){
+  DB.current=id; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
+}
+function openProjectTab(id){
+  if(!DB.openIds.includes(id)) DB.openIds.push(id);
+  switchProject(id);
+}
+function closeProjTab(id){
+  if(DB.openIds.length<=1){ alert("마지막 탭입니다. 다른 작품을 먼저 열어주세요."); return; }
+  DB.openIds=DB.openIds.filter(x=>x!==id);
+  if(DB.current===id){ DB.current=DB.openIds[DB.openIds.length-1]; P=currentProject(); resetUndoHistory(); }
+  save(); refreshProjSelect(); render();
 }
 document.getElementById("projSelect").onchange=e=>{
-  DB.current=e.target.value; P=currentProject(); save(); render();
+  const id=e.target.value; e.target.value="";
+  if(id) openProjectTab(id);
 };
 document.getElementById("newProjBtn").onclick=()=>{
   const name=prompt("새 작품 이름:","제목 없음"); if(name===null)return;
   const id=uid(); DB.projects.push(blankProject(id,name||"제목 없음"));
-  DB.current=id; P=currentProject(); save(); refreshProjSelect(); render();
+  DB.openIds.push(id);
+  DB.current=id; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
 };
 document.getElementById("renameProjBtn").onclick=()=>{
   const name=prompt("작품 이름 변경:",P.name); if(name===null)return;
@@ -180,11 +318,32 @@ document.getElementById("renameProjBtn").onclick=()=>{
 document.getElementById("delProjBtn").onclick=()=>{
   if(DB.projects.length<=1){alert("최소 1개의 작품은 있어야 합니다.");return;}
   if(!confirm(`'${P.name}'을(를) 삭제할까요? 되돌릴 수 없습니다.`))return;
-  DB.projects=DB.projects.filter(p=>p.id!==P.id);
-  DB.current=DB.projects[0].id; P=currentProject(); save(); refreshProjSelect(); render();
+  const wasId=P.id;
+  DB.projects=DB.projects.filter(p=>p.id!==wasId);
+  DB.openIds=DB.openIds.filter(id=>id!==wasId);
+  if(!DB.openIds.length) DB.openIds=[DB.projects[0].id];
+  DB.current=DB.openIds[0]; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
 };
+
+/* ===== 실행취소/다시실행 버튼 + 단축키 (Ctrl/Cmd+S 즉시저장, +Z 실행취소, +Shift+Z 또는 +Y 다시실행) ===== */
+document.getElementById("undoBtn").onclick=doUndo;
+document.getElementById("redoBtn").onclick=doRedo;
+function forceSaveNow(){
+  localStorage.setItem(LS_KEY, JSON.stringify(DB));
+  const el=document.getElementById("saveStatus");
+  if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
+  if(typeof getToken==="function" && getToken() && typeof forceSaveToServer==="function") forceSaveToServer();
+}
+window.addEventListener("keydown", e=>{
+  if(!(e.ctrlKey||e.metaKey)) return;
+  const k=e.key.toLowerCase();
+  if(k==="s"){ e.preventDefault(); forceSaveNow(); }
+  else if(k==="z" && !e.shiftKey){ e.preventDefault(); doUndo(); }
+  else if((k==="z" && e.shiftKey) || k==="y"){ e.preventDefault(); doRedo(); }
+});
+
 /* 상단 툴바 — 저장 / 불러오기 / 내보내기 */
-document.getElementById("manualSaveBtn").onclick=()=>save();
+document.getElementById("manualSaveBtn").onclick=()=>forceSaveNow();
 document.getElementById("topImportBtn").onclick=()=>document.getElementById("topImportInput").click();
 document.getElementById("topImportInput").onchange=e=>importStory(e);
 const topExportBtn=document.getElementById("topExportBtn");
@@ -259,7 +418,7 @@ function render(){
       const i=DB.projects.findIndex(x=>x.id===P.id);
       const fresh=blankProject(P.id,P.name);
       if(i>=0) DB.projects[i]=fresh; else DB.projects.push(fresh);
-      P=fresh; save(); render();
+      P=fresh; resetUndoHistory(); save(); render();
     };
   }
 }
@@ -355,7 +514,7 @@ function reorderIdeaBlocks(orderedIdsTopToBottom){
   P.ideaBlocks=P.ideaBlocks.map(b=> shownIds.has(b.id) ? idToBlock[newShownStorageOrder[si++]] : b);
 }
 document.addEventListener("mouseup", ()=>{
-  document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true], .scene-block[draggable=true], .sub-block[draggable=true]").forEach(el=>el.draggable=false);
+  document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true], .scene-block[draggable=true], .sub-block[draggable=true], .sub-branch[draggable=true]").forEach(el=>el.draggable=false);
 });
 
 function rIdea(){
@@ -812,7 +971,7 @@ function charGalleryCard(ch){
   d.innerHTML=`<div class="char-avatar"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
     <div class="char-card-name">${esc(ch.name)||"이름 없음"}</div>
     <div class="char-card-role">${esc(ch.role)||"-"}</div>
-    <div class="char-card-badges">${ch.mbti?`<span class="char-badge">${esc(ch.mbti)}</span>`:""}${ch.enneagram?`<span class="char-badge">${esc(ch.enneagram)}유형</span>`:""}${(ch.arcBefore&&ch.arcAfter)?`<span class="char-badge arc-badge">변화 설정됨</span>`:""}</div>
+    <div class="char-card-badges">${ch.mbti?`<span class="char-badge">${esc(ch.mbti)}</span>`:""}${ch.enneagram?`<span class="char-badge">${esc(ch.enneagram)}유형</span>`:""}</div>
     ${relCount?`<div class="char-card-rel">관계 ${relCount}개</div>`:""}
     <button type="button" class="char-card-del" title="삭제">${ICONS.trash}</button>`;
   d.querySelector(".char-card-del").onclick=e=>{
@@ -855,8 +1014,7 @@ function charModal(ch){
     <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
-    <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도"></textarea></div>
-    <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 모습"></textarea></div></div>
+    <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
     <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
     <label>다른 캐릭터와의 관계</label>
     <div class="char-rel-list" id="charRelList"></div>
@@ -942,38 +1100,21 @@ function charDetailPage(ch){
         <p class="hint" style="margin:4px 0 0">500KB 이하 이미지, 300×300px로 자동 압축됩니다.</p>
       </div>
     </div>
-    <h3 class="char-detail-sub">${ICONS.user} 인물 정보</h3>
     <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
     <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
-    <div class="row"><div><label>나이</label><input type="text" data-k="age" placeholder="예: 17세, 20대 초반"></div>
-    <div><label>성별</label><input type="text" data-k="gender" placeholder="예: 여성, 남성, 논바이너리 등"></div></div>
-
-    <h3 class="char-detail-sub">${ICONS.bolt} 인물 성격</h3>
     <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
     <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
-
-    <h3 class="char-detail-sub">${ICONS.building} 가족사</h3>
-    <label>부모의 정보 및 관계</label><textarea data-k="parentsInfo" placeholder="부모님의 성격, 직업, 캐릭터와의 관계 등"></textarea>
-    <label>가족 관계</label><textarea data-k="familyRelations" placeholder="형제자매 등 가족 구성, 갈등이나 유대감 등"></textarea>
-    <label>성장배경 / 과거사</label><textarea data-k="backstory" placeholder="자라온 환경, 이야기 이전에 겪은 사건 등"></textarea>
-
-    <h3 class="char-detail-sub">${ICONS.network} 인물의 변화</h3>
-    <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도·상태"></textarea></div>
-    <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 성격·태도·상태"></textarea></div></div>
-    <div class="char-arc-preview" id="charArcPreview"></div>
-
-    <h3 class="char-detail-sub">${ICONS.book} 외모 및 특징</h3>
+    <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
+    <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
+    <h3 class="char-detail-sub">${ICONS.book} 서사 확장</h3>
     <label>외모 상세</label><textarea data-k="appearance" placeholder="키, 체형, 헤어스타일, 옷차림, 특징적 외형 등"></textarea>
     <label>말투 / 버릇</label><textarea data-k="speechHabit" placeholder="자주 쓰는 말, 어투, 습관적 행동 등"></textarea>
+    <label>성장배경 / 과거사</label><textarea data-k="backstory" placeholder="자라온 환경, 이야기 이전에 겪은 사건 등"></textarea>
     <div class="row"><div><label>좋아하는 것</label><input type="text" data-k="likes"></div>
     <div><label>싫어하는 것</label><input type="text" data-k="dislikes"></div></div>
     <label>대사 샘플</label><textarea data-k="dialogueSample" placeholder="이 캐릭터라면 할 법한 대사 예시"></textarea>
-
-    <h3 class="char-detail-sub">기타 메모</h3>
-    <textarea data-k="desc" placeholder="위 항목에 넣기 애매한 특이사항"></textarea>
-
     <label>다른 캐릭터와의 관계</label>
     <div class="char-rel-list" id="charRelList"></div>
     <div class="char-rel-add" id="charRelAdd"></div>`;
@@ -991,18 +1132,6 @@ function charDetailPage(ch){
   }
   imgInput.onchange=e=>{ handleCharImageFile(e.target.files[0], ch, refreshImgPreview); e.target.value=""; };
   imgRemoveBtn.onclick=()=>{ ch.image=""; save(); refreshImgPreview(); };
-
-  /* 인물의 변화(전/후)를 나란히 보여주는 미리보기 -- 입력할 때마다 즉시 갱신 */
-  const arcPreview=body.querySelector("#charArcPreview");
-  const arcBox=t=>t?esc(t).replace(/\n/g,"<br>"):'<span class="arc-empty">아직 입력 안 됨</span>';
-  function refreshArcPreview(){
-    arcPreview.innerHTML=`<div class="arc-box arc-before"><div class="arc-box-label">변화 전</div>${arcBox(ch.arcBefore)}</div>
-      <div class="arc-arrow">→</div>
-      <div class="arc-box arc-after"><div class="arc-box-label">변화 후</div>${arcBox(ch.arcAfter)}</div>`;
-  }
-  body.querySelector('[data-k="arcBefore"]').addEventListener("input", refreshArcPreview);
-  body.querySelector('[data-k="arcAfter"]').addEventListener("input", refreshArcPreview);
-  refreshArcPreview();
 
   function renderRelList(){
     const listEl=body.querySelector("#charRelList");
@@ -1584,6 +1713,13 @@ function rWrite(){
   const layout=document.createElement("div"); layout.className="write-layout";
   app.appendChild(layout);
 
+  /* 목차(플롯 목록)·미리보기 접기/펼치기 버튼 — 각 패널 바로 앞/뒤에 붙여서, 패널이 display:none으로
+     접혀도 이 버튼만은 그 자리에 그대로 남는다 (곰국을끼리오너라 프로젝트 참고) */
+  const tocToggleBtn=document.createElement("button"); tocToggleBtn.className="panel-toggle toc-toggle"; tocToggleBtn.title="플롯 목록 접기/펼치기";
+  tocToggleBtn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+  tocToggleBtn.onclick=()=>{ UICOL.toc=!UICOL.toc; saveUiCollapse(); applyUiCollapse(); };
+  layout.appendChild(tocToggleBtn);
+
   /* 좌: 플롯 목록 + 글자수/% */
   const left=document.createElement("div"); left.className="write-plotlist";
   renderLeftInto(left);
@@ -1591,6 +1727,7 @@ function rWrite(){
 
   /* 중앙: 장면 블록 */
   const main=document.createElement("div"); main.className="write-main";
+  { const savedMainW=loadMainWidth(); if(savedMainW) main.style.flex="0 0 "+savedMainW+"px"; }
   const bar=document.createElement("div"); bar.className="write-toolbar";
   const loadBtn=document.createElement("button"); loadBtn.className="btn ghost sm icon-btn";
   loadBtn.innerHTML=ICONS.load+" 플롯 불러오기";
@@ -1652,8 +1789,15 @@ function rWrite(){
     main.appendChild(group);
   });
   layout.appendChild(main);
+  const resizer=document.createElement("div"); resizer.className="write-resizer"; resizer.title="드래그해서 폭 조절";
+  layout.appendChild(resizer);
+  setupPanelResizer(resizer, main);
   renderPreviewInto(right);
   layout.appendChild(right);
+  const previewToggleBtn=document.createElement("button"); previewToggleBtn.className="panel-toggle preview-toggle"; previewToggleBtn.title="미리보기 접기/펼치기";
+  previewToggleBtn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
+  previewToggleBtn.onclick=()=>{ UICOL.preview=!UICOL.preview; saveUiCollapse(); applyUiCollapse(); };
+  layout.appendChild(previewToggleBtn);
   requestAnimationFrame(()=>{ main.querySelectorAll(".sub-textarea").forEach(autoGrowTextarea); });
 
   /* 대사 추가 팝업 */
@@ -1961,6 +2105,74 @@ function openSectionCtxMenu(x, y, sec){
   m.style.left=Math.min(x, vw-190)+"px";
   m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
 }
+/* 본문(지문) 블록 우클릭 메뉴 — 분기 만들기 / 분기 블럭 추가
+   - 아직 분기가 없으면 [분기 만들기] (누르면 절반 크기 본문 블록 2개를 2열로 생성)
+   - 이미 분기된 블록이면 [분기 블럭 추가]만 표시 (분기 나누기는 한 번만) */
+function openTextBlockCtxMenu(x, y, bl, it){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  ctxMenuTargetBlock=bl;
+  const items=[];
+  items.push(["수정",ICONS.edit,()=>{ writeFocusTitle=bl.id; render(); }]);
+  items.push(["지문 추가",ICONS.plus,()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); }]);
+  items.push(["대사 추가",ICONS.chat,()=>{ writeDlgFor=bl.id; render(); }]);
+  const hasBranches=!!(it.branches && it.branches.length);
+  if(!hasBranches){
+    items.push(["분기 만들기",ICONS.plus,()=>{
+      it.branches=[{id:uid(), text:""},{id:uid(), text:""}];
+      save(); render();
+    }]);
+  }else{
+    items.push(["분기 블럭 추가",ICONS.plus,()=>{
+      /* 한 줄(2개)씩 생성 */
+      it.branches.push({id:uid(), text:""},{id:uid(), text:""});
+      save(); render();
+    }]);
+  }
+  if(writeSelectMode && writeSelectedIds.size>=2 && writeSelectedIds.has(bl.id)){
+    items.push(["그룹으로 묶기",ICONS.group,groupSelectedBlocks]);
+  }
+  if(bl.groupId){
+    items.push(["그룹 해제",ICONS.ungroup,()=>ungroupBlocks(bl.groupId)]);
+  }
+  items.push(["삭제",ICONS.trash,()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(b=>b.id!==bl.id); save(); render(); },"danger"]);
+  m.innerHTML="";
+  items.forEach(([label,icon,fn,cls])=>{
+    const b=document.createElement("button"); if(cls) b.className=cls;
+    b.innerHTML=icon+" "+label;
+    b.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(b);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
+/* 대사 블록 우클릭 메뉴 — 텍스트는 클릭으로 바로 편집하므로 "수정" 항목은 없음 */
+function openLineBlockCtxMenu(x, y, bl){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  ctxMenuTargetBlock=bl;
+  const items=[];
+  items.push(["지문 추가",ICONS.plus,()=>{ bl.items=bl.items||[]; bl.items.push({id:uid(), type:"text", char:"", text:""}); save(); render(); }]);
+  items.push(["대사 추가",ICONS.chat,()=>{ writeDlgFor=bl.id; render(); }]);
+  if(writeSelectMode && writeSelectedIds.size>=2 && writeSelectedIds.has(bl.id)){
+    items.push(["그룹으로 묶기",ICONS.group,groupSelectedBlocks]);
+  }
+  if(bl.groupId){
+    items.push(["그룹 해제",ICONS.ungroup,()=>ungroupBlocks(bl.groupId)]);
+  }
+  items.push(["삭제",ICONS.trash,()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(b=>b.id!==bl.id); save(); render(); },"danger"]);
+  m.innerHTML="";
+  items.forEach(([label,icon,fn,cls])=>{
+    const b=document.createElement("button"); if(cls) b.className=cls;
+    b.innerHTML=icon+" "+label;
+    b.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(b);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
 function hideCtxMenu(){ const m=document.getElementById("ctxMenu"); if(m){ m.hidden=true; m.innerHTML=""; } ctxMenuTargetBlock=null; }
 document.addEventListener("click", ()=>hideCtxMenu());
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") hideCtxMenu(); });
@@ -1981,12 +2193,44 @@ function subBlockEl(bl, it, liveRefresh, main){
 
   if(it.type==="line"){
     const who=document.createElement("span"); who.className="dlg-who"; who.textContent=it.char||"(미지정)";
-    const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=it.text;
+    /* 대사 텍스트 — 클릭하면 바로 편집(플롯/제목과 동일한 방식) */
+    const tx=document.createElement("span"); tx.className="dlg-text"; tx.contentEditable="false"; tx.spellcheck=false;
+    tx.textContent=it.text;
+    tx.oninput=()=>{ it.text=tx.textContent; save(); liveRefresh&&liveRefresh(); };
+    tx.addEventListener("blur", ()=>{ tx.contentEditable="false"; });
+    tx.addEventListener("click", ()=>{ if(tx.contentEditable!=="true"){ tx.contentEditable="true"; tx.focus(); selectAllEditable(tx); } });
     d.append(handle, who, tx, del);
+    d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openLineBlockCtxMenu(e.clientX, e.clientY, bl); });
   }else{
+    const mainRow=document.createElement("div"); mainRow.className="sub-main-row";
     const ta=document.createElement("textarea"); ta.className="sub-textarea"; ta.placeholder="본문을 써보세요"; ta.rows=1; ta.value=it.text||"";
     ta.oninput=()=>{ it.text=ta.value; save(); autoGrowTextarea(ta); liveRefresh&&liveRefresh(); };
-    d.append(handle, ta, del);
+    mainRow.append(handle, ta, del);
+    d.appendChild(mainRow);
+    /* 분기 본문 블록 — 2열로 나열, 폰트 1pt 작게, 핸들을 드래그해서 순서 이동 가능 */
+    if(it.branches && it.branches.length){
+      const brWrap=document.createElement("div"); brWrap.className="sub-branches";
+      it.branches.forEach(br=>{
+        const cell=document.createElement("div"); cell.className="sub-branch"; cell.dataset.id=br.id; cell.draggable=false;
+        const bHandle=document.createElement("span"); bHandle.className="sub-handle branch-handle"; bHandle.innerHTML=ICONS.grip; bHandle.title="드래그해서 순서 이동";
+        bHandle.addEventListener("mousedown", ()=>{ cell.draggable=true; });
+        bHandle.addEventListener("touchstart", ()=>{ cell.draggable=true; }, {passive:true});
+        cell.addEventListener("dragstart", e=>{ if(!cell.draggable) return; dndDropHandled=false; e.dataTransfer.effectAllowed="move"; setTimeout(()=>cell.classList.add("dragging"),0); });
+        cell.addEventListener("dragend", ()=>{
+          cell.draggable=false; cell.classList.remove("dragging");
+          if(!dndDropHandled && brWrap.isConnected) commitBranchOrder(brWrap, it);
+        });
+        const bta=document.createElement("textarea"); bta.className="sub-textarea branch-textarea"; bta.placeholder="분기 내용을 써보세요"; bta.rows=1; bta.value=br.text||"";
+        bta.oninput=()=>{ br.text=bta.value; save(); autoGrowTextarea(bta); liveRefresh&&liveRefresh(); };
+        const bdel=document.createElement("button"); bdel.className="sub-del branch-del"; bdel.innerHTML=ICONS.close; bdel.title="분기 삭제";
+        bdel.onclick=()=>{ it.branches=it.branches.filter(x=>x.id!==br.id); save(); render(); };
+        cell.append(bHandle, bta, bdel);
+        brWrap.appendChild(cell);
+      });
+      setupBranchDnD(brWrap, it);
+      d.appendChild(brWrap);
+    }
+    d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openTextBlockCtxMenu(e.clientX, e.clientY, bl, it); });
   }
   return d;
 }
@@ -2048,6 +2292,40 @@ function rebuildItemsFromDOM(main){
 }
 function commitWriteItemOrder(main){
   rebuildItemsFromDOM(main);
+  dndDropHandled=true;
+  save(); render();
+}
+
+/* 분기 블록 드래그앤드롭 (2열 그리드 — 커서와 가장 가까운 칸을 기준으로 앞/뒤 삽입) */
+function setupBranchDnD(container, it){
+  container.addEventListener("dragover", e=>{
+    const dragging=container.querySelector(".sub-branch.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    const els=[...container.querySelectorAll(".sub-branch:not(.dragging)")];
+    let closest=null, closestDist=Infinity, insertBefore=true;
+    els.forEach(el=>{
+      const box=el.getBoundingClientRect();
+      const cx=box.left+box.width/2, cy=box.top+box.height/2;
+      const dist=Math.hypot(e.clientX-cx, e.clientY-cy);
+      if(dist<closestDist){
+        closestDist=dist; closest=el;
+        insertBefore=(e.clientY<cy) || (Math.abs(e.clientY-cy)<box.height/2 && e.clientX<cx);
+      }
+    });
+    if(!closest) container.appendChild(dragging);
+    else if(insertBefore) container.insertBefore(dragging, closest);
+    else container.insertBefore(dragging, closest.nextSibling);
+  });
+  container.addEventListener("drop", e=>{
+    if(!container.querySelector(".sub-branch.dragging")) return;
+    e.preventDefault();
+    commitBranchOrder(container, it);
+  });
+}
+function commitBranchOrder(container, it){
+  const map={}; (it.branches||[]).forEach(b=>map[b.id]=b);
+  it.branches=[...container.querySelectorAll(".sub-branch")].map(el=>map[el.dataset.id]).filter(Boolean);
   dndDropHandled=true;
   save(); render();
 }
@@ -2158,7 +2436,7 @@ function buildPreview(){
     <p><b>인물 ${i+1}: ${esc(ch.name)||"-"}</b> (${esc(ch.role)})<br>
     MBTI: ${esc(ch.mbti)||"-"} / 에니어그램: ${esc(ch.enneagram)||"-"}<br>
     목표: ${esc(ch.goal)||"-"} / 결함: ${esc(ch.flaw)||"-"}<br>
-    인물 변화: 변화 전 - ${esc(ch.arcBefore)||"-"} / 변화 후 - ${esc(ch.arcAfter)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
+    아크: ${esc(ch.arc)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
   let plot;
   const pd=P.plotDoc;
   if(pd && pd.structure && Array.isArray(pd.sections) && pd.sections.length){
@@ -2194,8 +2472,8 @@ function importStory(e){
       const obj=JSON.parse(rd.result);
       if(!obj.plot||!obj.characters)throw 0;
       obj.id=uid(); obj.name=(obj.name||"가져온 작품")+" (복원)";
-      DB.projects.push(obj); DB.current=obj.id; P=currentProject();
-      save(); refreshProjSelect(); render();
+      DB.projects.push(obj); DB.openIds.push(obj.id); DB.current=obj.id; P=currentProject();
+      resetUndoHistory(); save(); refreshProjSelect(); render();
       alert("불러오기 완료!");
     }catch(_){ alert("올바른 작품 파일(.story)이 아닙니다."); }
   };
@@ -2207,6 +2485,15 @@ document.getElementById("aboutLink").onclick=e=>{
   e.preventDefault();
   alert("글쓰기도우미\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
 };
+
+/* 왼쪽 메뉴 접기/펼치기 버튼 + 저장된 접힘 상태 적용 */
+document.getElementById("sbToggleBtn").onclick=()=>{ UICOL.sb=!UICOL.sb; saveUiCollapse(); applyUiCollapse(); };
+applyUiCollapse();
+/* 상단바 실제 높이를 재서 --topbar-h에 반영 — 사이드바·접기 버튼이 툴바에 딱 붙도록 */
+(function syncTopbarHeight(){
+  const tb=document.querySelector(".topbar");
+  if(tb) document.documentElement.style.setProperty("--topbar-h", tb.offsetHeight+"px");
+})();
 
 /* 초기 렌더 */
 refreshProjSelect();

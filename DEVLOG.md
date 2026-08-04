@@ -74,19 +74,6 @@
 - **style.css** 수정 — 공통 `.btn` 규칙에 `display:inline-flex;align-items:center;justify-content:center;line-height:1.2;vertical-align:middle`를 추가해, 태그가 다른(label vs button) 버튼들도 항상 동일한 높이/중앙 정렬로 렌더링되도록 통일
 - 검증: style.css 내 다른 `.btn` 관련 규칙(margin-left:auto 등)과 충돌 없음을 확인
 
-## 2026-08-04 · 캐릭터 설정: 인물 변화(전/후) 분리 + 세부 정보 섹션화
-- 요청: (1) "인물 변화" 입력을 변화 전/변화 후 2개 폼으로 분리 (2) 캐릭터 상세페이지를 인물 정보/성격/가족사/변화/외모 등 섹션으로 재구성 (3) 학생이 변화를 직관적으로 확인할 수 있는 장치 추가
-- **app.js** 수정
-  - `blankChar()`에 `age, gender, parentsInfo, familyRelations, arcBefore, arcAfter` 필드 추가 (기존 `arc` 필드는 하위호환을 위해 유지)
-  - `fillProject()`의 캐릭터 마이그레이션에서, 기존 `arc` 값이 있고 `arcBefore/arcAfter`가 비어 있으면 `arc` 값을 `arcBefore`로 1회 이전 — 기존에 입력해둔 인물 변화 내용이 사라지지 않도록 처리
-  - `charDetailPage()`(캐릭터 상세 수정 페이지)를 "인물 정보(이름/역할/나이/성별) → 인물 성격(MBTI/에니어그램/목표/결함) → 가족사(부모의 정보 및 관계/가족 관계/성장배경) → 인물의 변화(변화 전/변화 후 + 실시간 비교 미리보기) → 외모 및 특징(외모/말투/취향/대사 샘플) → 기타 메모" 순서의 섹션(`h3.char-detail-sub`)으로 재구성
-  - 변화 전/후 텍스트를 입력할 때마다 즉시 갱신되는 `#charArcPreview` 비교 카드(변화 전 → 변화 후) 추가로 직관적 확인 지원
-  - `charGalleryCard()`에 변화 전/후가 모두 채워진 캐릭터에는 "변화 설정됨" 배지를 표시해 갤러리에서 한눈에 파악 가능하도록 함
-  - `charModal()`(신규 캐릭터 빠른 입력 팝업)도 동일하게 변화 전/후 2개 필드로 교체
-  - `buildPreview()`(Word/PDF 내보내기)의 "아크" 표기를 "인물 변화: 변화 전 - .../변화 후 - ..." 형식으로 변경
-- **style.css** 수정 — `.char-arc-preview`, `.arc-box`(전/후 카드, 좌측 컬러 보더로 구분), `.arc-arrow`, `.arc-empty`, `.char-badge.arc-badge` 스타일 추가
-- 검증: `node --check app.js` 통과, style.css 중괄호 개수 일치 확인, 기존 `data-k="arc"` 참조가 코드에 남아있지 않음을 grep으로 확인
-
 ## 2026-07-23 (52차) · 세계관 + 배경 설정 탭을 "배경 설정" 하나로 통합
 - 요청: 사이드메뉴의 "세계관"과 "배경 설정" 탭을 하나로 합쳐 "배경 설정"으로
 - **app.js** 수정 — `rWorld()`와 `rBg()`를 하나의 `rBg()`로 통합: 기존 세계관 항목(한 줄 요약/시대/장소/규칙)과 배경 항목(사회·정치적 배경/분위기/세부 묘사)을 "배경 설정" 카드 한 장에 순서대로 배치하고 중간에 `구체적 상황` 구분선(`.section-title`) 추가. 데이터는 기존 `P.world`/`P.background` 두 필드를 그대로 사용해 기존 저장 데이터 손실 없이 바인딩. 렌더러 매핑(`renderers`)에서 `world` 항목 제거
