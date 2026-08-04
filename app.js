@@ -166,7 +166,12 @@ function fillProject(p){
     world: Object.assign({}, b.world, p.world||{}),
     background: Object.assign({}, b.background, p.background||{}),
     event: Object.assign({}, b.event, p.event||{}),
-    characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>Object.assign({},blankChar(),c)):b.characters,
+    characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>{
+      const m=Object.assign({},blankChar(),c);
+      /* 예전 "인물 변화(아크)" 단일 필드에 값이 있고 전/후 필드가 비어 있으면 "변화 전"으로 이전 */
+      if(m.arc && !m.arcBefore && !m.arcAfter) m.arcBefore=m.arc;
+      return m;
+    }):b.characters,
     plot: Array.isArray(p.plot)?Object.assign([...b.plot],p.plot):b.plot,
     genres: Array.isArray(p.genres)?p.genres:b.genres,
     ideaBlocks: Array.isArray(p.ideaBlocks)?p.ideaBlocks.map(x=>Object.assign({id:uid(),text:"",tags:[]},x)):b.ideaBlocks,
@@ -250,7 +255,8 @@ function fillPlotDoc(pd){
   };
 }
 function blankChar(){
-  return {id:uid(), name:"",role:"영웅",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:"",
+  return {id:uid(), name:"",role:"영웅",age:"",gender:"",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:"",
+    parentsInfo:"", familyRelations:"", arcBefore:"", arcAfter:"",
     appearance:"", speechHabit:"", backstory:"", likes:"", dislikes:"", dialogueSample:""};
 }
 function currentProject(){
@@ -971,7 +977,7 @@ function charGalleryCard(ch){
   d.innerHTML=`<div class="char-avatar"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
     <div class="char-card-name">${esc(ch.name)||"이름 없음"}</div>
     <div class="char-card-role">${esc(ch.role)||"-"}</div>
-    <div class="char-card-badges">${ch.mbti?`<span class="char-badge">${esc(ch.mbti)}</span>`:""}${ch.enneagram?`<span class="char-badge">${esc(ch.enneagram)}유형</span>`:""}</div>
+    <div class="char-card-badges">${ch.mbti?`<span class="char-badge">${esc(ch.mbti)}</span>`:""}${ch.enneagram?`<span class="char-badge">${esc(ch.enneagram)}유형</span>`:""}${(ch.arcBefore&&ch.arcAfter)?`<span class="char-badge arc-badge">변화 설정됨</span>`:""}</div>
     ${relCount?`<div class="char-card-rel">관계 ${relCount}개</div>`:""}
     <button type="button" class="char-card-del" title="삭제">${ICONS.trash}</button>`;
   d.querySelector(".char-card-del").onclick=e=>{
@@ -1014,7 +1020,8 @@ function charModal(ch){
     <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
-    <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
+    <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도"></textarea></div>
+    <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 모습"></textarea></div></div>
     <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
     <label>다른 캐릭터와의 관계</label>
     <div class="char-rel-list" id="charRelList"></div>
@@ -1100,21 +1107,38 @@ function charDetailPage(ch){
         <p class="hint" style="margin:4px 0 0">500KB 이하 이미지, 300×300px로 자동 압축됩니다.</p>
       </div>
     </div>
+    <h3 class="char-detail-sub">${ICONS.user} 인물 정보</h3>
     <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
     <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
+    <div class="row"><div><label>나이</label><input type="text" data-k="age" placeholder="예: 17세, 20대 초반"></div>
+    <div><label>성별</label><input type="text" data-k="gender" placeholder="예: 여성, 남성, 논바이너리 등"></div></div>
+
+    <h3 class="char-detail-sub">${ICONS.bolt} 인물 성격</h3>
     <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
     <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
-    <label>인물 변화 (아크)</label><textarea data-k="arc" placeholder="이야기를 거치며 어떻게 달라지는가"></textarea>
-    <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
-    <h3 class="char-detail-sub">${ICONS.book} 서사 확장</h3>
+
+    <h3 class="char-detail-sub">${ICONS.building} 가족사</h3>
+    <label>부모의 정보 및 관계</label><textarea data-k="parentsInfo" placeholder="부모님의 성격, 직업, 캐릭터와의 관계 등"></textarea>
+    <label>가족 관계</label><textarea data-k="familyRelations" placeholder="형제자매 등 가족 구성, 갈등이나 유대감 등"></textarea>
+    <label>성장배경 / 과거사</label><textarea data-k="backstory" placeholder="자라온 환경, 이야기 이전에 겪은 사건 등"></textarea>
+
+    <h3 class="char-detail-sub">${ICONS.network} 인물의 변화</h3>
+    <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도·상태"></textarea></div>
+    <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 성격·태도·상태"></textarea></div></div>
+    <div class="char-arc-preview" id="charArcPreview"></div>
+
+    <h3 class="char-detail-sub">${ICONS.book} 외모 및 특징</h3>
     <label>외모 상세</label><textarea data-k="appearance" placeholder="키, 체형, 헤어스타일, 옷차림, 특징적 외형 등"></textarea>
     <label>말투 / 버릇</label><textarea data-k="speechHabit" placeholder="자주 쓰는 말, 어투, 습관적 행동 등"></textarea>
-    <label>성장배경 / 과거사</label><textarea data-k="backstory" placeholder="자라온 환경, 이야기 이전에 겪은 사건 등"></textarea>
     <div class="row"><div><label>좋아하는 것</label><input type="text" data-k="likes"></div>
     <div><label>싫어하는 것</label><input type="text" data-k="dislikes"></div></div>
     <label>대사 샘플</label><textarea data-k="dialogueSample" placeholder="이 캐릭터라면 할 법한 대사 예시"></textarea>
+
+    <h3 class="char-detail-sub">기타 메모</h3>
+    <textarea data-k="desc" placeholder="위 항목에 넣기 애매한 특이사항"></textarea>
+
     <label>다른 캐릭터와의 관계</label>
     <div class="char-rel-list" id="charRelList"></div>
     <div class="char-rel-add" id="charRelAdd"></div>`;
@@ -1132,6 +1156,18 @@ function charDetailPage(ch){
   }
   imgInput.onchange=e=>{ handleCharImageFile(e.target.files[0], ch, refreshImgPreview); e.target.value=""; };
   imgRemoveBtn.onclick=()=>{ ch.image=""; save(); refreshImgPreview(); };
+
+  /* 인물의 변화(전/후)를 나란히 보여주는 미리보기 -- 입력할 때마다 즉시 갱신 */
+  const arcPreview=body.querySelector("#charArcPreview");
+  const arcBox=t=>t?esc(t).replace(/\n/g,"<br>"):'<span class="arc-empty">아직 입력 안 됨</span>';
+  function refreshArcPreview(){
+    arcPreview.innerHTML=`<div class="arc-box arc-before"><div class="arc-box-label">변화 전</div>${arcBox(ch.arcBefore)}</div>
+      <div class="arc-arrow">→</div>
+      <div class="arc-box arc-after"><div class="arc-box-label">변화 후</div>${arcBox(ch.arcAfter)}</div>`;
+  }
+  body.querySelector('[data-k="arcBefore"]').addEventListener("input", refreshArcPreview);
+  body.querySelector('[data-k="arcAfter"]').addEventListener("input", refreshArcPreview);
+  refreshArcPreview();
 
   function renderRelList(){
     const listEl=body.querySelector("#charRelList");
@@ -2436,7 +2472,7 @@ function buildPreview(){
     <p><b>인물 ${i+1}: ${esc(ch.name)||"-"}</b> (${esc(ch.role)})<br>
     MBTI: ${esc(ch.mbti)||"-"} / 에니어그램: ${esc(ch.enneagram)||"-"}<br>
     목표: ${esc(ch.goal)||"-"} / 결함: ${esc(ch.flaw)||"-"}<br>
-    아크: ${esc(ch.arc)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
+    인물 변화: 변화 전 - ${esc(ch.arcBefore)||"-"} / 변화 후 - ${esc(ch.arcAfter)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
   let plot;
   const pd=P.plotDoc;
   if(pd && pd.structure && Array.isArray(pd.sections) && pd.sections.length){
