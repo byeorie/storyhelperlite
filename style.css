@@ -105,7 +105,8 @@ textarea{resize:vertical;min-height:70px}
 
 /* 버튼 */
 .btn{padding:9px 16px;border:none;border-radius:8px;background:var(--accent);color:#fff;
-  cursor:pointer;font-size:14px;font-weight:600}
+  cursor:pointer;font-size:14px;font-weight:600;display:inline-flex;align-items:center;
+  justify-content:center;line-height:1.2;vertical-align:middle}
 .btn:hover{filter:brightness(1.07)}
 .btn.ghost{background:#fff;color:var(--accent);border:1px solid var(--accent)}
 .btn.sm{padding:5px 10px;font-size:12px}
