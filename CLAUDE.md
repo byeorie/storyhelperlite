@@ -1,8 +1,21 @@
 # StoryHelperLite 프로젝트 지침
 
-## GitHub 자동 푸시 방법
+## 로컬 폴더 (2026-08-14부터 git 연결됨)
+"C:\Users\byeor\Claude\Projects\이야기 도우미" 폴더가 실제 GitHub 저장소와 git으로 연결되어 있다
+(origin에 PAT 포함, `git push`/`git pull` 즉시 가능). 예전에 쓰던 "StoryHelperLite" 폴더는 커밋 1개짜리
+방치된 옛날 클론(Gemini/Google Drive 연동 시절)이라 더 이상 사용하지 않는다 — 헷갈리지 말 것.
+- 사용자가 직접: `autopush.bat` 더블클릭(add+commit+push), `pull.bat` 더블클릭(fetch+hard reset)
+- Claude(Cowork 세션)가: 이 폴더는 `mcp__remote-devices__*` 디바이스 브리지로 접근. 클라우드 샌드박스의
+  git 프록시가 "session's authorized repository set" 제한으로 push를 차단하는 경우가 있으므로(2026-08
+  세션에서 확인), 그럴 땐 아래 클론 방식으로 작업한 뒤 변경된 파일만 SendUserFile + device_commit_files로
+  이 로컬 폴더에 반영하고, 사용자에게 `autopush.bat` 실행을 요청할 것 (사용자 PC는 이 제한을 받지 않음)
+- device_bash는 기존 파일을 삭제/덮어쓰기(unlink)할 수 없음 — unzip -o나 cp -f로 기존 파일을 덮으려 하면
+  "Operation not permitted" 오류. 기존 파일 내용을 바꿔야 하면 반드시 python `open(path,'w'/'wb').write(...)`
+  (truncate 방식, unlink 아님)로 쓸 것
 
-샌드박스에서 직접 git push가 불가 (GitHub API 차단).
+## GitHub 자동 푸시 방법 (클라우드 샌드박스에서 직접 push가 막혔을 때의 대안)
+
+샌드박스에서 직접 git push가 막힐 수 있음(위 참고).
 아래 절차로 매번 푸시할 것:
 
 1. `/tmp/`에 clone (매 세션마다 새 경로 사용: /tmp/shl2, /tmp/shl3 등 — 이전 세션 잔여물 권한 충돌 방지)
