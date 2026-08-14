@@ -2,6 +2,13 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-15 (61차) · 내보내기 롤메뉴가 작업스페이스에 가려지는 문제 수정
+- 증상: 상단바의 "내보내기" 드롭다운(대본/대사/콘티/.story)을 열면 메뉴가 워크스페이스(#app) 뒤로 가려져 거의 보이지 않음
+- 원인: `.topbar{overflow-x:auto}`가 걸려 있는데, CSS 스펙상 `overflow-x`가 `visible`이 아니면 지정하지 않은 `overflow-y`도 강제로 `auto`가 됨(가로 스크롤을 넣으려던 의도가 세로도 함께 잘라버림). `.mb-export-menu`는 `.topbar` 안의 `position:absolute` 요소라 이 세로 클리핑에 걸려, 버튼 아래로 펼쳐지는 부분(약 56px짜리 상단바 높이를 넘는 대부분)이 잘려나가 그 아래 워크스페이스가 비쳐 보였음. 같은 상단바의 `#userMenu`는 이미 `toggleUserMenu()`에서 열 때마다 `document.body`로 옮기고 `position:fixed`로 좌표를 직접 계산해 이 문제를 피해가고 있었는데, 내보내기 메뉴는 그 패턴이 적용돼 있지 않았음
+- **app.js** 수정 — `toggleExportMenu(forceHide)` 신설(`auth.js`의 `toggleUserMenu()`와 동일 패턴): 열 때 `topExportMenu`를 `document.body`로 옮기고 `topExportBtn`의 `getBoundingClientRect()` 기준으로 `top`/`left`를 직접 계산(화면 아래로 넘치면 버튼 위쪽에 표시). `topExportBtn.onclick`과 문서 전역 클릭(바깥 클릭 시 닫기) 핸들러를 이 함수 호출로 교체
+- **style.css** 수정 — `.mb-export-menu`를 `position:absolute;top:38px;left:0`에서 `position:fixed`로 변경(좌표는 JS가 지정), `z-index`를 30→1000으로 올려 다른 팝업들과 동일한 수준으로 맞춤
+- 검증: 정적 파일 서버(`node`)로 실제 페이지를 띄워 브라우저에서 직접 확인 — 수정 전엔 메뉴 중심 좌표(`elementFromPoint`)에서 워크스페이스 안의 `#ideaNewInput`이 잡혔으나(메뉴가 가려짐), 수정 후엔 같은 좌표에서 메뉴 자신의 버튼(`#topExportStoryboard`)이 정상적으로 잡힘. 메뉴가 `document.body`로 옮겨진 것과 바깥 클릭 시 다시 닫히는 것까지 확인
+
 ## 2026-08-15 (60차) · 내보내기를 대본/대사/콘티 3종 출력으로 전면 교체
 - 요청: 기존 "Word(.docx) / PDF" 내보내기(캐릭터·세계관·배경·사건·플롯 개요만 담고 실제 글쓰기 본문은 빠져 있던 구조)를 없애고, 실제 창작 결과물에 맞는 3종 출력으로 교체
   1. **대본 출력**(.docx) — 글쓰기 탭의 모든 장면 블록을 표로 저장. 표는 블록 번호당 한 행, 한 칸에 그 블록의 전체 내용(지문·대사 구분 없이 줄바꿈으로만 구분). 대사 항목은 반드시 "캐릭터명: 대사" 형식으로 캐릭터 이름을 앞에 표기

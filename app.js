@@ -360,12 +360,26 @@ document.getElementById("topImportBtn").onclick=()=>document.getElementById("top
 document.getElementById("topImportInput").onchange=e=>importStory(e);
 const topExportBtn=document.getElementById("topExportBtn");
 const topExportMenu=document.getElementById("topExportMenu");
-topExportBtn.onclick=e=>{ e.stopPropagation(); topExportMenu.hidden=!topExportMenu.hidden; };
+/* 상단바가 overflow-x:auto라 세로로 넘치는 내용은 잘리므로, 열 때마다 body로 옮겨 position:fixed로 좌표를 직접 계산 (user-menu와 동일 패턴) */
+function toggleExportMenu(forceHide){
+  const hide=forceHide===true || !topExportMenu.hidden;
+  if(!hide){
+    document.body.appendChild(topExportMenu);
+    const r=topExportBtn.getBoundingClientRect();
+    let top=r.bottom+6;
+    const menuH=200;
+    if(top+menuH>window.innerHeight) top=r.top-6-menuH;
+    topExportMenu.style.top=top+"px";
+    topExportMenu.style.left=r.left+"px";
+  }
+  topExportMenu.hidden=hide;
+}
+topExportBtn.onclick=e=>{ e.stopPropagation(); toggleExportMenu(); };
 document.getElementById("topExportScript").onclick=()=>{ topExportMenu.hidden=true; exportScript(); };
 document.getElementById("topExportDialogue").onclick=()=>{ topExportMenu.hidden=true; exportDialogueOnly(); };
 document.getElementById("topExportStoryboard").onclick=()=>{ topExportMenu.hidden=true; exportStoryboardPdf(); };
 document.getElementById("topExportStory").onclick=()=>{ topExportMenu.hidden=true; exportStory(); };
-document.addEventListener("click", ()=>{ topExportMenu.hidden=true; });
+document.addEventListener("click", ()=>{ toggleExportMenu(true); });
 
 /* ===== 탭 ===== */
 const TAB_KEY = "storyhelper_activeTab";
