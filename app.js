@@ -361,8 +361,9 @@ document.getElementById("topImportInput").onchange=e=>importStory(e);
 const topExportBtn=document.getElementById("topExportBtn");
 const topExportMenu=document.getElementById("topExportMenu");
 topExportBtn.onclick=e=>{ e.stopPropagation(); topExportMenu.hidden=!topExportMenu.hidden; };
-document.getElementById("topExportDocx").onclick=()=>{ topExportMenu.hidden=true; exportDocx(); };
-document.getElementById("topExportPdf").onclick=()=>{ topExportMenu.hidden=true; exportPdf(); };
+document.getElementById("topExportScript").onclick=()=>{ topExportMenu.hidden=true; exportScript(); };
+document.getElementById("topExportDialogue").onclick=()=>{ topExportMenu.hidden=true; exportDialogueOnly(); };
+document.getElementById("topExportStoryboard").onclick=()=>{ topExportMenu.hidden=true; exportStoryboardPdf(); };
 document.getElementById("topExportStory").onclick=()=>{ topExportMenu.hidden=true; exportStory(); };
 document.addEventListener("click", ()=>{ topExportMenu.hidden=true; });
 
@@ -2459,47 +2460,85 @@ function paginatePreview(right){
   }
 }
 
-/* 내보내기 */
-/* PDF로 내보내기 — 미리보기를 만든 뒤 인쇄(대상: PDF로 저장) */
-function exportPdf(){ buildPreview(); window.print(); }
-/* Word(.docx)로 내보내기 — html-docx-js로 미리보기 HTML을 변환 */
-function exportDocx(){
-  buildPreview();
-  const pv=document.getElementById("preview");
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${pv?pv.innerHTML:""}</body></html>`;
+/* 내보내기: 대본 출력(.docx) / 대사만 출력(.docx) / 콘티 출력(.pdf) */
+function esc(s){return(s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
+
+/* 플롯 섹션 순서대로 이어붙인 전체 글쓰기 블록 목록(글쓰기 탭에서 보이는 순서와 동일) */
+function allWriteBlocksOrdered(){
+  const list=[];
+  (P.plotDoc.sections||[]).forEach(sec=>{ blocksOfSection(sec.id).forEach(bl=>list.push(bl)); });
+  return list;
+}
+/* 블록 내용 HTML — 지문/대사 블럭을 구분하지 않고 줄바꿈으로만 나열, 대사는 "캐릭터: 대사" 형식 */
+function blockBodyHtml(bl){
+  const lines=(bl.items||[]).filter(it=>(it.text||"").trim().length)
+    .map(it=> it.type==="line" ? (esc(it.char||"(미지정)")+": "+esc(it.text.trim())) : esc(it.text.trim()));
+  return lines.join("<br>");
+}
+
+/* 1) 대본 출력 — Word(.docx), 표(번호 | 내용) */
+function exportScript(){
+  const blocks=allWriteBlocksOrdered();
+  if(!blocks.length){ alert("글쓰기 탭에 작성된 블록이 없습니다."); return; }
+  const rows=blocks.map((bl,i)=>
+    `<tr><td style="width:40px;text-align:center;vertical-align:top">${i+1}</td><td style="padding:6px">${blockBodyHtml(bl)}</td></tr>`
+  ).join("");
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+    <h2>${esc(P.name)} — 대본</h2>
+    <table border="1" style="border-collapse:collapse;width:100%">${rows}</table>
+  </body></html>`;
+  downloadDocx(html, (P.name||"story")+"_대본");
+}
+
+/* 2) 대사만 출력 — Word(.docx), 표 없이 줄바꿈으로만 블록 구분. 같은 블록의 대사는 이어서 출력, 캐릭터명은 제외 */
+function exportDialogueOnly(){
+  const blocks=allWriteBlocksOrdered();
+  const paras=[];
+  blocks.forEach(bl=>{
+    const lines=(bl.items||[]).filter(it=>it.type==="line" && (it.text||"").trim().length).map(it=>it.text.trim());
+    if(lines.length) paras.push(lines.join(" "));
+  });
+  if(!paras.length){ alert("작성된 대사가 없습니다."); return; }
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+    ${paras.map(p=>`<p>${esc(p)}</p>`).join("")}
+  </body></html>`;
+  downloadDocx(html, (P.name||"story")+"_대사");
+}
+
+function downloadDocx(html, filename){
   if(typeof htmlDocx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
   const blob=htmlDocx.asBlob(html);
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob); a.download=(P.name||"story")+".docx"; a.click();
+  a.href=URL.createObjectURL(blob); a.download=filename+".docx"; a.click();
 }
-function buildPreview(){
-  const pv=document.getElementById("preview"); if(!pv)return;
-  const chars=P.characters.map((ch,i)=>`
-    <p><b>인물 ${i+1}: ${esc(ch.name)||"-"}</b> (${esc(ch.role)})<br>
-    MBTI: ${esc(ch.mbti)||"-"} / 에니어그램: ${esc(ch.enneagram)||"-"}<br>
-    목표: ${esc(ch.goal)||"-"} / 결함: ${esc(ch.flaw)||"-"}<br>
-    인물 변화: 변화 전 - ${esc(ch.arcBefore)||"-"} / 변화 후 - ${esc(ch.arcAfter)||"-"}<br>${esc(ch.desc)||""}</p>`).join("");
-  let plot;
-  const pd=P.plotDoc;
-  if(pd && pd.structure && Array.isArray(pd.sections) && pd.sections.length){
-    const label=(PLOT_STRUCTURES[pd.structure]&&PLOT_STRUCTURES[pd.structure].label)||"사용자 구조";
-    plot=`<p class="muted" style="margin:0 0 8px">구조: ${esc(label)}</p>`+
-      pd.sections.map((s,i)=>{
-        const items=(s.ideaIds||[]).map(id=>{const t=plotIdeaText(id);return t?`<li>${esc(t)}</li>`:"";}).join("");
-        return `<p><b>${i+1}. ${esc(s.name)}</b></p>${items?`<ul>${items}</ul>`:`<p><i>(배치된 아이디어 없음)</i></p>`}`;
-      }).join("");
-  }else{
-    plot=`<p><i>(아직 플롯이 생성되지 않았습니다. '플롯 생성' 메뉴에서 구조를 선택하세요.)</i></p>`;
-  }
-  pv.innerHTML=`<h2 style="border-bottom:2px solid var(--accent);padding-bottom:8px">${esc(P.name)}</h2>
-    <p><b>로그라인:</b> ${esc(P.logline)||"-"}<br><b>장르:</b> ${P.genres.join(", ")||"-"}</p>
-    <div class="section-title">캐릭터</div>${chars}
-    <div class="section-title">세계관</div><p>${esc(P.world.summary)||"-"}<br>시대: ${esc(P.world.era)} / 장소: ${esc(P.world.place)}<br>규칙: ${esc(P.world.rules)}</p>
-    <div class="section-title">배경</div><p>사회: ${esc(P.background.social)}<br>분위기: ${esc(P.background.mood)}<br>${esc(P.background.detail)}</p>
-    <div class="section-title">사건</div><p>주요 사건: ${esc(P.event.main)}<br>갈등: ${esc(P.event.conflict)}<br>결말: ${esc(P.event.ending)}</p>
-    <div class="section-title">플롯</div>${plot}`;
+
+/* 3) 콘티 출력 — PDF, 표(왼쪽: 글 블록 내용 / 오른쪽: 콘티 이미지). 미리보기를 만든 뒤 인쇄(대상: PDF로 저장) */
+function exportStoryboardPdf(){
+  const blocks=allWriteBlocksOrdered();
+  if(!blocks.length){ alert("글쓰기 탭에 작성된 블록이 없습니다."); return; }
+  const pv=document.getElementById("preview"); if(!pv) return;
+  const rows=blocks.map(bl=>{
+    const title=bl.title?("<b>"+esc(bl.title)+"</b><br>"):"";
+    const body=blockBodyHtml(bl);
+    const left=title+(body||'<span class="muted">(내용 없음)</span>');
+    let right='<span class="muted">(콘티 없음)</span>';
+    if(bl.storyboard && bl.storyboard.key){
+      right=`<img src="/api/storyboard-image?key=${encodeURIComponent(bl.storyboard.key)}" style="max-width:100%;max-height:260px">`;
+    }
+    return `<tr><td style="width:50%;vertical-align:top;padding:8px">${left}</td><td style="width:50%;vertical-align:top;padding:8px;text-align:center">${right}</td></tr>`;
+  }).join("");
+  pv.innerHTML=`<h2 style="border-bottom:2px solid var(--accent);padding-bottom:8px">${esc(P.name)} — 콘티</h2>
+    <table border="1" style="border-collapse:collapse;width:100%">${rows}</table>`;
+  const imgs=Array.from(pv.querySelectorAll("img"));
+  if(!imgs.length){ window.print(); return; }
+  let remaining=imgs.length, done=false;
+  const finish=()=>{ if(done) return; done=true; window.print(); };
+  imgs.forEach(img=>{
+    if(img.complete){ remaining--; if(remaining<=0) finish(); return; }
+    img.onload=img.onerror=()=>{ remaining--; if(remaining<=0) finish(); };
+  });
+  setTimeout(finish, 4000);
 }
-function esc(s){return(s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
 
 function exportStory(){
   const blob=new Blob([JSON.stringify(P,null,2)],{type:"application/json"});
