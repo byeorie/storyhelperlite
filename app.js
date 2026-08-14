@@ -2523,6 +2523,11 @@ function importStory(e){
 }
 
 /* ===== 🖼 콘티제작 (글쓰기 탭의 장면 블록과 행 단위로 연동) ===== */
+/* 그리기 툴 펜 굵기 — 브라우저(개인)별로 마지막에 고른 값을 기억해서 다음에 그릴 때도 그대로 유지 */
+const DRAW_WIDTH_KEY = "storyhelper_drawWidth";
+function loadDrawWidth(){ const n=Number(localStorage.getItem(DRAW_WIDTH_KEY)); return (n>=1 && n<=24) ? n : 4; }
+function saveDrawWidth(n){ try{ localStorage.setItem(DRAW_WIDTH_KEY, String(n)); }catch(e){} }
+
 const SB_SIZES = {
   large: {w:350, h:500, label:"큰 칸"},
   medium:{w:350, h:350, label:"중간 칸"},
@@ -2792,7 +2797,7 @@ function openDrawModal(bl, sizeKey){
 
   const toolbar=document.createElement("div"); toolbar.className="draw-toolbar";
   const COLORS=["#2c2a26","#c4654a","#4a7fc4","#5a8f6b","#c4a34a","#8a4ac4","#c44a91"];
-  let curColor=COLORS[0], curWidth=4, erasing=false;
+  let curColor=COLORS[0], curWidth=loadDrawWidth(), erasing=false;
   const swatchWrap=document.createElement("div"); swatchWrap.className="draw-swatches";
   const swatchEls=[];
   COLORS.forEach((c,i)=>{
@@ -2809,7 +2814,7 @@ function openDrawModal(bl, sizeKey){
 
   const widthWrap=document.createElement("label"); widthWrap.className="draw-width-wrap"; widthWrap.textContent="굵기";
   const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="24"; widthInput.value=String(curWidth);
-  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); };
+  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); };
   widthWrap.appendChild(widthInput);
   toolbar.appendChild(widthWrap);
 
