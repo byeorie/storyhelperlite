@@ -2,6 +2,50 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-16 (4) — 아이디어 탐색: 작품DB 매칭 → 선택형 작법 가이드로 전면 교체
+
+**배경**: "로그라인을 입력하면 작품DB에서 비슷한 작품을 찾아주는" 기존 방식은 관리자가 작품DB(.md/.xlsx)를
+직접 구축·유지해야 해서 실질적으로 운영이 어려움 → 폐지 요청.
+
+**변경**: 아이디어 탐색 탭을 "주인공의 성격 / 목적 / 변화 / 세계관 / 플롯의 종류 / 엔딩의 종류" 6개 카테고리
+중 선택하면, 선택한 항목마다 구체적인 작법 안내(어떻게 써야 하는지)를 보여주는 방식으로 전면 교체.
+- **data.js**: `LOGLINE_SLOTS`(8슬롯) 삭제 → `STORY_GUIDE_SLOTS`(6카테고리 × 옵션별 작법 tip)로 교체
+- **app.js**: 작품DB 업로드/파싱/매칭 관련 함수 전부 삭제(`splitRow`, `rowsToWorks`, `parseMarkdownTable`,
+  `parseExcelBuffer`, `handleWorkDBFile`, `applyWorkDB`, `keywordOptions`, `matchWorks`, `fillWorkDB`),
+  `rExplore()`를 카테고리 선택 + 작법 안내 카드 렌더링으로 재작성. `rAdmin()`(작품DB 관리 페이지)과
+  상태의 `DB.workDB` 필드 전체 삭제
+- **index.html**: "관리자 — 작품DB 관리" 사이드바 메뉴(`adminNavGroup`) 삭제, 더 이상 쓰지 않는 `xlsx`
+  CDN 스크립트 태그 삭제 (docx 내보내기용 `docx` 스크립트는 유지)
+- 로그인 시스템 자체(`isAdmin`/`ADMIN_USERNAME`)는 향후 다른 용도로 쓰일 수 있어 그대로 둠
+
+## 2026-08-16 (3) — 대본/대사 Word 출력 시 대사 텍스트 굵게(bold) 처리
+- **app.js** 수정 — `blockBodyParagraphs()`(대본 출력용)와 `exportDialogueOnly()`(대사만 출력용) 두 곳
+  모두, 대사(line 타입) 텍스트에 `bold:true`를 적용. 캐릭터 이름은 기존에도 굵게 처리되어 있었음. 지문은
+  그대로 일반 굵기 유지.
+
+## 2026-08-16 (2) — 대본 출력 .docx가 MS워드에선 열리는데 한컴 워드에선 안 열리던 버그 수정
+
+**증상**: 위 항목에서 docx 라이브러리로 교체한 뒤 MS Word에서는 정상 출력되지만, 한컴 오피스(한컴 워드)
+에서는 파일이 열리지 않거나 표가 깨짐.
+
+**원인**: 대본 출력의 표를 만들 때 각 셀(TableCell)에만 개별 너비(700dxa / 9000dxa)를 지정하고, 표
+전체의 `columnWidths`는 지정하지 않았음. `docx` 라이브러리는 `columnWidths`가 없으면 `w:tblGrid`
+(표의 열 구조를 선언하는 부분)를 실제 셀 너비와 무관하게 기본값(모든 열 100dxa)으로 채워버려, 문서
+안에 "표 구조 선언(tblGrid)"과 "실제 셀 너비(tcW)"가 서로 어긋나는 결함 있는 표가 만들어짐. 또한 표
+전체 너비를 퍼센트(`WidthType.PERCENTAGE`, 100%)로 지정했는데, 라이브러리가 이를 표준적인 "50분의
+1% 단위 정수"가 아니라 `w:w="100%"`처럼 퍼센트 기호가 붙은 문자열로 그대로 써버려 값 형식이 모호해짐.
+MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 다시 그려주지만, 한컴 오피스의 OOXML
+가져오기 필터는 훨씬 엄격해서 tblGrid와 tcW가 불일치하는 표를 만나면 열기를 거부하거나 빈 문서로
+처리함.
+
+**수정**: `exportScript()`의 표 생성부에서
+- 표 전체 너비를 퍼센트 대신 dxa(트윕) 정수 고정값(9000 = 700+8300)으로 지정
+- `new Table({...})`에 `columnWidths:[700, 8300]`을 명시해 tblGrid가 실제 셀 너비와 정확히 일치하도록 수정
+
+**검증**: Playwright로 실제 app.js를 로드해 export 실행 후 생성된 .docx의 `word/document.xml`을 파싱해
+`w:tblGrid`(700/8300)와 각 `w:tcW`(700/8300) 값이 정확히 일치함을 확인. LibreOffice(soffice --headless)
+로도 정상 변환/텍스트 추출됨을 재확인.
+
 ## 2026-08-15 (61차) · 내보내기 롤메뉴가 작업스페이스에 가려지는 문제 수정
 - 증상: 상단바의 "내보내기" 드롭다운(대본/대사/콘티/.story)을 열면 메뉴가 워크스페이스(#app) 뒤로 가려져 거의 보이지 않음
 - 원인: `.topbar{overflow-x:auto}`가 걸려 있는데, CSS 스펙상 `overflow-x`가 `visible`이 아니면 지정하지 않은 `overflow-y`도 강제로 `auto`가 됨(가로 스크롤을 넣으려던 의도가 세로도 함께 잘라버림). `.mb-export-menu`는 `.topbar` 안의 `position:absolute` 요소라 이 세로 클리핑에 걸려, 버튼 아래로 펼쳐지는 부분(약 56px짜리 상단바 높이를 넘는 대부분)이 잘려나가 그 아래 워크스페이스가 비쳐 보였음. 같은 상단바의 `#userMenu`는 이미 `toggleUserMenu()`에서 열 때마다 `document.body`로 옮기고 `position:fixed`로 좌표를 직접 계산해 이 문제를 피해가고 있었는데, 내보내기 메뉴는 그 패턴이 적용돼 있지 않았음

@@ -146,20 +146,15 @@ function load(){
     if(d&&Array.isArray(d.projects)&&d.projects.length){
       d.projects=d.projects.map(fillProject);
       if(!d.projects.some(p=>p.id===d.current)) d.current=d.projects[0].id;
-      d.workDB=fillWorkDB(d.workDB);
       fillOpenIds(d);
       return d;
     }
   }catch(e){}
   const id=uid();
-  return {current:id, projects:[blankProject(id,"내 첫 작품")], workDB:fillWorkDB(), openIds:[id]};
-}
-/* 작품DB(아이디어 탐색용) 기본값 보정 */
-function fillWorkDB(w){
-  return Object.assign({fileName:"", uploadedAt:"", works:[]}, w||{});
+  return {current:id, projects:[blankProject(id,"내 첫 작품")], openIds:[id]};
 }
 function blankExplore(){
-  const o={}; LOGLINE_SLOTS.forEach(s=>o[s.key]=""); return o;
+  const o={}; STORY_GUIDE_SLOTS.forEach(s=>o[s.key]=""); return o;
 }
 /* 예전 버전 데이터에 누락된 필드를 채워 오류를 방지 */
 function fillProject(p){
@@ -426,13 +421,7 @@ function render(){
     if(!P) P=currentProject();
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
-    if(!DB.workDB) DB.workDB=fillWorkDB();
-    if(activeTab==="admin" && !isAdmin()){
-      app.innerHTML=`<div class="card"><h2>${ICONS.lock} 접근 권한이 없습니다</h2>`
-        +'<p class="hint">이 메뉴는 관리자 계정으로 로그인해야 사용할 수 있습니다.</p></div>';
-      return;
-    }
-    const renderers={idea:rIdea, explore:rExplore, admin:rAdmin, character:rChar, background:rBg,
+    const renderers={idea:rIdea, explore:rExplore, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard};
     (renderers[activeTab]||rIdea)();
   }catch(e){
@@ -738,118 +727,54 @@ function ideaBlockCard(b, allTags, list){
   return d;
 }
 
-/* ===== 🔎 아이디어 탐색 (작품DB 매칭) ===== */
-function splitRow(line){
-  return line.split("|").map(s=>s.trim()).filter((s,i,a)=>!(i===0&&s==="")&&!(i===a.length-1&&s===""));
-}
-function rowsToWorks(headers, rows){
-  const idx={};
-  headers.forEach((h,i)=>{
-    const clean=(h||"").trim();
-    if(clean==="제목"||clean.toLowerCase()==="title") idx.title=i;
-    LOGLINE_SLOTS.forEach(s=>{ if(clean===s.label) idx[s.key]=i; });
-  });
-  return rows.map(cells=>{
-    const w={title:(idx.title!=null?(cells[idx.title]||""):"").trim(), slots:{}};
-    LOGLINE_SLOTS.forEach(s=>{
-      const raw=idx[s.key]!=null?(cells[idx[s.key]]||""):"";
-      w.slots[s.key]=raw.split(/[,\/·]/).map(x=>x.trim()).filter(Boolean);
-    });
-    return w;
-  }).filter(w=>w.title);
-}
-function parseMarkdownTable(text){
-  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.startsWith("|"));
-  if(lines.length<2) return [];
-  const headers=splitRow(lines[0]);
-  const dataLines=lines.slice(1).filter(l=>!/^\|[\s\-:|]+\|$/.test(l));
-  return rowsToWorks(headers, dataLines.map(splitRow));
-}
-function parseExcelBuffer(buf){
-  const wb=XLSX.read(buf,{type:"array"});
-  const sheet=wb.Sheets[wb.SheetNames[0]];
-  const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
-  if(!rows.length) return [];
-  const headers=rows[0].map(h=>String(h||"").trim());
-  const dataRows=rows.slice(1).map(r=>headers.map((_,i)=>String(r[i]!=null?r[i]:"")));
-  return rowsToWorks(headers, dataRows);
-}
-function handleWorkDBFile(file){
-  const name=file.name||"업로드파일";
-  if(/\.(md|txt)$/i.test(name)){
-    const rd=new FileReader();
-    rd.onload=()=>applyWorkDB(parseMarkdownTable(rd.result), name);
-    rd.readAsText(file,"utf-8");
-  }else if(/\.(xlsx|xls)$/i.test(name)){
-    if(typeof XLSX==="undefined"){ alert("엑셀 파싱 기능을 불러오지 못했습니다. 인터넷 연결을 확인 후 새로고침 해주세요."); return; }
-    const rd=new FileReader();
-    rd.onload=()=>applyWorkDB(parseExcelBuffer(new Uint8Array(rd.result)), name);
-    rd.readAsArrayBuffer(file);
-  }else{
-    alert(".md 또는 .xlsx 파일만 업로드할 수 있습니다.");
-  }
-}
-function applyWorkDB(works,name){
-  if(!works.length){ alert("작품을 하나도 인식하지 못했습니다. 열 이름(제목/주인공 특성/시대/공간/사건 유형/위기 유형/원인·동기/해결 방식/결말)을 확인해주세요."); return; }
-  DB.workDB={fileName:name, uploadedAt:new Date().toLocaleString(), works};
-  save(); render();
-}
-function keywordOptions(key){
-  const set=new Set();
-  ((DB.workDB&&DB.workDB.works)||[]).forEach(w=>(w.slots[key]||[]).forEach(v=>v&&set.add(v)));
-  return [...set].sort((a,b)=>a.localeCompare(b,"ko"));
-}
-function matchWorks(sel){
-  const activeKeys=LOGLINE_SLOTS.map(s=>s.key).filter(k=>(sel[k]||"").trim());
-  if(!activeKeys.length) return [];
-  return ((DB.workDB&&DB.workDB.works)||[]).map(w=>{
-    const matched=activeKeys.filter(k=>(w.slots[k]||[]).some(v=>v.toLowerCase()===sel[k].trim().toLowerCase()));
-    return {work:w, matched, score:matched.length};
-  }).filter(r=>r.score>0).sort((a,b)=>b.score-a.score).slice(0,10);
+/* ===== 🔎 아이디어 탐색 (선택형 스토리 작법 가이드) =====
+   주인공의 성격/목적/변화/세계관/플롯의 종류/엔딩의 종류를 선택하면,
+   선택 조합에 맞춰 이야기를 어떻게 써야 할지 안내 문구를 보여준다. (작품DB 매칭 방식은 폐지) */
+function guideOptionFor(key,val){
+  const slot=STORY_GUIDE_SLOTS.find(s=>s.key===key);
+  return slot&&slot.options.find(o=>o.v===val);
 }
 function rExplore(){
-  if(!DB.workDB) DB.workDB=fillWorkDB();
-  const wdb=DB.workDB;
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
     <h2>${ICONS.search} 아이디어 탐색</h2>
-    <p class="hint">슬롯을 선택해 로그라인을 조합하고, 등록된 작품DB에서 비슷한 작품을 찾아봅니다.</p>
+    <p class="hint">주인공의 성격·목적·변화, 세계관, 플롯의 종류, 엔딩의 종류를 선택하면 어떻게 이야기를 풀어가면 좋을지 작법을 안내해 드립니다.</p>
   </div>`;
   app.appendChild(c);
 
   const slotsCard=document.createElement("div"); slotsCard.className="card";
-  slotsCard.innerHTML=`<h3>로그라인 슬롯 선택</h3>
+  slotsCard.innerHTML=`<h3>카테고리 선택</h3>
     <div class="explore-grid" id="slotGrid"></div>
     <div class="ai-box" id="loglinePreview"></div>
-    <button class="btn ghost" id="saveAsIdea" style="margin-top:10px">＋ 이 로그라인을 아이디어로 저장</button>`;
+    <button class="btn ghost" id="saveAsIdea" style="margin-top:10px">＋ 이 줄거리를 아이디어로 저장</button>`;
   app.appendChild(slotsCard);
   const grid=slotsCard.querySelector("#slotGrid");
   function updatePreview(){
     const pv=slotsCard.querySelector("#loglinePreview");
     const sel=P.explore;
-    const has=LOGLINE_SLOTS.some(s=>sel[s.key]);
-    if(!has){ pv.className="ai-box empty"; pv.textContent="슬롯을 선택하면 로그라인 초안이 여기에 만들어집니다."; return; }
+    const has=STORY_GUIDE_SLOTS.some(s=>sel[s.key]);
+    if(!has){ pv.className="ai-box empty"; pv.textContent="카테고리를 선택하면 줄거리 초안이 여기에 만들어집니다."; return; }
     pv.className="ai-box";
-    pv.textContent=`${sel.era||"(시대 미정)"} ${sel.place||"(공간 미정)"}, ${sel.protagonist||"(특성 미정)"} 주인공이 `
-      +`${sel.eventType||"(사건 미정)"}(으)로 ${sel.crisisType||"(위기 미정)"}을 겪지만, `
-      +`${sel.motive||"(동기 미정)"} 때문에 ${sel.resolution||"(해결 미정)"}(으)로 맞서 결국 ${sel.ending||"(결말 미정)"}을 맞는다.`;
+    pv.textContent=`${sel.worldview||"(세계관 미정)"} 세계에서, ${sel.personality||"(성격 미정)"} 주인공이 `
+      +`${sel.goal||"(목적 미정)"}을(를) 위해 나아간다. ${sel.plotType||"(플롯 미정)"} 전개 속에서 `
+      +`${sel.change||"(변화 미정)"}의 과정을 거치고, 결국 ${sel.endingType||"(결말 미정)"}(으)로 이야기를 맺는다.`;
   }
-  LOGLINE_SLOTS.forEach(s=>{
-    const opts=keywordOptions(s.key);
+  STORY_GUIDE_SLOTS.forEach(s=>{
     const wrap=document.createElement("div"); wrap.className="explore-slot";
     wrap.innerHTML=`<label>${s.label}</label>
-      <select>${`<option value="">선택 안 함</option>`}${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("")}<option value="__custom__">직접 입력…</option></select>
+      <select>${`<option value="">선택 안 함</option>`}${s.options.map(o=>`<option value="${esc(o.v)}">${esc(o.v)}</option>`).join("")}<option value="__custom__">직접 입력…</option></select>
       <input type="text" placeholder="${s.ph}" style="display:none;margin-top:6px">`;
     grid.appendChild(wrap);
     const sel=wrap.querySelector("select"), custom=wrap.querySelector("input");
     const cur=P.explore[s.key]||"";
+    const opts=s.options.map(o=>o.v);
     if(cur && opts.includes(cur)) sel.value=cur;
     else if(cur){ sel.value="__custom__"; custom.style.display="block"; custom.value=cur; }
     sel.onchange=()=>{
       if(sel.value==="__custom__"){ custom.style.display="block"; custom.focus(); }
-      else{ custom.style.display="none"; custom.value=""; P.explore[s.key]=sel.value; save(); updatePreview(); }
+      else{ custom.style.display="none"; custom.value=""; P.explore[s.key]=sel.value; save(); updatePreview(); renderGuide(); }
     };
-    custom.oninput=()=>{ P.explore[s.key]=custom.value.trim(); save(); updatePreview(); };
+    custom.oninput=()=>{ P.explore[s.key]=custom.value.trim(); save(); updatePreview(); renderGuide(); };
   });
   updatePreview();
   slotsCard.querySelector("#saveAsIdea").onclick=()=>{
@@ -859,56 +784,24 @@ function rExplore(){
     save(); alert("아이디어 수집에 저장했습니다.");
   };
 
-  const resultCard=document.createElement("div"); resultCard.className="card";
-  resultCard.innerHTML=`<h3>비슷한 작품 찾기</h3>
-    <button class="btn" id="matchBtn">${ICONS.search} 매칭 작품 찾기</button>
-    <div id="matchResults" class="explore-results"></div>`;
-  app.appendChild(resultCard);
-  resultCard.querySelector("#matchBtn").onclick=()=>{
-    const box=resultCard.querySelector("#matchResults");
-    if(!wdb.works.length){ box.innerHTML=`<p class="hint">먼저 작품DB를 업로드해주세요.</p>`; return; }
-    const results=matchWorks(P.explore);
-    if(!results.length){ box.innerHTML=`<p class="hint">일치하는 작품이 없습니다. 슬롯을 더 선택하거나 다르게 선택해보세요.</p>`; return; }
+  const guideCard=document.createElement("div"); guideCard.className="card";
+  guideCard.innerHTML=`<h3>작법 안내</h3><div id="guideResults" class="explore-results"></div>`;
+  app.appendChild(guideCard);
+  function renderGuide(){
+    const box=guideCard.querySelector("#guideResults");
+    const active=STORY_GUIDE_SLOTS.filter(s=>(P.explore[s.key]||"").trim());
+    if(!active.length){ box.innerHTML=`<p class="hint">위에서 카테고리를 하나 이상 선택하면 각 선택에 맞는 작법 안내가 여기에 나타납니다.</p>`; return; }
     box.innerHTML="";
-    results.forEach(r=>{
+    active.forEach(s=>{
+      const val=P.explore[s.key].trim();
+      const opt=guideOptionFor(s.key,val);
       const d=document.createElement("div"); d.className="match-card";
-      const pct=Math.round(r.score/LOGLINE_SLOTS.length*100);
-      d.innerHTML=`<div class="match-head"><b>${esc(r.work.title)}</b><span class="match-score">${r.score}/${LOGLINE_SLOTS.length} 일치 (${pct}%)</span></div>
-        <div class="match-tags">${r.matched.map(k=>{
-          const slot=LOGLINE_SLOTS.find(x=>x.key===k);
-          return `<span class="idea-tag">${esc(slot.label)}: ${esc(P.explore[k])}</span>`;
-        }).join("")}</div>`;
+      d.innerHTML=`<div class="match-head"><b>${esc(s.label)}</b><span class="match-score">${esc(val)}</span></div>
+        <p class="hint" style="margin-top:8px">${esc(opt?opt.tip:"직접 입력한 항목입니다. 이 요소가 이야기 전체에서 어떤 역할을 하는지 스스로 점검하며 써보세요.")}</p>`;
       box.appendChild(d);
     });
-  };
-}
-
-/* 🔐 관리자 — 작품DB 등록/관리 (아이디: profh 전용) */
-function rAdmin(){
-  if(!DB.workDB) DB.workDB=fillWorkDB();
-  const wdb=DB.workDB;
-  const c=document.createElement("div"); c.className="card";
-  c.innerHTML=`<h2>${ICONS.lock} 작품DB 관리</h2>
-    <p class="hint">관리자 계정(${esc(ADMIN_USERNAME)})으로 로그인된 상태입니다. 여기서 등록한 작품DB는 모든 학생의 "아이디어 탐색" 탭에서 공통으로 사용됩니다.</p>
-    <div class="explore-dbstatus">${wdb.works.length
-      ?`${ICONS.book} <b>${esc(wdb.fileName)}</b> — 작품 ${wdb.works.length}개 (${esc(wdb.uploadedAt)})`
-      :`아직 작품DB가 없습니다. 아래에서 파일을 업로드하세요.`}</div>
-    <label class="btn ghost" style="display:inline-block;margin-top:8px">${ICONS.upload} 작품DB 업로드 (.md / .xlsx)
-      <input type="file" id="wdbIn" accept=".md,.txt,.xlsx,.xls" style="display:none"></label>
-    ${wdb.works.length?`<button class="btn sm danger" id="wdbClear" style="margin-left:8px">DB 비우기</button>`:""}
-    <p class="hint" style="margin-top:10px">파일 형식: 첫 행(헤더)에 <b>제목, 주인공 특성, 시대, 공간, 사건 유형, 위기 유형, 원인·동기, 해결 방식, 결말</b> 열을 두고, 한 칸에 키워드가 여러 개면 쉼표(,)로 구분하세요. (md는 표 형식, xlsx는 첫 시트 사용)</p>
-    <div id="wdbList"></div>`;
-  app.appendChild(c);
-  c.querySelector("#wdbIn").onchange=e=>{ const f=e.target.files[0]; if(f) handleWorkDBFile(f); e.target.value=""; };
-  const clearBtn=c.querySelector("#wdbClear");
-  if(clearBtn) clearBtn.onclick=()=>{ if(confirm("업로드한 작품DB를 모두 삭제할까요?")){ DB.workDB=fillWorkDB(); save(); render(); } };
-  const listBox=c.querySelector("#wdbList");
-  if(wdb.works.length){
-    listBox.innerHTML=`<label style="margin-top:16px">등록된 작품 목록 (${wdb.works.length})</label>
-      <div class="hint" style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:10px 12px">
-        ${wdb.works.map(w=>esc(w.title)).join(", ")}
-      </div>`;
   }
+  renderGuide();
 }
 
 /* ① 캐릭터 */
@@ -2490,40 +2383,64 @@ function blockBodyHtml(bl){
   return lines.join("<br>");
 }
 
+/* 블록 내용 → Word 문단 배열(줄바꿈=문단 구분, 대사는 "캐릭터: 대사" 형식, 지문/대사 구분 없이 나열) */
+function blockBodyParagraphs(bl){
+  const {Paragraph,TextRun}=docx;
+  const items=(bl.items||[]).filter(it=>(it.text||"").trim().length);
+  if(!items.length) return [new Paragraph("")];
+  return items.map(it=> it.type==="line"
+    ? new Paragraph({children:[new TextRun({text:(it.char||"(미지정)")+": ", bold:true}), new TextRun({text:it.text.trim(), bold:true})]})
+    : new Paragraph({children:[new TextRun(it.text.trim())]})
+  );
+}
+
 /* 1) 대본 출력 — Word(.docx), 표(번호 | 내용) */
-function exportScript(){
+async function exportScript(){
   const blocks=allWriteBlocksOrdered();
   if(!blocks.length){ alert("글쓰기 탭에 작성된 블록이 없습니다."); return; }
-  const rows=blocks.map((bl,i)=>
-    `<tr><td style="width:40px;text-align:center;vertical-align:top">${i+1}</td><td style="padding:6px">${blockBodyHtml(bl)}</td></tr>`
-  ).join("");
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
-    <h2>${esc(P.name)} — 대본</h2>
-    <table border="1" style="border-collapse:collapse;width:100%">${rows}</table>
-  </body></html>`;
-  downloadDocx(html, (P.name||"story")+"_대본");
+  if(typeof docx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
+  const {Document,Packer,Paragraph,TextRun,Table,TableRow,TableCell,WidthType,VerticalAlign,AlignmentType,HeadingLevel}=docx;
+  /* 표 전체 너비를 dxa(트윕) 고정값으로 지정하고 columnWidths를 함께 명시해야
+     tblGrid가 실제 칸 너비와 일치한다. columnWidths를 생략하면 docx 라이브러리가
+     기본값(모든 칸 100dxa)으로 tblGrid를 채워버려 tblGrid와 각 셀의 실제 너비(tcW)가
+     어긋난 "구조가 깨진" 표가 되고, MS워드는 이를 눈감아주지만 한컴 오피스 등 더 엄격한
+     OOXML 파서는 표/문서를 아예 열지 못하거나 빈 것으로 처리한다. 표 너비도 퍼센트(pct)
+     대신 dxa 정수로 고정해 파서마다 다르게 해석될 여지를 없앤다. */
+  const NUM_COL_W=700, CONTENT_COL_W=8300;
+  const rows=blocks.map((bl,i)=> new TableRow({children:[
+    new TableCell({
+      width:{size:NUM_COL_W,type:WidthType.DXA}, verticalAlign:VerticalAlign.TOP,
+      children:[new Paragraph({alignment:AlignmentType.CENTER, children:[new TextRun(String(i+1))]})]
+    }),
+    new TableCell({ width:{size:CONTENT_COL_W,type:WidthType.DXA}, children:blockBodyParagraphs(bl) })
+  ]}));
+  const doc=new Document({sections:[{children:[
+    new Paragraph({text:(P.name||"")+" — 대본", heading:HeadingLevel.HEADING_2}),
+    new Table({width:{size:NUM_COL_W+CONTENT_COL_W,type:WidthType.DXA}, columnWidths:[NUM_COL_W,CONTENT_COL_W], rows})
+  ]}]});
+  const blob=await Packer.toBlob(doc);
+  triggerDownload(blob, (P.name||"story")+"_대본.docx");
 }
 
 /* 2) 대사만 출력 — Word(.docx), 표 없이 줄바꿈으로만 블록 구분. 같은 블록의 대사는 이어서 출력, 캐릭터명은 제외 */
-function exportDialogueOnly(){
+async function exportDialogueOnly(){
   const blocks=allWriteBlocksOrdered();
+  if(typeof docx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
+  const {Document,Packer,Paragraph,TextRun}=docx;
   const paras=[];
   blocks.forEach(bl=>{
     const lines=(bl.items||[]).filter(it=>it.type==="line" && (it.text||"").trim().length).map(it=>it.text.trim());
-    if(lines.length) paras.push(lines.join(" "));
+    if(lines.length) paras.push(new Paragraph({children:[new TextRun({text:lines.join(" "), bold:true})]}));
   });
   if(!paras.length){ alert("작성된 대사가 없습니다."); return; }
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
-    ${paras.map(p=>`<p>${esc(p)}</p>`).join("")}
-  </body></html>`;
-  downloadDocx(html, (P.name||"story")+"_대사");
+  const doc=new Document({sections:[{children:paras}]});
+  const blob=await Packer.toBlob(doc);
+  triggerDownload(blob, (P.name||"story")+"_대사.docx");
 }
 
-function downloadDocx(html, filename){
-  if(typeof htmlDocx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
-  const blob=htmlDocx.asBlob(html);
+function triggerDownload(blob, filename){
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob); a.download=filename+".docx"; a.click();
+  a.href=URL.createObjectURL(blob); a.download=filename; a.click();
 }
 
 /* 3) 콘티 출력 — PDF, 표(왼쪽: 글 블록 내용 / 오른쪽: 콘티 이미지). 미리보기를 만든 뒤 인쇄(대상: PDF로 저장) */
