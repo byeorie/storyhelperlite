@@ -1253,11 +1253,11 @@ function charRelationshipGraph(){
   return wrap;
 }
 
-/* 세계관 설정 (세계관 + 배경을 하나로 통합) */
+/* 배경 설정 (세계관 + 배경을 하나로 통합) */
 function rBg(){
   const c=document.createElement("div");
   const worldTypeOpts=(typeof STORY_GUIDE_SLOTS!=="undefined"?((STORY_GUIDE_SLOTS.find(s=>s.key==="worldview")||{}).options||[]):[]);
-  c.innerHTML=`<div class="card"><h2>${ICONS.globe} 세계관 설정</h2>
+  c.innerHTML=`<div class="card"><h2>${ICONS.globe} 배경 설정</h2>
     <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기, 지리·역사·사회 구조를 정리합니다. 굵은 항목만 채워도 충분하며 나머지는 필요한 만큼만 채우세요.</p>
 
     <div class="section-title">기본 정보</div>
