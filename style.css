@@ -390,8 +390,8 @@ textarea{resize:vertical;min-height:70px}
 
 /* ===== 배경 설정 · 사건 설정 — 오른쪽에 기획서 미리보기(읽기 전용) 분할 화면 ===== */
 .setting-split{display:flex;gap:14px;align-items:flex-start}
-.setting-main{flex:0 1 720px;min-width:0}
-.setting-planview{flex:1 1 0;min-width:280px;position:sticky;top:70px;
+.setting-main{flex:0 1 60%;min-width:0}
+.setting-planview{flex:0 1 40%;min-width:260px;position:sticky;top:70px;
   max-height:calc(100vh - 90px);overflow-y:auto}
 .plan-viewer-card h3{margin:0 0 4px;font-size:15px}
 .plan-view-block{background:#fbfaf7}

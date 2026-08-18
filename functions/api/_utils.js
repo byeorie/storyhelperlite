@@ -158,7 +158,7 @@ export async function sendEmail(env, { to, subject, text }) {
     await c.cmd("DATA", 354);
     const bodyLines = String(text).split("\n").map((l) => (l.startsWith(".") ? "." + l : l));
     const headers = [
-      `From: 글쓰기도우미 <${user}>`,
+      `From: 스토리텔링 가이드 <${user}>`,
       `To: <${to}>`,
       `Subject: ${encodeHeaderUtf8(subject)}`,
       "MIME-Version: 1.0",

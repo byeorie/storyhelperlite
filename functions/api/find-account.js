@@ -26,12 +26,12 @@ export async function onRequestPost({ request, env }) {
   const resetUrl = `${origin}/?reset=${token}`;
   const text =
     `안녕하세요, ${user.username} 님.\n\n` +
-    `글쓰기도우미 계정의 아이디는 "${user.username}" 입니다.\n\n` +
+    `스토리텔링 가이드 계정의 아이디는 "${user.username}" 입니다.\n\n` +
     `아래 링크에서 새 비밀번호를 설정할 수 있습니다. (${RESET_EXPIRE_MIN}분간 유효, 1회만 사용 가능)\n${resetUrl}\n\n` +
     `본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.`;
 
   try {
-    await sendEmail(env, { to: email, subject: "[글쓰기도우미] 아이디 안내 및 비밀번호 재설정", text });
+    await sendEmail(env, { to: email, subject: "[스토리텔링 가이드] 아이디 안내 및 비밀번호 재설정", text });
   } catch (e) {
     return jsonResponse({ error: "메일 발송에 실패했습니다: " + e.message }, 500);
   }

@@ -1,4 +1,4 @@
--- 글쓰기도우미 D1 스키마
+-- 스토리텔링 가이드 D1 스키마
 -- 적용 방법(교수님 진행용): Cloudflare 대시보드 > Workers & Pages > D1 > 해당 DB 선택
 -- > Console 탭에 이 파일 내용을 붙여넣고 실행 (또는 `wrangler d1 execute <DB이름> --file=schema.sql`)
 
