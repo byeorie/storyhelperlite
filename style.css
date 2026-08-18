@@ -109,6 +109,12 @@ textarea{resize:vertical;min-height:70px}
 .plan-block textarea.plan-ta-lg{min-height:110px}
 .plan-block textarea.plan-ta-xl{min-height:220px}
 
+/* 세계관 설정 — 용어사전(설정 관리) 카드 리스트 */
+.wv-glossary-list{display:flex;flex-direction:column;gap:12px;margin-bottom:10px}
+.wv-term-head{display:flex;align-items:center;gap:8px}
+.wv-term-head .wv-term-name{flex:1;font-weight:700}
+.wv-term textarea{min-height:56px}
+
 /* 캐릭터 */
 .charlist .char-item{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;background:#fcfbf9}
 .char-item .char-head{display:flex;justify-content:space-between;align-items:center}

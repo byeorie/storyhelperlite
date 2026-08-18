@@ -167,9 +167,12 @@ function blankExplore(){
 /* 예전 버전 데이터에 누락된 필드를 채워 오류를 방지 */
 function fillProject(p){
   const b=blankProject(p.id||uid(), p.name||"제목 없음");
+  const world=Object.assign({}, b.world, p.world||{});
+  world.glossary=Array.isArray(world.glossary)?world.glossary.map(g=>Object.assign(
+    {id:uid(), term:"", definition:"", firstEpisode:"", absoluteRule:"", disclosure:"", resolved:""}, g)):[];
   return Object.assign({}, b, p, {
     idea: Object.assign({}, b.idea, p.idea||{}),
-    world: Object.assign({}, b.world, p.world||{}),
+    world,
     background: Object.assign({}, b.background, p.background||{}),
     event: Object.assign({}, b.event, p.event||{}),
     characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>{
@@ -218,7 +221,8 @@ function blankProject(id,name){
   return {id,name,logline:"",genres:[],
     idea:{protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""},
     characters:[blankChar()],
-    world:{summary:"",rules:"",era:"",place:""},
+    world:{summary:"",rules:"",era:"",place:"",type:"",regions:"",timeline:"",politics:"",
+      factions:"",economy:"",taboo:"",culture:"",language:"",conflict:"",glossary:[]},
     background:{social:"",mood:"",detail:""},
     event:{main:"",conflict:"",ending:""},
     plot:Array(12).fill(""),
@@ -1249,27 +1253,123 @@ function charRelationshipGraph(){
   return wrap;
 }
 
-/* 배경 설정 (세계관 + 배경을 하나로 통합) */
+/* 세계관 설정 (세계관 + 배경을 하나로 통합) */
 function rBg(){
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.building} 배경 설정</h2>
-    <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기, 이야기가 시작되는 구체적 상황을 정합니다.</p>
+  const worldTypeOpts=(typeof STORY_GUIDE_SLOTS!=="undefined"?((STORY_GUIDE_SLOTS.find(s=>s.key==="worldview")||{}).options||[]):[]);
+  c.innerHTML=`<div class="card"><h2>${ICONS.globe} 세계관 설정</h2>
+    <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기, 지리·역사·사회 구조를 정리합니다. 굵은 항목만 채워도 충분하며 나머지는 필요한 만큼만 채우세요.</p>
+
+    <div class="section-title">기본 정보</div>
     <label>한 줄 요약</label><textarea id="w_summary" placeholder="이 세계는 어떤 곳인가"></textarea>
-    <div class="row"><div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
-    <div><label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…"></div></div>
-    <label>세계의 규칙 (마법·기술·금기 등)</label><textarea id="w_rules"></textarea>
-    <div class="section-title">구체적 상황</div>
-    <label>사회·정치적 배경</label><textarea id="b_social"></textarea>
+    <div class="row">
+      <div><label>세계관 유형</label><select id="w_type"><option value="">선택 안 함</option>${worldTypeOpts.map(o=>`<option value="${esc(o.v)}">${esc(o.v)}</option>`).join("")}</select></div>
+      <div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
+      <div><label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…"></div>
+    </div>
     <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
-    <label>세부 묘사</label><textarea id="b_detail"></textarea></div>`;
+
+    <div class="section-title">지리 · 역사 (선택)</div>
+    <label>주요 지역/장소</label><textarea id="w_regions" placeholder="이야기의 주 무대가 되는 지역들과 각각의 특징"></textarea>
+    <label>연표 · 주요 사건</label><textarea id="w_timeline" placeholder="세계의 역사에서 이야기에 영향을 주는 사건들"></textarea>
+
+    <div class="section-title">사회 구조 (선택)</div>
+    <label>정치체제</label><textarea id="w_politics" placeholder="왕정 / 공화정 / 부족연합 등 통치 방식"></textarea>
+    <label>계급 · 종족 · 세력 구도</label><textarea id="w_factions" placeholder="신분 구조, 종족, 주요 세력들"></textarea>
+    <label>경제</label><textarea id="w_economy" placeholder="화폐, 산업, 계층별 생활수준"></textarea>
+    <label>사회 전반 설명</label><textarea id="b_social"></textarea>
+
+    <div class="section-title">규칙 체계</div>
+    <label>마법 · 기술 · 초자연 규칙</label><textarea id="w_rules" placeholder="이 세계만의 마법·기술·금기의 기본 원리"></textarea>
+    <label>절대 금기</label><textarea id="w_taboo" placeholder="어겨서는 안 되는 규칙과 대가"></textarea>
+
+    <div class="section-title">문화 · 일상 (선택)</div>
+    <label>풍습 · 종교</label><textarea id="w_culture"></textarea>
+    <label>언어 · 호칭 특징</label><textarea id="w_language"></textarea>
+
+    <div class="section-title">갈등 · 세력 구도 (선택)</div>
+    <label>대립 세력 / 전쟁·분쟁 요소</label><textarea id="w_conflict"></textarea>
+    <label>기타 세부 묘사</label><textarea id="b_detail"></textarea>
+
+    <div class="section-title">설정 관리 (용어사전)</div>
+    <p class="hint" style="margin:0 0 10px">연재 중 설정 실수를 막기 위한 항목입니다. 새로운 세계관 용어(장소·조직·아이템·규칙 등)가 등장할 때마다 카드를 추가해 관리하세요.</p>
+    <div class="wv-glossary-list" id="wvGlossaryList"></div>
+    <button type="button" class="btn ghost sm" id="wvGlossaryAdd">${ICONS.plus} 용어 추가</button>
+  </div>`;
   app.appendChild(c);
   bind(c.querySelector("#w_summary"),P.world,"summary");
+  bind(c.querySelector("#w_type"),P.world,"type");
   bind(c.querySelector("#w_era"),P.world,"era");
   bind(c.querySelector("#w_place"),P.world,"place");
+  bind(c.querySelector("#w_regions"),P.world,"regions");
+  bind(c.querySelector("#w_timeline"),P.world,"timeline");
+  bind(c.querySelector("#w_politics"),P.world,"politics");
+  bind(c.querySelector("#w_factions"),P.world,"factions");
+  bind(c.querySelector("#w_economy"),P.world,"economy");
   bind(c.querySelector("#w_rules"),P.world,"rules");
+  bind(c.querySelector("#w_taboo"),P.world,"taboo");
+  bind(c.querySelector("#w_culture"),P.world,"culture");
+  bind(c.querySelector("#w_language"),P.world,"language");
+  bind(c.querySelector("#w_conflict"),P.world,"conflict");
   bind(c.querySelector("#b_social"),P.background,"social");
   bind(c.querySelector("#b_mood"),P.background,"mood");
   bind(c.querySelector("#b_detail"),P.background,"detail");
+
+  /* 설정 관리(용어사전) — 반복 카드 리스트 */
+  function renderGlossary(){
+    const listEl=c.querySelector("#wvGlossaryList");
+    listEl.innerHTML="";
+    P.world.glossary=P.world.glossary||[];
+    if(!P.world.glossary.length){
+      listEl.innerHTML='<p class="hint" style="margin:0 0 10px">아직 등록된 용어가 없습니다.</p>';
+      return;
+    }
+    P.world.glossary.forEach((g,i)=>{
+      const box=document.createElement("div"); box.className="plan-block wv-term";
+      box.innerHTML=`
+        <div class="wv-term-head">
+          <input type="text" class="wv-term-name" placeholder="용어명 (예: 마력석, 붉은 여단…)" value="${esc(g.term||"")}">
+          <button type="button" class="chip-x" title="삭제">${ICONS.close}</button>
+        </div>
+        <label>한 줄 정의</label><input type="text" class="wv-term-def" value="${esc(g.definition||"")}">
+        <div class="row">
+          <div><label>첫 등장 회차</label><input type="text" class="wv-term-ep" placeholder="예: 12화" value="${esc(g.firstEpisode||"")}"></div>
+          <div><label>독자 공개 범위</label><select class="wv-term-disc">
+            <option value=""${g.disclosure?"":" selected"}>선택 안 함</option>
+            <option value="공개"${g.disclosure==="공개"?" selected":""}>공개</option>
+            <option value="일부 공개"${g.disclosure==="일부 공개"?" selected":""}>일부 공개</option>
+            <option value="비공개"${g.disclosure==="비공개"?" selected":""}>비공개</option>
+          </select></div>
+          <div><label>떡밥 회수 여부</label><select class="wv-term-res">
+            <option value=""${g.resolved?"":" selected"}>선택 안 함</option>
+            <option value="회수완료"${g.resolved==="회수완료"?" selected":""}>회수완료</option>
+            <option value="미회수"${g.resolved==="미회수"?" selected":""}>미회수</option>
+            <option value="해당없음"${g.resolved==="해당없음"?" selected":""}>해당없음</option>
+          </select></div>
+        </div>
+        <label>절대 규칙 (이 설정이 절대 어겨서는 안 되는 선)</label><textarea class="wv-term-rule">${esc(g.absoluteRule||"")}</textarea>`;
+      const nameEl=box.querySelector(".wv-term-name");
+      const defEl=box.querySelector(".wv-term-def");
+      const epEl=box.querySelector(".wv-term-ep");
+      const discEl=box.querySelector(".wv-term-disc");
+      const resEl=box.querySelector(".wv-term-res");
+      const ruleEl=box.querySelector(".wv-term-rule");
+      nameEl.oninput=()=>{ g.term=nameEl.value; save(); };
+      defEl.oninput=()=>{ g.definition=defEl.value; save(); };
+      epEl.oninput=()=>{ g.firstEpisode=epEl.value; save(); };
+      discEl.onchange=()=>{ g.disclosure=discEl.value; save(); };
+      resEl.onchange=()=>{ g.resolved=resEl.value; save(); };
+      ruleEl.oninput=()=>{ g.absoluteRule=ruleEl.value; save(); };
+      box.querySelector(".chip-x").onclick=()=>{ P.world.glossary.splice(i,1); save(); renderGlossary(); };
+      listEl.appendChild(box);
+    });
+  }
+  renderGlossary();
+  c.querySelector("#wvGlossaryAdd").onclick=()=>{
+    P.world.glossary=P.world.glossary||[];
+    P.world.glossary.push({id:uid(), term:"", definition:"", firstEpisode:"", absoluteRule:"", disclosure:"", resolved:""});
+    save(); renderGlossary();
+  };
 }
 
 /* 사건 */
