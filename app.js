@@ -170,11 +170,14 @@ function fillProject(p){
   const world=Object.assign({}, b.world, p.world||{});
   world.glossary=Array.isArray(world.glossary)?world.glossary.map(g=>Object.assign(
     {id:uid(), term:"", definition:"", firstEpisode:"", absoluteRule:"", disclosure:"", resolved:""}, g)):[];
+  const event=Object.assign({}, b.event, p.event||{});
+  event.log=Array.isArray(event.log)?event.log.map(g=>Object.assign(
+    {id:uid(), name:"", characters:"", episode:"", impact:"", nextLink:"", cliffhanger:""}, g)):[];
   return Object.assign({}, b, p, {
     idea: Object.assign({}, b.idea, p.idea||{}),
     world,
     background: Object.assign({}, b.background, p.background||{}),
-    event: Object.assign({}, b.event, p.event||{}),
+    event,
     characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>{
       const m=Object.assign({},blankChar(),c);
       /* 예전 "인물 변화(아크)" 단일 필드에 값이 있고 전/후 필드가 비어 있으면 "변화 전"으로 이전 */
@@ -224,7 +227,8 @@ function blankProject(id,name){
     world:{summary:"",rules:"",era:"",place:"",type:"",regions:"",timeline:"",politics:"",
       factions:"",economy:"",taboo:"",culture:"",language:"",conflict:"",glossary:[]},
     background:{social:"",mood:"",detail:""},
-    event:{main:"",conflict:"",ending:""},
+    event:{main:"",conflict:"",ending:"",name:"",characters:"",agency:"",conflictType:"",
+      goal:"",disaster:"",reaction:"",decision:"",transform:"",nextLink:"",log:[]},
     plot:Array(12).fill(""),
     ideaBlocks:[],
     tagColors:{},
@@ -1373,17 +1377,107 @@ function rBg(){
 }
 
 /* 사건 */
+const EVENT_AGENCY_OPTS=["주인공 능동 사건 (주인공이 먼저 갈등을 겁니다)","주인공 피동 사건 (적대자가 갈등을 걸어옵니다)"];
+const EVENT_CONFLICT_TYPE_OPTS=["내적 갈등 (인물 내면의 심리·도덕적 딜레마)","외적 갈등 — 인물 vs 인물","외적 갈등 — 인물 vs 자신","외적 갈등 — 인물 vs 사회","외적 갈등 — 인물 vs 자연","외적 갈등 — 인물 vs 운명·초자연"];
 function rEvent(){
   const c=document.createElement("div");
+  const optHtml=(opts)=>opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("");
   c.innerHTML=`<div class="card"><h2>${ICONS.bolt} 사건 설정</h2>
-    <p class="hint">이야기를 굴러가게 하는 핵심 사건과 갈등, 결말 방향입니다.</p>
-    <label>주요 사건 (발단)</label><textarea id="e_main" placeholder="이야기를 시작시키는 사건"></textarea>
-    <label>핵심 갈등</label><textarea id="e_conflict" placeholder="주인공 vs 무엇/누구"></textarea>
-    <label>결말 방향</label><textarea id="e_ending" placeholder="어떻게 끝나는가 (열린 결말도 OK)"></textarea></div>`;
+    <p class="hint">이야기 전체의 구조(발단~결말)는 "플롯 생성" 탭에서 다룹니다. 여기서는 사건 하나하나를
+    "목표 → 갈등 → 결과 → 다음 사건"의 흐름으로 설계합니다. 굵은 항목만 채워도 충분합니다.</p>
+
+    <div class="section-title">사건 개요</div>
+    <label>사건명</label><input type="text" id="e_name" placeholder="예: 왕궁 습격, 첫 만남…">
+    <label>사건 설명 (무슨 일이 일어나는가)</label><textarea id="e_main" placeholder="이야기를 시작시키는 사건"></textarea>
+    <label>관련 인물</label><textarea id="e_characters" placeholder="이 사건을 주도하는 인물 / 영향을 받는 인물"></textarea>
+    <div class="row">
+      <div><label>사건 유형</label><select id="e_agency"><option value="">선택 안 함</option>${optHtml(EVENT_AGENCY_OPTS)}</select></div>
+      <div><label>갈등 유형</label><select id="e_conflictType"><option value="">선택 안 함</option>${optHtml(EVENT_CONFLICT_TYPE_OPTS)}</select></div>
+    </div>
+
+    <div class="section-title">사건 설계 (목표 → 갈등 → 결과)</div>
+    <label>목표 (인물이 이 사건에서 원하는 것)</label><textarea id="e_goal"></textarea>
+    <label>갈등 · 장애물 (목표를 가로막는 것)</label><textarea id="e_conflict" placeholder="주인공 vs 무엇/누구"></textarea>
+    <label>결과 (성공/실패 + 새로 생긴 문제)</label><textarea id="e_disaster"></textarea>
+
+    <div class="section-title">여파 (반응 → 결정, 선택)</div>
+    <label>인물의 반응</label><textarea id="e_reaction" placeholder="사건 직후 느끼는 감정적·물리적 반응"></textarea>
+    <label>결정 (다음 행동에 대한 결심)</label><textarea id="e_decision" placeholder="이 결심이 다음 사건의 목표가 됩니다"></textarea>
+
+    <div class="section-title">인과 · 전환 (선택)</div>
+    <label>이 사건으로 달라진 것</label><textarea id="e_transform" placeholder="가치·지위·관계의 전환 (삶↔죽음, 신뢰↔배신 등)"></textarea>
+    <label>다음 사건과의 연결</label><textarea id="e_nextLink"></textarea>
+    <label>결말 방향 (선택 — 전체 이야기의 결말 구조는 "플롯 생성" 탭에서 다뤄주세요)</label><textarea id="e_ending" placeholder="이 사건들이 궁극적으로 향하는 방향"></textarea>
+
+    <div class="section-title">사건 관리 (회차 일지)</div>
+    <p class="hint" style="margin:0 0 10px">여러 사건이 얽히는 장편 연재에서 인과 사슬을 놓치지 않기 위한 항목입니다. 사건이 하나씩 확정될 때마다 카드를 추가하세요.</p>
+    <div class="wv-glossary-list" id="evLogList"></div>
+    <button type="button" class="btn ghost sm" id="evLogAdd">${ICONS.plus} 사건 추가</button>
+  </div>`;
   app.appendChild(c);
+  bind(c.querySelector("#e_name"),P.event,"name");
   bind(c.querySelector("#e_main"),P.event,"main");
+  bind(c.querySelector("#e_characters"),P.event,"characters");
+  bind(c.querySelector("#e_agency"),P.event,"agency");
+  bind(c.querySelector("#e_conflictType"),P.event,"conflictType");
+  bind(c.querySelector("#e_goal"),P.event,"goal");
   bind(c.querySelector("#e_conflict"),P.event,"conflict");
+  bind(c.querySelector("#e_disaster"),P.event,"disaster");
+  bind(c.querySelector("#e_reaction"),P.event,"reaction");
+  bind(c.querySelector("#e_decision"),P.event,"decision");
+  bind(c.querySelector("#e_transform"),P.event,"transform");
+  bind(c.querySelector("#e_nextLink"),P.event,"nextLink");
   bind(c.querySelector("#e_ending"),P.event,"ending");
+
+  /* 사건 관리(회차 일지) — 반복 카드 리스트 */
+  function renderLog(){
+    const listEl=c.querySelector("#evLogList");
+    listEl.innerHTML="";
+    P.event.log=P.event.log||[];
+    if(!P.event.log.length){
+      listEl.innerHTML='<p class="hint" style="margin:0 0 10px">아직 등록된 사건이 없습니다.</p>';
+      return;
+    }
+    P.event.log.forEach((g,i)=>{
+      const box=document.createElement("div"); box.className="plan-block wv-term";
+      box.innerHTML=`
+        <div class="wv-term-head">
+          <input type="text" class="ev-log-name" placeholder="사건명" value="${esc(g.name||"")}">
+          <button type="button" class="chip-x" title="삭제">${ICONS.close}</button>
+        </div>
+        <label>관련 인물</label><input type="text" class="ev-log-char" value="${esc(g.characters||"")}">
+        <div class="row">
+          <div><label>발생 회차</label><input type="text" class="ev-log-ep" placeholder="예: 12화" value="${esc(g.episode||"")}"></div>
+          <div><label>클리프행어 여부</label><select class="ev-log-cliff">
+            <option value=""${g.cliffhanger?"":" selected"}>선택 안 함</option>
+            <option value="예"${g.cliffhanger==="예"?" selected":""}>예</option>
+            <option value="아니오"${g.cliffhanger==="아니오"?" selected":""}>아니오</option>
+          </select></div>
+        </div>
+        <label>파급효과 (이 사건으로 달라진 것)</label><textarea class="ev-log-impact">${esc(g.impact||"")}</textarea>
+        <label>다음 사건과의 연결</label><textarea class="ev-log-next">${esc(g.nextLink||"")}</textarea>`;
+      const nameEl=box.querySelector(".ev-log-name");
+      const charEl=box.querySelector(".ev-log-char");
+      const epEl=box.querySelector(".ev-log-ep");
+      const cliffEl=box.querySelector(".ev-log-cliff");
+      const impactEl=box.querySelector(".ev-log-impact");
+      const nextEl=box.querySelector(".ev-log-next");
+      nameEl.oninput=()=>{ g.name=nameEl.value; save(); };
+      charEl.oninput=()=>{ g.characters=charEl.value; save(); };
+      epEl.oninput=()=>{ g.episode=epEl.value; save(); };
+      cliffEl.onchange=()=>{ g.cliffhanger=cliffEl.value; save(); };
+      impactEl.oninput=()=>{ g.impact=impactEl.value; save(); };
+      nextEl.oninput=()=>{ g.nextLink=nextEl.value; save(); };
+      box.querySelector(".chip-x").onclick=()=>{ P.event.log.splice(i,1); save(); renderLog(); };
+      listEl.appendChild(box);
+    });
+  }
+  renderLog();
+  c.querySelector("#evLogAdd").onclick=()=>{
+    P.event.log=P.event.log||[];
+    P.event.log.push({id:uid(), name:"", characters:"", episode:"", impact:"", nextLink:"", cliffhanger:""});
+    save(); renderLog();
+  };
 }
 
 /* ===== 📋 기획서 작성 =====
