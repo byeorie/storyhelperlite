@@ -765,6 +765,20 @@ function guideOptionFor(key,val){
   const slot=STORY_GUIDE_SLOTS.find(s=>s.key===key);
   return slot&&slot.options.find(o=>o.v===val);
 }
+/* 옵션 배열([{v,tip,group?}])을 <option>/<optgroup> HTML로 변환.
+   group이 있는 항목들은 등장 순서대로 묶어 <optgroup>으로, 없으면 예전처럼 평평한 목록으로 렌더링한다. */
+function optionsToHtml(options){
+  const groups=[]; const byGroup={};
+  options.forEach(o=>{
+    const g=o.group||"";
+    if(!byGroup[g]){ byGroup[g]={group:g, items:[]}; groups.push(byGroup[g]); }
+    byGroup[g].items.push(o);
+  });
+  return groups.map(gr=>{
+    const optsHtml=gr.items.map(o=>`<option value="${esc(o.v)}">${esc(o.v)}</option>`).join("");
+    return gr.group ? `<optgroup label="${esc(gr.group)}">${optsHtml}</optgroup>` : optsHtml;
+  }).join("");
+}
 function rExplore(){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
@@ -793,7 +807,7 @@ function rExplore(){
   STORY_GUIDE_SLOTS.forEach(s=>{
     const wrap=document.createElement("div"); wrap.className="explore-slot";
     wrap.innerHTML=`<label>${s.label}</label>
-      <select>${`<option value="">선택 안 함</option>`}${s.options.map(o=>`<option value="${esc(o.v)}">${esc(o.v)}</option>`).join("")}<option value="__custom__">직접 입력…</option></select>
+      <select><option value="">선택 안 함</option>${optionsToHtml(s.options)}<option value="__custom__">직접 입력…</option></select>
       <input type="text" placeholder="${s.ph}" style="display:none;margin-top:6px">`;
     grid.appendChild(wrap);
     const sel=wrap.querySelector("select"), custom=wrap.querySelector("input");
@@ -1267,7 +1281,7 @@ function rBg(){
     <div class="section-title">기본 정보</div>
     <label>한 줄 요약</label><textarea id="w_summary" placeholder="이 세계는 어떤 곳인가"></textarea>
     <div class="row">
-      <div><label>세계관 유형</label><select id="w_type"><option value="">선택 안 함</option>${worldTypeOpts.map(o=>`<option value="${esc(o.v)}">${esc(o.v)}</option>`).join("")}</select></div>
+      <div><label>세계관 유형</label><select id="w_type"><option value="">선택 안 함</option>${optionsToHtml(worldTypeOpts)}</select></div>
       <div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
       <div><label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…"></div>
     </div>
