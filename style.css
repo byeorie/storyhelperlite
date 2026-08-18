@@ -388,6 +388,21 @@ textarea{resize:vertical;min-height:70px}
   .write-plotlist{position:static;flex-basis:auto;width:100%;max-height:none}
 }
 
+/* ===== 배경 설정 · 사건 설정 — 오른쪽에 기획서 미리보기(읽기 전용) 분할 화면 ===== */
+.setting-split{display:flex;gap:14px;align-items:flex-start}
+.setting-main{flex:0 1 720px;min-width:0}
+.setting-planview{flex:1 1 0;min-width:280px;position:sticky;top:70px;
+  max-height:calc(100vh - 90px);overflow-y:auto}
+.plan-viewer-card h3{margin:0 0 4px;font-size:15px}
+.plan-view-block{background:#fbfaf7}
+.plan-view-block label{color:var(--accent);margin-top:12px}
+.plan-view-text{font-size:13px;line-height:1.7;color:var(--ink)}
+.plan-view-text.empty{color:var(--muted);font-style:italic}
+@media(max-width:1023px){
+  .setting-planview{display:none}
+  .setting-main{flex:1 1 auto}
+}
+
 /* 아이디어 탐색 */
 .explore-dbstatus{background:#fbf8f3;border:1px solid var(--line);border-radius:8px;
   padding:10px 12px;font-size:13px;color:var(--ink)}

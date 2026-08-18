@@ -446,7 +446,7 @@ function render(){
   try{
     refreshProjSelect();
     app.innerHTML="";
-    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard");
+    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event");
     if(!P) P=currentProject();
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
@@ -1271,6 +1271,34 @@ function charRelationshipGraph(){
   return wrap;
 }
 
+/* 기획서 뷰어 — "배경 설정"·"사건 설정" 탭 오른쪽에 "기획서 작성" 내용을 참고용(읽기 전용)으로
+   블록 형태로 보여준다. 글쓰기 탭의 좌/우 분할 레이아웃과 같은 방식(.setting-split)을 사용한다. */
+function renderPlanViewerInto(container){
+  const pd=P.planDoc||blankPlanDoc();
+  const items=[{label:"일시", val:pd.date}, {label:"작성자", val:pd.author}]
+    .concat(PLAN_FIELDS.map(f=>({label:f.label, val:pd[f.k]})));
+  const hasAny=items.some(it=>(it.val||"").trim());
+  container.innerHTML=`<div class="card plan-viewer-card">
+    <h3>${ICONS.file} 기획서 미리보기</h3>
+    <p class="hint">"기획서 작성" 탭에 입력한 내용을 참고용으로 보여드립니다. 여기서는 수정할 수 없습니다.</p>
+    ${hasAny ? items.map(it=>`<div class="plan-block plan-view-block">
+        <label>${esc(it.label)}</label>
+        <div class="plan-view-text${(it.val||"").trim()?"":" empty"}">${(it.val||"").trim()?esc(it.val):"아직 작성하지 않았습니다"}</div>
+      </div>`).join("")
+      : `<p class="hint">아직 "기획서 작성" 탭에 입력한 내용이 없습니다. 왼쪽 메뉴의 "기획서 작성"에서 먼저 채워보세요.</p>`}
+  </div>`;
+}
+/* 카드 하나를 좌측에, 기획서 뷰어를 우측에 배치하는 분할 화면으로 app에 붙인다 */
+function mountWithPlanViewer(cardEl){
+  const layout=document.createElement("div"); layout.className="setting-split";
+  const left=document.createElement("div"); left.className="setting-main";
+  left.appendChild(cardEl);
+  const right=document.createElement("div"); right.className="setting-planview";
+  renderPlanViewerInto(right);
+  layout.append(left, right);
+  app.appendChild(layout);
+}
+
 /* 배경 설정 (세계관 + 배경을 하나로 통합) */
 function rBg(){
   const c=document.createElement("div");
@@ -1314,7 +1342,7 @@ function rBg(){
     <div class="wv-glossary-list" id="wvGlossaryList"></div>
     <button type="button" class="btn ghost sm" id="wvGlossaryAdd">${ICONS.plus} 용어 추가</button>
   </div>`;
-  app.appendChild(c);
+  mountWithPlanViewer(c);
   bind(c.querySelector("#w_summary"),P.world,"summary");
   bind(c.querySelector("#w_type"),P.world,"type");
   bind(c.querySelector("#w_era"),P.world,"era");
@@ -1428,7 +1456,7 @@ function rEvent(){
     <div class="wv-glossary-list" id="evLogList"></div>
     <button type="button" class="btn ghost sm" id="evLogAdd">${ICONS.plus} 사건 추가</button>
   </div>`;
-  app.appendChild(c);
+  mountWithPlanViewer(c);
   bind(c.querySelector("#e_name"),P.event,"name");
   bind(c.querySelector("#e_main"),P.event,"main");
   bind(c.querySelector("#e_characters"),P.event,"characters");
