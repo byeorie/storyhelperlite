@@ -1,0 +1,15 @@
+console.log("A: start");
+const fs = require("fs"); const path = require("path"); const { JSDOM } = require("jsdom");
+console.log("B: required");
+const html = fs.readFileSync(path.join(process.cwd(), "index.html"), "utf8");
+console.log("C: html read, len=", html.length);
+const dom = new JSDOM(html, { runScripts: "outside-only", url: "http://localhost/" });
+console.log("D: dom created");
+const { window } = dom;
+window.fetch = () => Promise.reject(new Error("no network"));
+console.log("E: about to eval data.js");
+window.eval(fs.readFileSync("data.js","utf8"));
+console.log("F: data.js done");
+window.eval(fs.readFileSync("auth.js","utf8"));
+console.log("G: auth.js done");
+process.exit(0);

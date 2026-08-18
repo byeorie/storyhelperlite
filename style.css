@@ -98,6 +98,17 @@ textarea{resize:vertical;min-height:70px}
 .row{display:flex;gap:12px;flex-wrap:wrap}
 .row>div{flex:1;min-width:160px}
 
+/* 기획서 작성 — 항목별 블럭 + 8pt 작성 가이드 */
+.plan-row{display:flex;gap:12px;flex-wrap:wrap}
+.plan-row>.plan-block{flex:1;min-width:160px}
+.plan-block{border:1px solid var(--line);border-radius:10px;background:#fbfaf7;
+  padding:12px 14px;margin-bottom:12px}
+.plan-block label{margin:0 0 2px;color:var(--accent)}
+.plan-guide{font-size:8pt;color:var(--muted);margin:0 0 8px;line-height:1.4}
+.plan-block textarea{min-height:64px}
+.plan-block textarea.plan-ta-lg{min-height:110px}
+.plan-block textarea.plan-ta-xl{min-height:220px}
+
 /* 캐릭터 */
 .charlist .char-item{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;background:#fcfbf9}
 .char-item .char-head{display:flex;justify-content:space-between;align-items:center}

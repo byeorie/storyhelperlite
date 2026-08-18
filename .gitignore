@@ -3,3 +3,4 @@ Thumbs.db
 *.log
 .github-pat
 smoketest.js
+node_modules/

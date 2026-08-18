@@ -2,6 +2,30 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-18 — 기획서 작성 페이지 신설 (블럭형 입력 + .docx 출력)
+
+**배경**: 교수님이 첨부한 표준 웹툰 기획안 양식(일시/작성자 · 제목/장르/로그라인 ·
+주요독자/웹툰분량/중심소재/상황/등장인물/사건/결말/기획의도 · 시놉시스)을 학생들이 항목별로
+입력하고, 첨부 양식 그대로 .docx로 뽑을 수 있게 해달라는 요청. (교수-학생 그룹/과제 시스템,
+관리자 페이지는 다음 단계로 순차 진행 예정)
+
+- **index.html** 수정 — 사이드바에 "기획 → 기획서 작성"(`data-tab="plan"`) 메뉴 그룹 추가(아이디어
+  그룹 바로 다음). 상단 내보내기 메뉴에 "기획서 출력 (.docx)"(`#topExportPlan`) 버튼 추가(맨 위)
+- **app.js** 수정
+  - `blankPlanDoc()`/`fillPlanDoc()` 신설 — 기획서 14개 필드(date/author/title/genre/logline/
+    mainReaders/length/material/situation/characters/incident/ending/intent/synopsis) 기본값·구버전
+    데이터 보정
+  - `blankProject()`/`fillProject()`에 `planDoc` 필드 연결 (다른 프로젝트 문서들과 동일 패턴)
+  - `PLAN_FIELDS` 배열 + `rPlan()` 신설 — 항목별 블럭(`.plan-block`) UI, 블럭마다 8pt 작성 가이드
+    문구(`.plan-guide`)를 라벨 아래에 표시. `renderers` 맵에 `plan:rPlan` 등록
+  - `exportPlan()` 신설 — docx 라이브러리로 첨부 양식과 동일한 표 구성(일시/작성자 표 → 제목·장르·
+    로그라인 표 → 주요독자~기획의도 표 → 페이지 나눔 후 시놉시스 표) 그대로 출력. 라벨 셀은
+    베이지색(#E8D9C5) 음영 처리
+- **style.css** 수정 — `.plan-row`/`.plan-block`/`.plan-guide`(font-size:8pt)/`.plan-ta-lg`/
+  `.plan-ta-xl` 스타일 추가
+- 검증: Node로 `exportPlan()`과 동일한 테이블 구성을 만들어 LibreOffice로 PDF 변환 후 렌더링
+  이미지로 확인 — 첨부 원본 양식과 레이아웃(라벨 음영, 표 구간, 시놉시스 2페이지 분리) 일치 확인
+
 ## 2026-08-16 (4) — 아이디어 탐색: 작품DB 매칭 → 선택형 작법 가이드로 전면 교체
 
 **배경**: "로그라인을 입력하면 작품DB에서 비슷한 작품을 찾아주는" 기존 방식은 관리자가 작품DB(.md/.xlsx)를

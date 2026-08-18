@@ -176,6 +176,7 @@ function fillProject(p){
     tagColors: Object.assign({}, b.tagColors, p.tagColors||{}),
     plotDoc: fillPlotDoc(p.plotDoc),
     writeDoc: fillWriteDoc(p.writeDoc),
+    planDoc: fillPlanDoc(p.planDoc),
     explore: Object.assign({}, b.explore, p.explore||{}),
   });
 }
@@ -217,7 +218,18 @@ function blankProject(id,name){
     tagColors:{},
     plotDoc:{structure:"", sections:[], ideaOverrides:{}},
     writeDoc:{blocks:[], groups:[]},
+    planDoc:blankPlanDoc(),
     explore:blankExplore()};
+}
+/* ===== 📋 기획서 작성 — 기본값/보정 ===== */
+function blankPlanDoc(){
+  return {date:"", author:"", title:"", genre:"", logline:"", mainReaders:"", length:"",
+    material:"", situation:"", characters:"", incident:"", ending:"", intent:"", synopsis:""};
+}
+function fillPlanDoc(pd){
+  const b=blankPlanDoc();
+  if(!pd||typeof pd!=="object") return b;
+  return Object.assign({}, b, pd);
 }
 /* writeDoc 기본값 보정 (본문/대사를 공통 하위블록 items로 통합) */
 function fillWriteDoc(wd){
@@ -370,6 +382,7 @@ function toggleExportMenu(forceHide){
   topExportMenu.hidden=hide;
 }
 topExportBtn.onclick=e=>{ e.stopPropagation(); toggleExportMenu(); };
+document.getElementById("topExportPlan").onclick=()=>{ topExportMenu.hidden=true; exportPlan(); };
 document.getElementById("topExportScript").onclick=()=>{ topExportMenu.hidden=true; exportScript(); };
 document.getElementById("topExportDialogue").onclick=()=>{ topExportMenu.hidden=true; exportDialogueOnly(); };
 document.getElementById("topExportStoryboard").onclick=()=>{ topExportMenu.hidden=true; exportStoryboardPdf(); };
@@ -421,7 +434,8 @@ function render(){
     if(!P) P=currentProject();
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
-    const renderers={idea:rIdea, explore:rExplore, character:rChar, background:rBg,
+    if(!P.planDoc) P.planDoc=blankPlanDoc();
+    const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard};
     (renderers[activeTab]||rIdea)();
   }catch(e){
@@ -1261,6 +1275,48 @@ function rEvent(){
   bind(c.querySelector("#e_main"),P.event,"main");
   bind(c.querySelector("#e_conflict"),P.event,"conflict");
   bind(c.querySelector("#e_ending"),P.event,"ending");
+}
+
+/* ===== 📋 기획서 작성 =====
+   웹툰 기획안 표준 양식(첨부 양식)과 동일한 항목을 블럭 단위로 입력받는다.
+   각 블럭 위에는 8pt 크기의 작성 가이드 문구를 붙여 무엇을 적어야 하는지 안내한다.
+   내보내기(.docx)는 exportPlan()에서 같은 양식(표) 그대로 출력한다. */
+const PLAN_FIELDS=[
+  {k:"title", label:"제목", guide:"작품의 제목 또는 가제를 입력하세요.", type:"text"},
+  {k:"genre", label:"장르", guide:"로맨스·판타지·액션·스릴러 등 장르와 톤을 적어주세요.", type:"text"},
+  {k:"logline", label:"로그라인", guide:"작품 전체를 한두 문장으로 요약하세요. (주인공이 무엇을 원하고, 무엇이 가로막는가)", type:"textarea"},
+  {k:"mainReaders", label:"주요 독자", guide:"이 작품을 즐길 핵심 독자층(연령대·성별·취향)을 구체적으로 적어주세요.", type:"textarea"},
+  {k:"length", label:"웹툰 분량", guide:"예상 총 화수, 연재 주기, 회당 컷 수 등을 적어주세요.", type:"textarea"},
+  {k:"material", label:"중심 소재", guide:"이야기의 핵심이 되는 소재나 컨셉을 적어주세요.", type:"textarea"},
+  {k:"situation", label:"상황", guide:"이야기가 시작되는 시점의 배경 상황을 설명하세요.", type:"textarea"},
+  {k:"characters", label:"등장인물", guide:"주요 인물의 이름과 특징, 관계를 간단히 소개하세요. (자세한 설정은 '캐릭터 설정' 메뉴를 이용하세요)", type:"textarea"},
+  {k:"incident", label:"사건", guide:"이야기를 이끌어가는 핵심 사건과 갈등을 적어주세요.", type:"textarea"},
+  {k:"ending", label:"결말", guide:"이야기가 어떻게 마무리되는지 적어주세요.", type:"textarea"},
+  {k:"intent", label:"기획의도", guide:"이 작품을 왜 만들고자 하는지, 기획 배경과 목적을 적어주세요.", type:"textarea-lg"},
+  {k:"synopsis", label:"시놉시스", guide:"기승전결에 따라 전체 줄거리를 상세하게 서술하세요.", type:"textarea-xl"},
+];
+function rPlan(){
+  if(!P.planDoc) P.planDoc=blankPlanDoc();
+  const pd=P.planDoc;
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>${ICONS.file} 기획서 작성</h2>
+    <p class="hint">항목별로 작성하면 상단 '내보내기 → 기획서 출력(.docx)'에서 정해진 양식의 워드 파일로 받을 수 있습니다.</p>
+    <div class="plan-row">
+      <div class="plan-block"><label>일시</label><p class="plan-guide">작성한 날짜를 입력하세요. (예: 2026년 8월 18일)</p><input type="text" id="pd_date" placeholder="2026년 8월 18일"></div>
+      <div class="plan-block"><label>작성자</label><p class="plan-guide">이름과 학번 등 작성자 정보를 입력하세요.</p><input type="text" id="pd_author" placeholder="홍길동 (2024000000)"></div>
+    </div>
+    ${PLAN_FIELDS.map(f=>`<div class="plan-block">
+      <label>${f.label}</label>
+      <p class="plan-guide">${f.guide}</p>
+      ${f.type==="text"
+        ? `<input type="text" id="pd_${f.k}">`
+        : `<textarea id="pd_${f.k}" class="${f.type==="textarea-xl"?"plan-ta-xl":f.type==="textarea-lg"?"plan-ta-lg":""}"></textarea>`}
+    </div>`).join("")}
+  </div>`;
+  app.appendChild(c);
+  bind(c.querySelector("#pd_date"),pd,"date");
+  bind(c.querySelector("#pd_author"),pd,"author");
+  PLAN_FIELDS.forEach(f=> bind(c.querySelector("#pd_"+f.k),pd,f.k));
 }
 
 /* ===== 📖 플롯 생성 ===== */
@@ -2436,6 +2492,44 @@ async function exportDialogueOnly(){
   const doc=new Document({sections:[{children:paras}]});
   const blob=await Packer.toBlob(doc);
   triggerDownload(blob, (P.name||"story")+"_대사.docx");
+}
+
+/* 0) 기획서 출력 — Word(.docx), 첨부 양식(표)과 동일한 구성으로 출력 */
+async function exportPlan(){
+  if(typeof docx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
+  const {Document,Packer,Paragraph,TextRun,Table,TableRow,TableCell,WidthType,VerticalAlign,AlignmentType,ShadingType,PageBreak}=docx;
+  const pd=P.planDoc||blankPlanDoc();
+  const shade={fill:"E8D9C5", type:ShadingType.CLEAR, color:"auto"};
+  const LW=1600, VW=3350, LW2=1600, VW2=7500;
+  function labelCell(text,width){
+    return new TableCell({width:{size:width,type:WidthType.DXA}, shading:shade, verticalAlign:VerticalAlign.CENTER,
+      children:[new Paragraph({alignment:AlignmentType.CENTER, children:[new TextRun({text, bold:true})]})]});
+  }
+  function valueCell(text,width){
+    const lines=(text||"").split("\n");
+    return new TableCell({width:{size:width,type:WidthType.DXA}, verticalAlign:VerticalAlign.TOP,
+      children: lines.length ? lines.map(l=>new Paragraph({children:[new TextRun(l)]})) : [new Paragraph("")]});
+  }
+  const table1=new Table({width:{size:LW+VW+LW+VW,type:WidthType.DXA}, columnWidths:[LW,VW,LW,VW],
+    rows:[new TableRow({children:[labelCell("일 시",LW), valueCell(pd.date,VW), labelCell("작성자",LW), valueCell(pd.author,VW)]})]});
+  const table2=new Table({width:{size:LW2+VW2,type:WidthType.DXA}, columnWidths:[LW2,VW2],
+    rows:[
+      ["제 목",pd.title],["장 르",pd.genre],["로그라인",pd.logline],
+    ].map(([label,val])=>new TableRow({children:[labelCell(label,LW2), valueCell(val,VW2)]}))});
+  const table3=new Table({width:{size:LW2+VW2,type:WidthType.DXA}, columnWidths:[LW2,VW2],
+    rows:[
+      ["주요 독자",pd.mainReaders],["웹툰 분량",pd.length],["중심 소재",pd.material],
+      ["상 황",pd.situation],["등장인물",pd.characters],["사 건",pd.incident],
+      ["결 말",pd.ending],["기획의도",pd.intent],
+    ].map(([label,val])=>new TableRow({children:[labelCell(label,LW2), valueCell(val,VW2)]}))});
+  const table4=new Table({width:{size:LW2+VW2,type:WidthType.DXA}, columnWidths:[LW2,VW2],
+    rows:[new TableRow({children:[labelCell("시놉시스",LW2), valueCell(pd.synopsis,VW2)]})]});
+  const doc=new Document({sections:[{children:[
+    table1, new Paragraph(""), table2, new Paragraph(""), table3,
+    new Paragraph({children:[new PageBreak()]}), table4,
+  ]}]});
+  const blob=await Packer.toBlob(doc);
+  triggerDownload(blob, (P.name||"story")+"_기획서.docx");
 }
 
 function triggerDownload(blob, filename){
