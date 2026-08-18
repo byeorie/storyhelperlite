@@ -130,7 +130,7 @@ function openSettings() {
       <p class="hint">${joined ? "이미 교수 그룹에 가입되어 있습니다. 다른 코드를 입력하면 그룹이 변경됩니다." : "교수님께 받은 6자리 코드를 입력하면 과제 제출 그룹에 가입됩니다."}</p>
       <div class="plan-block">
         <label>교수 코드</label>
-        <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 360544" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
+        <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 123456" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
       </div>
       <p id="profJoinMsg" class="hint" style="min-height:18px"></p>
       <button class="btn" id="profJoinBtn" style="width:100%">가입하기</button>

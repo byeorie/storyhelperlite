@@ -3017,14 +3017,29 @@ async function renderAdminUsers(){
   const profCount=users.filter(u=>u.role==="professor").length;
   const rows=users.map(u=>`<tr>
     <td>${esc(u.school)}</td><td>${esc(u.name)}</td><td>${esc(u.username)}</td>
-    <td>${u.role==="professor"?"교수":"학생"}</td>
+    <td><select class="admin-role-select" data-uid="${u.id}" ${u.username===ADMIN_USERNAME?"disabled":""}>
+      <option value="student" ${u.role==="professor"?"":"selected"}>학생</option>
+      <option value="professor" ${u.role==="professor"?"selected":""}>교수</option>
+    </select></td>
     <td>${u.role==="professor"?esc(u.prof_code||"-"):"-"}</td>
     <td>${esc(u.email)}</td><td>${fmtDate(u.created_at)}</td>
   </tr>`).join("");
   wrap.innerHTML=`<table class="admin-table"><thead><tr>
     <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th>교수 코드</th><th>이메일</th><th>가입일</th>
   </tr></thead><tbody>${rows}</tbody></table>
-  <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명)</p>`;
+  <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.</p>`;
+  wrap.querySelectorAll(".admin-role-select").forEach(sel=>{
+    sel.onchange=()=>doAdminSetRole(sel);
+  });
+}
+async function doAdminSetRole(selectEl){
+  const uid=selectEl.dataset.uid, role=selectEl.value, prevRole=role==="professor"?"student":"professor";
+  const label=role==="professor"?"교수":"학생";
+  if(!confirm(`이 회원의 등급을 '${label}'(으)로 변경할까요?`)){ selectEl.value=prevRole; return; }
+  selectEl.disabled=true;
+  const res=await apiFetch("admin", { method:"POST", body: JSON.stringify({mode:"setRole", userId:Number(uid), role}) });
+  if(res.ok){ adminUsersCache=null; renderAdminUsers(); }
+  else { alert((res.body && res.body.error) || "등급 변경에 실패했습니다."); selectEl.value=prevRole; selectEl.disabled=false; }
 }
 async function doAdminReset(mode){
   const label = mode==="all" ? "계정 + 데이터 초기화" : "데이터 초기화";

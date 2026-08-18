@@ -2,6 +2,24 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-18 (7) — 교수 코드 입력란 예시 수정 + 회원 관리에서 등급 직접 변경
+
+**배경**: 설정 화면의 "교수 코드" 입력란 placeholder가 실제 studio.inknpen 교수 계정의 코드(360544)를
+그대로 노출하고 있었음(학생들이 진짜 코드로 착각할 수 있음) → 예시용 임의 숫자로 교체 요청.
+또한 회원 관리 표에서 등급(교수/학생)을 관리자가 직접 바꿀 수 있게 해달라는 요청.
+
+- **auth.js** 수정 — `openSettings()`의 `#profCodeInput` placeholder "예: 360544" → "예: 123456"
+- **functions/api/admin.js** 수정
+  - `generateProfCode(env)` 추가(signup.js와 동일 로직 — 6자리 숫자, DB 중복 없을 때까지 재생성)
+  - `POST /api/admin`에 `mode:"setRole"` 신설 — body `{userId, role:"student"|"professor"}`. 학생→교수로
+    바꾸는데 기존 코드가 없으면 새로 발급, 교수→학생으로 바꾸면 코드를 지움
+- **app.js** 수정 — `renderAdminUsers()`의 등급 열을 텍스트 대신 `<select>`(학생/교수)로 렌더링, 값이
+  바뀌면 `doAdminSetRole()`이 확인창 후 `/api/admin`(setRole)을 호출하고 표를 새로고침. 관리자
+  본인(byeorie) 행은 select를 비활성화(관리자 권한은 role과 무관해서 바꿀 이유가 없음)
+- 검증: `node -c app.js`, `node -c auth.js`, `node --input-type=module -c < functions/api/admin.js` 통과.
+  실제 배포 후 회원 관리 화면에서 테스트 계정(testuser...) 등급을 학생→교수로 바꿔 표에 코드가 새로
+  생기는지, 교수→학생으로 되돌리면 코드가 사라지는지 확인 예정
+
 ## 2026-08-18 (6) — 관리자 계정을 studio.inknpen → byeorie 로 교체
 
 **배경**: studio.inknpen은 교수 계정으로만 쓰고, 관리자 권한은 별도 계정 byeorie(교수님이 D1에서
