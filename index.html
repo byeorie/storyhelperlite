@@ -49,6 +49,14 @@
       <p class="auth-error" id="findResult"></p>
       <a href="#" id="backToLoginLink" class="auth-link">← 로그인으로 돌아가기</a>
     </form>
+
+    <form id="resetPanel" class="auth-panel" hidden>
+      <p class="login-desc">새로 사용할 비밀번호를 입력해주세요.</p>
+      <input type="password" id="resetPassword" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password" required>
+      <input type="password" id="resetPasswordConfirm" placeholder="새 비밀번호 확인" autocomplete="new-password" required>
+      <button type="submit" class="btn auth-submit">비밀번호 변경</button>
+      <p class="auth-error" id="resetError"></p>
+    </form>
   </div>
 </div>
 <header class="topbar">

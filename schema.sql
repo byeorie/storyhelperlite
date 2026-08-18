@@ -108,3 +108,14 @@ CREATE TABLE IF NOT EXISTS submissions (
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);
+
+-- ===== 2026-08-18 (3): 비밀번호 재설정 이메일 =====
+-- 이미 DB를 만든 뒤라면 아래 내용을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+CREATE TABLE IF NOT EXISTS password_resets (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);

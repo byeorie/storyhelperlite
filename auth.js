@@ -303,10 +303,40 @@ function bindAuthForms() {
   if (settingsBtn) settingsBtn.onclick = openSettings;
   const logoutBtn = document.getElementById("menuLogoutBtn");
   if (logoutBtn) logoutBtn.onclick = signOut;
+
+  const resetForm = document.getElementById("resetPanel");
+  if (resetForm) resetForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const token = new URLSearchParams(location.search).get("reset");
+    const pw = document.getElementById("resetPassword").value;
+    const pwConfirm = document.getElementById("resetPasswordConfirm").value;
+    const errEl = document.getElementById("resetError");
+    errEl.textContent = "";
+    if (!token) { errEl.textContent = "잘못된 접근입니다. 이메일의 링크로 다시 들어와주세요."; return; }
+    if (!pw || !pwConfirm) { errEl.textContent = "새 비밀번호를 입력해주세요."; return; }
+    if (pw !== pwConfirm) { errEl.textContent = "비밀번호가 일치하지 않습니다."; return; }
+    if (pw.length < 6) { errEl.textContent = "비밀번호는 6자 이상이어야 합니다."; return; }
+    const res = await apiFetch("reset-password", { method: "POST", body: JSON.stringify({ token, newPassword: pw }) });
+    if (res.ok && res.body && res.body.ok) {
+      history.replaceState(null, "", location.pathname);
+      alert("비밀번호가 재설정되었습니다. 새 비밀번호로 로그인해주세요.");
+      showAuthPanel("loginPanel");
+    } else {
+      errEl.textContent = (res.body && res.body.error) || "재설정에 실패했습니다.";
+    }
+  };
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   bindAuthForms();
+  const resetToken = new URLSearchParams(location.search).get("reset");
+  if (resetToken) {
+    // 비밀번호 재설정 링크로 들어온 경우 — 새 비밀번호 입력 화면을 우선 보여주고,
+    // 기존 로그인 세션 자동 복원은 건너뜀(재설정 전까지 다른 화면과 헷갈리지 않도록)
+    document.body.classList.remove("logged-in");
+    showAuthPanel("resetPanel");
+    return;
+  }
   if (restoreAuth()) {
     setLoggedInUI();
     loadFromServer();

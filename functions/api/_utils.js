@@ -84,3 +84,91 @@ export async function requireProfessor(request, env) {
   if (!auth || auth.user.role !== "professor") return null;
   return auth;
 }
+
+/* ===== 이메일 발송 (Gmail SMTP, 465/TLS) =====
+   Cloudflare Pages 프로젝트의 환경변수(Settings → Environment variables)에
+   GMAIL_USER(보내는 사람 gmail 주소), GMAIL_APP_PASSWORD(구글 계정의 "앱 비밀번호")를
+   등록해야 동작합니다. 두 값이 없으면 sendEmail()이 에러를 던집니다. */
+
+function b64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function encodeHeaderUtf8(text) {
+  return "=?UTF-8?B?" + b64(text) + "?=";
+}
+
+class SmtpClient {
+  constructor(socket) {
+    this.writer = socket.writable.getWriter();
+    this.reader = socket.readable.getReader();
+    this.buf = "";
+    this.dec = new TextDecoder();
+    this.enc = new TextEncoder();
+  }
+  async _fill() {
+    const { value, done } = await this.reader.read();
+    if (done) throw new Error("SMTP 서버와의 연결이 끊어졌습니다.");
+    this.buf += this.dec.decode(value, { stream: true });
+  }
+  /* SMTP는 파이프라이닝 없이 명령마다 응답하므로, 버퍼가 CRLF로 끝나고
+     마지막 줄이 "250 " 처럼 대시(-)가 아닌 공백으로 시작하면 완전한 응답으로 간주 */
+  async readResponse() {
+    while (true) {
+      if (this.buf.endsWith("\r\n")) {
+        const lines = this.buf.split("\r\n").filter(Boolean);
+        if (lines.length && /^\d{3} /.test(lines[lines.length - 1])) {
+          const resp = this.buf;
+          this.buf = "";
+          return resp;
+        }
+      }
+      await this._fill();
+    }
+  }
+  async writeLine(line) {
+    await this.writer.write(this.enc.encode(line + "\r\n"));
+  }
+  async cmd(line, expectCode) {
+    if (line !== null) await this.writeLine(line);
+    const resp = await this.readResponse();
+    if (expectCode && !resp.startsWith(String(expectCode))) {
+      throw new Error("SMTP 오류: " + resp.trim());
+    }
+    return resp;
+  }
+}
+
+export async function sendEmail(env, { to, subject, text }) {
+  const user = env.GMAIL_USER;
+  const pass = env.GMAIL_APP_PASSWORD;
+  if (!user || !pass) {
+    throw new Error("이메일 발송 설정이 되어있지 않습니다 (GMAIL_USER / GMAIL_APP_PASSWORD 환경변수 필요)");
+  }
+  const { connect } = await import("cloudflare:sockets");
+  const socket = connect({ hostname: "smtp.gmail.com", port: 465 }, { secureTransport: "on" });
+  try {
+    const c = new SmtpClient(socket);
+    await c.readResponse(); // 220 인사말
+    await c.cmd("EHLO storyhelperlite.pages.dev", 250);
+    await c.cmd("AUTH LOGIN", 334);
+    await c.cmd(b64(user), 334);
+    await c.cmd(b64(pass), 235);
+    await c.cmd(`MAIL FROM:<${user}> BODY=8BITMIME`, 250);
+    await c.cmd(`RCPT TO:<${to}>`, 250);
+    await c.cmd("DATA", 354);
+    const bodyLines = String(text).split("\n").map((l) => (l.startsWith(".") ? "." + l : l));
+    const headers = [
+      `From: 글쓰기도우미 <${user}>`,
+      `To: <${to}>`,
+      `Subject: ${encodeHeaderUtf8(subject)}`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: 8bit",
+    ];
+    const raw = headers.join("\r\n") + "\r\n\r\n" + bodyLines.join("\r\n") + "\r\n.";
+    await c.cmd(raw, 250);
+    await c.cmd("QUIT", 221);
+  } finally {
+    try { await socket.close(); } catch (e) {}
+  }
+}

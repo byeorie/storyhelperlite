@@ -2,6 +2,36 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-18 (5) — 비밀번호를 잊었을 때 이메일로 아이디 안내 + 재설정 링크 발송
+
+**배경**: profh(→studio.inknpen) 계정 비밀번호를 잊어버렸는데, 로그인 화면의 "아이디/비밀번호를
+잊으셨나요?"는 이메일 확인만 하고 실제 메일 발송은 "준비 중"이었음 → 실제로 메일이 가도록 구현.
+
+- **발송 방식**: 별도 유료 서비스 가입 없이, 교수님이 이미 쓰는 Gmail 계정으로 발송(Cloudflare
+  Pages Functions에서 `cloudflare:sockets`로 smtp.gmail.com:465에 직접 접속해 SMTP 프로토콜을
+  구현). **배포 후 Cloudflare 대시보드 → Pages 프로젝트 → Settings → Environment variables에
+  `GMAIL_USER`(보내는 사람 gmail 주소), `GMAIL_APP_PASSWORD`(구글 계정의 "앱 비밀번호", 일반
+  로그인 비밀번호 아님)를 추가해야 동작함** — 별도 안내 필요
+- **schema.sql** 수정 — `password_resets`(token/user_id/생성·만료시각/사용여부) 테이블 신설(30분
+  유효, 1회용) — Cloudflare D1 콘솔에서 수동 실행 필요
+- **functions/api/_utils.js** 수정 — `sendEmail(env,{to,subject,text})` 신설: 최소 SMTP
+  클라이언트(EHLO/AUTH LOGIN/MAIL FROM/RCPT TO/DATA, 멀티라인 응답 버퍼링, 제목 한글은 RFC2047
+  `=?UTF-8?B?...?=`로 인코딩) 구현
+- **functions/api/find-account.js** 수정 — 기존엔 "계정 확인됨" 메시지만 보여주던 것을, 실제로
+  ①비밀번호 재설정용 1회용 토큰을 `password_resets`에 저장하고 ②이메일 본문에 가입 아이디 안내 +
+  재설정 링크(`<사이트주소>/?reset=<토큰>`)를 담아 `sendEmail()`로 발송하도록 교체
+- **functions/api/reset-password.js** 신규 — POST {token,newPassword}: 토큰 유효성(존재/미사용/
+  기한내)을 검사해 비밀번호를 실제로 변경, 토큰은 사용 처리, 보안을 위해 해당 계정의 기존 로그인
+  세션은 모두 삭제(재로그인 필요)
+- **index.html** 수정 — 로그인 화면에 "새 비밀번호 설정" 패널(`#resetPanel`) 추가
+- **auth.js** 수정 — 페이지 로드 시 주소창에 `?reset=토큰`이 있으면 로그인 화면 대신 새 비밀번호
+  설정 패널을 바로 보여줌(기존 로그인 세션 자동 복원은 건너뜀). `resetPanel` 제출 시
+  `/api/reset-password` 호출 → 성공하면 로그인 패널로 안내
+- 검증: `node -c` 로 _utils.js/find-account.js/reset-password.js/auth.js 문법 확인, index.html
+  `<form>` 개수 짝 확인. **Gmail SMTP 실제 발송 자체는 이 환경에서 직접 테스트할 수 없어(실제 구글
+  계정 인증 필요), 배포 후 교수님이 직접 "비밀번호 찾기"로 한 번 테스트해봐야 함** — 앱 비밀번호가
+  틀렸거나 미설정이면 화면에 "메일 발송에 실패했습니다: ..." 형태로 원인이 표시됨
+
 ## 2026-08-18 (4) — 교수 그룹 설정 (학생 가입 + 과제 등록/제출 + 첨삭)
 
 **배경**: 위 단계에서 교수(studio.inknpen 등)가 6자리 코드를 받도록 만들어뒀으니, 이제 학생이 그 코드로
