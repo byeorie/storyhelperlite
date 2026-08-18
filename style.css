@@ -447,6 +447,20 @@ body.logged-in .login-overlay { display: none; }
 .auth-link { display: block; text-align: center; font-size: .82em; color: #80868b; margin-top: 2px; }
 .auth-link:hover { color: #2b3a67; }
 
+/* 회원가입 — 교수/학생 등급 선택 */
+.signup-role { display: flex; gap: 16px; justify-content: center; margin-top: 2px; }
+.signup-role-opt { display: flex; align-items: center; gap: 5px; font-size: .9em; color: #3c3c3c; cursor: pointer; }
+.signup-role-hint { font-size: 8pt; color: #9aa0a6; text-align: center; margin: 0; line-height: 1.4; }
+
+/* 관리자 — 회원 관리 표 / 서버 초기화 */
+.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+.admin-table th, .admin-table td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; }
+.admin-table th { background: var(--accent2); color: var(--accent); font-weight: 700; }
+.admin-table tbody tr:nth-child(even) { background: #fbfaf7; }
+.admin-reset-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.admin-reset-box { flex: 1; min-width: 220px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.admin-reset-box .plan-guide { margin: 4px 0 10px; }
+
 /* ===== 심플라인 아이콘 / 아이콘 버튼 ===== */
 .icon{width:15px;height:15px;vertical-align:-3px;flex-shrink:0}
 .icon-btn{display:inline-flex;align-items:center;gap:5px}

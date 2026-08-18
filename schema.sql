@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
   email TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  role TEXT NOT NULL DEFAULT 'student', -- 'student' | 'professor'
+  prof_code TEXT -- 교수 계정만: 학생이 그룹 가입 시 입력하는 6자리 코드
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -41,3 +43,15 @@ VALUES (
   'byeorie@gmail.com',
   1784181472
 );
+
+-- ===== 2026-08-18: 회원 등급(교수/학생) + 교수 코드, 관리자 계정 교체 =====
+-- 이미 DB를 만든 뒤라면 (users 테이블이 이미 있다면) 아래 내용을 Cloudflare D1 Console에
+-- 붙여넣고 한 번만 실행하세요. (처음 DB를 만드는 경우엔 위 CREATE TABLE에 이미 반영되어 있어
+-- 아래는 건너뛰어도 됩니다 — 단, 위 CREATE TABLE도 role/prof_code 컬럼이 없으므로 항상 실행 필요)
+ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'student';
+ALTER TABLE users ADD COLUMN prof_code TEXT;
+
+-- 기존 관리자(profh, 황기연) 계정을 studio.inknpen 으로 교체하고 교수 등급 + 교수 코드 부여
+-- (아이디만 바뀝니다. 비밀번호는 그대로이니 새 아이디 studio.inknpen 으로 로그인하세요)
+UPDATE users SET username = 'studio.inknpen', role = 'professor', prof_code = '360544'
+  WHERE username = 'profh';

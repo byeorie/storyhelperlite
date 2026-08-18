@@ -1,6 +1,6 @@
 /* ===== 상태 & 저장 ===== */
 const LS_KEY = "storyhelper_v1";
-const ADMIN_USERNAME = "profh";
+const ADMIN_USERNAME = "studio.inknpen";
 
 /* ===== 심플라인 아이콘 (24x24 stroke, currentColor) ===== */
 const ICONS = {
@@ -436,7 +436,7 @@ function render(){
     if(!P.explore) P.explore=blankExplore();
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
-      event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard};
+      event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin};
     (renderers[activeTab]||rIdea)();
   }catch(e){
     console.error("렌더링 오류:", e);
@@ -2948,6 +2948,77 @@ function openDrawModal(bl, sizeKey){
 
   overlay.appendChild(box);
   document.body.appendChild(overlay);
+}
+
+/* ===== 🛠 관리자 — 회원 관리 · 서버 초기화 =====
+   /api/admin (GET: 회원 명단, POST {mode:"data"|"all"}: 초기화) 를 사용한다.
+   접근 자체는 사이드바에서 isAdmin()으로 이미 가려져 있지만, 서버(functions/api/admin.js)도
+   ADMIN_USERNAME으로 한 번 더 확인하므로 다른 계정이 URL을 직접 두드려도 안전하다. */
+let adminUsersCache=null;
+async function loadAdminUsers(force){
+  if(!force && adminUsersCache) return adminUsersCache;
+  const res=await apiFetch("admin");
+  adminUsersCache=(res.ok && res.body && Array.isArray(res.body.users)) ? res.body.users : [];
+  return adminUsersCache;
+}
+function fmtDate(sec){
+  if(!sec) return "-";
+  const d=new Date(sec*1000);
+  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`;
+}
+function rAdmin(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>${ICONS.user} 회원 관리</h2>
+    <p class="hint">가입한 회원 명단입니다. 교수 계정에는 학생이 그룹 가입 시 입력할 6자리 코드가 함께 표시됩니다.</p>
+    <div id="adminUsersWrap"><p class="hint">불러오는 중…</p></div>
+  </div>
+  <div class="card"><h2>${ICONS.trash} 서버 초기화</h2>
+    <p class="hint">아래 버튼은 되돌릴 수 없습니다. 눌러도 바로 실행되지 않고, 두 번의 확인을 거쳐야 실행됩니다.</p>
+    <div class="admin-reset-row">
+      <div class="admin-reset-box">
+        <b>데이터 초기화</b>
+        <p class="plan-guide">모든 회원의 작품(아이디어·기획서·플롯·글쓰기 등) 데이터만 삭제합니다. 회원 계정(아이디/비밀번호)은 그대로 유지됩니다.</p>
+        <button class="btn danger" id="adminResetDataBtn">데이터 초기화</button>
+      </div>
+      <div class="admin-reset-box">
+        <b>계정 + 데이터 초기화</b>
+        <p class="plan-guide">관리자(studio.inknpen) 계정을 제외한 모든 회원 계정과 데이터를 전부 삭제합니다. 새 학기를 시작할 때 사용하세요.</p>
+        <button class="btn danger" id="adminResetAllBtn">계정 + 데이터 초기화</button>
+      </div>
+    </div>
+  </div>`;
+  app.appendChild(c);
+  renderAdminUsers();
+  c.querySelector("#adminResetDataBtn").onclick=()=>doAdminReset("data");
+  c.querySelector("#adminResetAllBtn").onclick=()=>doAdminReset("all");
+}
+async function renderAdminUsers(){
+  const wrap=document.getElementById("adminUsersWrap"); if(!wrap) return;
+  const users=await loadAdminUsers();
+  if(!wrap.isConnected) return; /* 렌더링 도중 탭을 벗어난 경우 무시 */
+  if(!users.length){ wrap.innerHTML=`<p class="hint">회원 명단을 불러오지 못했습니다.</p>`; return; }
+  const profCount=users.filter(u=>u.role==="professor").length;
+  const rows=users.map(u=>`<tr>
+    <td>${esc(u.school)}</td><td>${esc(u.name)}</td><td>${esc(u.username)}</td>
+    <td>${u.role==="professor"?"교수":"학생"}</td>
+    <td>${u.role==="professor"?esc(u.prof_code||"-"):"-"}</td>
+    <td>${esc(u.email)}</td><td>${fmtDate(u.created_at)}</td>
+  </tr>`).join("");
+  wrap.innerHTML=`<table class="admin-table"><thead><tr>
+    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th>교수 코드</th><th>이메일</th><th>가입일</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명)</p>`;
+}
+async function doAdminReset(mode){
+  const label = mode==="all" ? "계정 + 데이터 초기화" : "데이터 초기화";
+  if(!confirm(`정말 '${label}'를 실행할까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  const warn = mode==="all"
+    ? "마지막 확인입니다.\n관리자 계정을 제외한 모든 회원 계정과 데이터가 영구적으로 삭제됩니다.\n정말 진행할까요?"
+    : "마지막 확인입니다.\n모든 회원의 작품 데이터가 영구적으로 삭제됩니다.\n정말 진행할까요?";
+  if(!confirm(warn)) return;
+  const res=await apiFetch("admin", { method:"POST", body: JSON.stringify({mode}) });
+  if(res.ok){ alert("초기화가 완료되었습니다."); adminUsersCache=null; renderAdminUsers(); }
+  else alert((res.body && res.body.error) || "초기화에 실패했습니다.");
 }
 
 /* 정보 */

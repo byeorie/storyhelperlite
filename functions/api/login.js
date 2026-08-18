@@ -25,6 +25,7 @@ export async function onRequestPost({ request, env }) {
 
   return jsonResponse({
     token,
-    user: { username: user.username, name: user.name, school: user.school, email: user.email },
+    user: { username: user.username, name: user.name, school: user.school, email: user.email,
+      role: user.role || "student", profCode: user.prof_code || "" },
   });
 }

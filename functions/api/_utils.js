@@ -1,5 +1,9 @@
 /* ===== 공용 유틸 (Cloudflare Pages Functions) ===== */
 
+/* 관리자(서버 초기화/회원 관리) 권한을 가진 단일 계정의 아이디.
+   app.js의 ADMIN_USERNAME과 반드시 같은 값으로 유지할 것 */
+export const ADMIN_USERNAME = "studio.inknpen";
+
 export function jsonResponse(obj, status) {
   return new Response(JSON.stringify(obj), {
     status: status || 200,
@@ -52,7 +56,7 @@ export async function requireAuth(request, env) {
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
   const session = await env.DB.prepare(
-    "SELECT s.expires_at, u.id, u.school, u.name, u.username, u.email " +
+    "SELECT s.expires_at, u.id, u.school, u.name, u.username, u.email, u.role, u.prof_code " +
     "FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?"
   ).bind(token).first();
   if (!session) return null;
@@ -62,6 +66,14 @@ export async function requireAuth(request, env) {
   }
   return {
     token,
-    user: { id: session.id, school: session.school, name: session.name, username: session.username, email: session.email },
+    user: { id: session.id, school: session.school, name: session.name, username: session.username, email: session.email,
+      role: session.role || "student", profCode: session.prof_code || "" },
   };
+}
+
+/* 관리자 전용 API에서 공통으로 사용 — 관리자가 아니면 null */
+export async function requireAdmin(request, env) {
+  const auth = await requireAuth(request, env);
+  if (!auth || auth.user.username !== ADMIN_USERNAME) return null;
+  return auth;
 }

@@ -209,6 +209,8 @@ function bindAuthForms() {
     const password = document.getElementById("signupPassword").value;
     const passwordConfirm = document.getElementById("signupPasswordConfirm").value;
     const email = document.getElementById("signupEmail").value.trim();
+    const roleEl = document.querySelector('input[name="signupRole"]:checked');
+    const role = roleEl ? roleEl.value : "student";
     const errEl = document.getElementById("signupError");
     errEl.textContent = "";
     if (!school || !name || !username || !password || !passwordConfirm || !email) {
@@ -218,7 +220,7 @@ function bindAuthForms() {
     if (password.length < 6) { errEl.textContent = "비밀번호는 6자 이상이어야 합니다."; return; }
     const res = await apiFetch("signup", {
       method: "POST",
-      body: JSON.stringify({ school, name, username, password, email }),
+      body: JSON.stringify({ school, name, username, password, email, role }),
     });
     if (res.ok && res.body && res.body.token) {
       saveAuth(res.body.token, res.body.user);

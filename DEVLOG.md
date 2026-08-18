@@ -2,6 +2,37 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-18 (3) — 관리자 페이지 신설 (회원 관리 + 서버 초기화) + 회원 등급(교수/학생)
+
+**배경**: studio.inknpen 계정을 유일한 관리자로 지정하고, 회원 명단 조회와 서버 초기화(데이터만 /
+계정+데이터) 기능이 필요해짐. 회원은 교수/학생 등급으로 나뉘고 교수는 6자리 코드를 받는다(다음 단계
+"교수 그룹 설정"에서 학생이 이 코드로 교수 그룹에 가입).
+
+- **schema.sql** 수정 — `users` 테이블에 `role`(기본값 'student')·`prof_code` 컬럼 추가. 기존 DB에
+  적용할 `ALTER TABLE`문과, 기존 profh 계정을 studio.inknpen(교수 등급 + 코드 360544)으로 바꾸는
+  `UPDATE`문 추가 — **Cloudflare D1 콘솔에서 수동 실행 필요** (교수님께 별도 안내)
+- **functions/api/_utils.js** 수정 — `ADMIN_USERNAME`("studio.inknpen") 상수화, `requireAuth()`가
+  role/prof_code도 함께 조회, 공용 `requireAdmin()` 헬퍼 추가
+- **functions/api/login.js**, **signup.js** 수정 — 로그인/가입 응답에 role·profCode 포함. signup은
+  role(student/professor) 입력을 받아 저장하고, 교수로 가입 시 중복되지 않는 6자리 코드를 자동 생성
+- **functions/api/admin.js** 신규 생성 — GET: 회원 명단 조회, POST {mode:"data"|"all"}: 서버 초기화
+  (data=모든 회원 작품데이터만 삭제, all=관리자 본인 제외 모든 계정·세션·데이터 삭제). 둘 다
+  `requireAdmin()`으로 studio.inknpen 계정만 허용
+- **index.html** 수정 — 회원가입 폼에 교수/학생 선택 라디오 버튼 + 8pt 안내문구 추가. 사이드바 맨
+  아래 "관리자" 메뉴 그룹(`#adminNavGroup`, 기본 숨김) + "회원 관리 · 서버 초기화" 탭(`data-tab="admin"`)
+  복원 — 기존 isAdmin()/refreshAdminTabVisibility() 스캐폴딩(2026-08-16에 구 작품DB 관리 페이지만
+  지우고 남겨뒀던 것)을 그대로 재사용
+- **app.js** 수정 — `ADMIN_USERNAME` 'profh' → 'studio.inknpen'. `rAdmin()` 신설(회원 명단 표 +
+  데이터초기화/계정+데이터초기화 버튼, 각 버튼은 confirm() 2연속으로 재확인 후 `/api/admin` POST) +
+  `renderers` 맵에 `admin:rAdmin` 등록
+- **auth.js** 수정 — 회원가입 제출 시 선택한 role을 `/api/signup` 요청 본문에 포함
+- **style.css** 수정 — `.signup-role`(가입 폼 등급 선택), `.admin-table`(회원 명단 표),
+  `.admin-reset-row`/`.admin-reset-box`(초기화 버튼 영역) 스타일 추가
+- 검증: Node로 모든 수정 파일 문법 체크(`node -c`/ESM 문법 체크) 통과
+- 정리: 이전 커밋에서 실수로 들어간 빈 파일 `main`과, git 브랜치/잠금 문제 진단용으로 썼던 1회성
+  배치 파일(`fix-branch.bat`/`autopush-debug.bat`/`cleanup-node_modules.bat`/`setup-and-push.bat`)
+  삭제 — 더 이상 필요 없음
+
 ## 2026-08-18 — 기획서 작성 페이지 신설 (블럭형 입력 + .docx 출력)
 
 **배경**: 교수님이 첨부한 표준 웹툰 기획안 양식(일시/작성자 · 제목/장르/로그라인 ·
