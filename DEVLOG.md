@@ -2,6 +2,22 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-18 (6) — 관리자 계정을 studio.inknpen → byeorie 로 교체
+
+**배경**: studio.inknpen은 교수 계정으로만 쓰고, 관리자 권한은 별도 계정 byeorie(교수님이 D1에서
+직접 profh → byeorie 로 아이디를 바꿔둔 계정)로 옮기고 싶다는 요청.
+
+- **functions/api/_utils.js** 수정 — `ADMIN_USERNAME` "studio.inknpen" → "byeorie"
+- **app.js** 수정 — `ADMIN_USERNAME` 상수 동일하게 교체, 서버 초기화 안내 문구("관리자(...) 계정을
+  제외한...")의 계정명 표기도 byeorie로 수정
+- 참고: 관리자 권한은 DB에 별도 컬럼으로 저장되는 게 아니라 로그인한 아이디가 이 상수와 같은지만
+  비교하는 방식이라, 이 상수만 바꾸면 byeorie 계정이 (role 값과 무관하게) 바로 관리자 권한을 갖고,
+  studio.inknpen은 자동으로 관리자 권한을 잃음(교수 권한은 role='professor' 값을 그대로 유지하고
+  있어 별도 변경 없이 계속 교수로 남음). DB 스키마 변경 없음 — D1에서 추가로 실행할 SQL 없음
+- 검증: `node -c app.js` / `node -c functions/api/_utils.js` 통과, 코드 전체에 "studio.inknpen"
+  문자열이 더 이상 남아있지 않음을 grep으로 확인(과거 기록용 schema.sql 주석·DEVLOG 이전 항목은
+  기록 보존 차원에서 그대로 둠)
+
 ## 2026-08-18 (5) — 비밀번호를 잊었을 때 이메일로 아이디 안내 + 재설정 링크 발송
 
 **배경**: profh(→studio.inknpen) 계정 비밀번호를 잊어버렸는데, 로그인 화면의 "아이디/비밀번호를

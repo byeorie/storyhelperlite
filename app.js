@@ -1,6 +1,6 @@
 /* ===== 상태 & 저장 ===== */
 const LS_KEY = "storyhelper_v1";
-const ADMIN_USERNAME = "studio.inknpen";
+const ADMIN_USERNAME = "byeorie";
 
 /* ===== 심플라인 아이콘 (24x24 stroke, currentColor) ===== */
 const ICONS = {
@@ -2999,7 +2999,7 @@ function rAdmin(){
       </div>
       <div class="admin-reset-box">
         <b>계정 + 데이터 초기화</b>
-        <p class="plan-guide">관리자(studio.inknpen) 계정을 제외한 모든 회원 계정과 데이터를 전부 삭제합니다. 새 학기를 시작할 때 사용하세요.</p>
+        <p class="plan-guide">관리자(byeorie) 계정을 제외한 모든 회원 계정과 데이터를 전부 삭제합니다. 새 학기를 시작할 때 사용하세요.</p>
         <button class="btn danger" id="adminResetAllBtn">계정 + 데이터 초기화</button>
       </div>
     </div>

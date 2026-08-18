@@ -2,7 +2,7 @@
 
 /* 관리자(서버 초기화/회원 관리) 권한을 가진 단일 계정의 아이디.
    app.js의 ADMIN_USERNAME과 반드시 같은 값으로 유지할 것 */
-export const ADMIN_USERNAME = "studio.inknpen";
+export const ADMIN_USERNAME = "byeorie";
 
 export function jsonResponse(obj, status) {
   return new Response(JSON.stringify(obj), {
