@@ -199,8 +199,18 @@ async function loadFromServer() {
       render();
       if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
     } else {
-      // 서버에 저장된 데이터가 없으면 현재 로컬 데이터를 서버로 업로드
-      saveToServer();
+      // 서버에 저장된 데이터가 없는 계정(신규 가입 등) — 이 시점에 메모리의 DB는 로그인 화면이 뜨기 전
+      // localStorage에서 미리 읽어들인 값이라, 같은 브라우저에서 다른 계정으로 테스트했던 내용이 그대로
+      // 남아있을 수 있다. 그걸 그대로 서버에 올리면 새 계정에 다른 계정 내용이 넘어가 버리므로(2026-08-18
+      // 발견된 버그), 서버에 데이터가 없을 땐 항상 빈 작품 하나로 새로 시작한다.
+      if (typeof blankProject === "function" && typeof uid === "function") {
+        const id = uid();
+        DB = { current: id, projects: [blankProject(id, "내 첫 작품")], openIds: [id] };
+        P = currentProject();
+        if (typeof resetUndoHistory === "function") resetUndoHistory();
+        render();
+      }
+      if (typeof save === "function") save(); else saveToServer();
       if (st) st.innerHTML = CLOUD_ICON + " 서버 연결됨";
     }
   } else if (st) {
