@@ -2,6 +2,71 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-18 (4) — 교수 그룹 설정 (학생 가입 + 과제 등록/제출 + 첨삭)
+
+**배경**: 위 단계에서 교수(studio.inknpen 등)가 6자리 코드를 받도록 만들어뒀으니, 이제 학생이 그 코드로
+교수 그룹에 가입하고, 교수가 과제를 만들면 학생이 기획서/플롯/글쓰기 작업물을 제출하고, 교수가 그
+제출물을 열람·첨삭할 수 있도록 하는 마지막 단계.
+
+- **schema.sql** 수정 — `users`에 `prof_id`(학생이 가입한 교수의 id, 미가입이면 NULL) 컬럼 추가.
+  `assignments`(과제: 교수id/제목/제출기한/제출열림여부) · `submissions`(제출물: 과제id/학생id/유형
+  plan·plot·write/제출당시 작업물 JSON 스냅샷/첨삭 JSON/제출·첨삭시각) 테이블 신설 — **Cloudflare D1
+  콘솔에서 수동 실행 필요** (교수님께 별도 안내)
+- **functions/api/_utils.js** 수정 — `requireAuth()`가 `prof_code`/`prof_id`도 함께 조회해 `profCode`/
+  `profId`로 반환, `requireProfessor()` 헬퍼 추가(로그인 + role이 professor인 계정만 통과)
+- **functions/api/login.js**, **signup.js** 수정 — 응답 user 객체에 `profId` 포함
+- **신규 API 8종**(모두 `node --check`로 문법 확인)
+  - `student-join.js` — POST {code}: 6자리 코드로 교수를 찾아 `users.prof_id` 갱신(본인 코드로는
+    가입 불가)
+  - `professor-students.js` — GET: 내 그룹에 가입한 학생 명단
+  - `professor-assignments.js` — GET(과제별 제출 건수 포함 목록)/POST {title,dueAt}(과제 생성)
+  - `professor-assignment.js` — GET ?id=(해당 과제의 제출물 목록, 소유권 확인)/POST {id,open}(제출
+    열림/마감 토글)
+  - `professor-submission.js` — GET ?id=(제출물 상세, 소유권은 과제 조인으로 확인)/POST {id,feedback}
+    (첨삭 저장)
+  - `student-assignments.js` — GET: 내가 가입한 교수 정보 + 그 교수의 과제 목록(과제별 내 제출 이력
+    포함)
+  - `student-submit.js` — POST {assignmentId,type,projectName,data}: 과제 제출(가입 그룹·제출 열림
+    여부 확인 후 현재 작업물 스냅샷을 그대로 저장)
+  - `student-submission.js` — GET ?id=: 내가 제출한 것의 상세 + 교수 첨삭(본인 것만)
+- **index.html** 수정 — 사이드바 관리자 메뉴 바로 위에 "교수" 메뉴 그룹(`#profNavGroup`, 기본 숨김) +
+  "학생 관리"(`data-tab="profStudents"`)/"과제 관리"(`data-tab="profAssignments"`) 탭 추가
+- **app.js** 수정
+  - `isProfessor()`/`refreshProfNavVisibility()`/`forceTab()` 추가, `onAuthChanged()`가 로그인한
+    계정이 교수가 아니면 교수 전용 탭에서 자동으로 빠져나오도록 처리
+  - `renderers` 맵에 `profStudents:rProfStudents`, `profAssignments:rProfAssignments` 등록
+  - 학생 계정 화면의 "기획서 작성"/"플롯 생성"/"글쓰기" 탭 제목 오른쪽에 "제출" 버튼 추가(교수
+    계정에서는 숨김) — `submitBtnHtml()`/`wireSubmitBtn()`로 공용화
+  - `openSubmitModal(type)` — 내가 가입한 교수의 열려있는 과제 목록을 보여주고, 고르면 현재 작업물을
+    `buildSubmissionData(type)`로 스냅샷 떠서 `/api/student-submit`으로 제출. 이미 제출한 과제는
+    "이미 N회 제출함" 배지 표시(클릭하면 본인이 제출한 내용을 읽기 전용으로 확인 가능)
+  - `rProfStudents()` — 내 그룹 학생 명단 표
+  - `rProfAssignments()`/`renderProfAssignList()` — 과제들을 폴더형 카드로 나열, 카드마다 제출기한·
+    제출건수 + 제출열림/마감 토글 스위치. "과제 등록" 버튼(`openNewAssignmentModal()`)으로 과제명·
+    제출기한 입력해 생성
+  - `openAssignmentFolder(id)` — 과제 폴더를 열면 그 과제에 제출한 학생 이름 목록 표시, 클릭 시
+    `openSubmissionReview(id)`로 이동
+  - `openSubmissionReview(id)` — 교수의 첨삭 화면. 제출물을 유형(기획서/플롯/글쓰기)에 맞는 블록
+    단위로 쪼개 **위에는 학생이 제출한 원본(읽기 전용), 바로 아래에 첨삭 입력란**을 블록마다 짝
+    지어 세로로 나열. "첨삭 저장"을 누르면 학생도 확인 가능하도록 서버에 저장. 이 화면에서 여는
+    제출물은 교수 본인의 프로젝트 데이터(`DB`/`P`)에는 전혀 반영되지 않는 **완전히 별도의 임시
+    데이터**로만 다룸(전역 `P`/`DB`를 건드리지 않고 모달 내부 지역 변수로만 렌더링)
+  - `buildReviewPairs(type,data,feedback)`/`buildFeedbackFromPairs(type,data,afterList)` — 기획서는
+    14개 필드별, 플롯은 섹션별, 글쓰기는 블록별로 원본/첨삭 쌍을 만들고 되돌리는 공용 변환 함수
+- **auth.js** 수정 — `openSettings()`를 실제 기능으로 구현. 교수 계정은 본인의 6자리 코드를 크게
+  표시(학생에게 공유용), 학생 계정은 6자리 코드 입력란 + "가입하기" 버튼을 보여주고
+  `/api/student-join` 호출 → 성공 시 `currentUser.profId` 갱신 후 저장
+- **style.css** 수정 — `.card-h2-row`(탭 제목+제출버튼 배치), `.plot-modal.wide`, `.prof-code-display`
+  (설정 화면 코드 큰 글씨), `.submit-assign-list`류(제출 모달 과제 목록), `.assign-type-badge`,
+  `.prof-assign-grid`/`.assign-folder`류(과제 폴더 카드), `.assign-switch`류(제출열림/마감 토글
+  스위치), `.review-pair`/`.review-before`/`.review-after`(첨삭 화면 원본/첨삭 쌍 레이아웃) 추가.
+  기존에 app.js에서 쓰이고 있었으나 정의가 빠져있던 `.muted` 클래스도 함께 추가
+- 검증: `node -c app.js`, `node -c auth.js`, 신규 API 8개 전부 `node --check` 통과
+- ⚠️ **배포 후 수동 설정 필요**: 위 schema.sql의 이번 단계분(`prof_id` 컬럼 + `assignments`/
+  `submissions` 테이블)을 Cloudflare D1 콘솔에서 실행해야 학생 가입/과제/제출 기능이 정상 동작함.
+  또한 이 기능은 2단계(관리자 페이지)에서 추가된 `role`/`prof_code` 컬럼과 studio.inknpen 계정 전환이
+  이미 D1에 반영돼 있어야 함께 정상 동작함
+
 ## 2026-08-18 (3) — 관리자 페이지 신설 (회원 관리 + 서버 초기화) + 회원 등급(교수/학생)
 
 **배경**: studio.inknpen 계정을 유일한 관리자로 지정하고, 회원 명단 조회와 서버 초기화(데이터만 /

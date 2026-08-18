@@ -54,5 +54,5 @@ export async function onRequestPost({ request, env }) {
     "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)"
   ).bind(token, userId, created, expires).run();
 
-  return jsonResponse({ token, user: { username, name, school, email, role, profCode: profCode || "" } });
+  return jsonResponse({ token, user: { username, name, school, email, role, profCode: profCode || "", profId: null } });
 }

@@ -56,7 +56,7 @@ export async function requireAuth(request, env) {
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
   const session = await env.DB.prepare(
-    "SELECT s.expires_at, u.id, u.school, u.name, u.username, u.email, u.role, u.prof_code " +
+    "SELECT s.expires_at, u.id, u.school, u.name, u.username, u.email, u.role, u.prof_code, u.prof_id " +
     "FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?"
   ).bind(token).first();
   if (!session) return null;
@@ -67,7 +67,7 @@ export async function requireAuth(request, env) {
   return {
     token,
     user: { id: session.id, school: session.school, name: session.name, username: session.username, email: session.email,
-      role: session.role || "student", profCode: session.prof_code || "" },
+      role: session.role || "student", profCode: session.prof_code || "", profId: session.prof_id || null },
   };
 }
 
@@ -75,5 +75,12 @@ export async function requireAuth(request, env) {
 export async function requireAdmin(request, env) {
   const auth = await requireAuth(request, env);
   if (!auth || auth.user.username !== ADMIN_USERNAME) return null;
+  return auth;
+}
+
+/* 교수 전용 API — role이 professor가 아니면 null */
+export async function requireProfessor(request, env) {
+  const auth = await requireAuth(request, env);
+  if (!auth || auth.user.role !== "professor") return null;
   return auth;
 }

@@ -104,7 +104,65 @@ document.addEventListener("click", (e) => {
 
 function openSettings() {
   toggleUserMenu(true);
-  alert("설정 기능은 준비 중입니다.");
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="설정";
+  const closeBtn=(typeof iconBtn==="function" && typeof ICONS!=="undefined")
+    ? iconBtn(ICONS.close, "닫기", ()=>document.body.removeChild(overlay))
+    : (()=>{ const b=document.createElement("button"); b.type="button"; b.textContent="닫기"; b.onclick=()=>document.body.removeChild(overlay); return b; })();
+  top.append(ttl, closeBtn);
+  box.appendChild(top);
+
+  const body=document.createElement("div");
+  const esc2 = typeof esc==="function" ? esc : (s=>String(s==null?"":s));
+
+  if (currentUser && currentUser.role === "professor") {
+    body.innerHTML = `
+      <p class="hint">학생들에게 아래 코드를 알려주면, 학생이 [설정]에서 이 코드를 입력해 내 그룹에 가입할 수 있습니다.</p>
+      <div class="prof-code-display">${esc2(currentUser.profCode || "코드 없음")}</div>
+      <p class="hint">${esc2(currentUser.school || "")} · ${esc2(currentUser.name || "")}</p>
+    `;
+  } else {
+    const joined = !!(currentUser && currentUser.profId);
+    body.innerHTML = `
+      <p class="hint">${joined ? "이미 교수 그룹에 가입되어 있습니다. 다른 코드를 입력하면 그룹이 변경됩니다." : "교수님께 받은 6자리 코드를 입력하면 과제 제출 그룹에 가입됩니다."}</p>
+      <div class="plan-block">
+        <label>교수 코드</label>
+        <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 360544" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
+      </div>
+      <p id="profJoinMsg" class="hint" style="min-height:18px"></p>
+      <button class="btn" id="profJoinBtn" style="width:100%">가입하기</button>
+    `;
+  }
+  box.appendChild(body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const joinBtn = document.getElementById("profJoinBtn");
+  if (joinBtn) {
+    joinBtn.onclick = async () => {
+      const input = document.getElementById("profCodeInput");
+      const msgEl = document.getElementById("profJoinMsg");
+      const code = (input.value || "").trim();
+      if (!/^\d{6}$/.test(code)) { msgEl.textContent = "6자리 숫자 코드를 입력해주세요."; return; }
+      joinBtn.disabled = true;
+      msgEl.textContent = "확인 중…";
+      const res = await apiFetch("student-join", { method: "POST", body: JSON.stringify({ code }) });
+      joinBtn.disabled = false;
+      if (res.ok && res.body && res.body.ok) {
+        const prof = res.body.prof || {};
+        currentUser.profId = prof.id;
+        currentUser.profCode = currentUser.profCode; // 학생 계정은 원래 없음
+        saveAuth(getToken(), currentUser);
+        msgEl.textContent = `${prof.school || ""} ${prof.name || ""} 교수님 그룹에 가입되었습니다.`;
+        if (typeof onAuthChanged === "function") onAuthChanged();
+      } else {
+        msgEl.textContent = (res.body && res.body.error) || "가입에 실패했습니다.";
+      }
+    };
+  }
 }
 
 async function signOut() {

@@ -34,19 +34,27 @@ const ICONS = {
   eraser:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a2 2 0 0 1 0-2.8l9.6-9.6a2 2 0 0 1 2.8 0l5.7 5.7a2 2 0 0 1 0 2.8L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>'
 };
 function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
+function isProfessor(){ return typeof currentUser!=="undefined" && currentUser && currentUser.role==="professor"; }
 function refreshAdminTabVisibility(){
   const grp=document.getElementById("adminNavGroup");
   if(grp) grp.style.display=isAdmin()?"":"none";
 }
+function refreshProfNavVisibility(){
+  const grp=document.getElementById("profNavGroup");
+  if(grp) grp.style.display=isProfessor()?"":"none";
+}
+function forceTab(name){
+  activeTab=name;
+  localStorage.setItem(TAB_KEY, activeTab);
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  const btn=document.querySelector(`.tab[data-tab="${name}"]`);
+  if(btn) btn.classList.add("active");
+}
 function onAuthChanged(){
   refreshAdminTabVisibility();
-  if(activeTab==="admin" && !isAdmin()){
-    activeTab="idea";
-    localStorage.setItem(TAB_KEY, activeTab);
-    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-    const ideaBtn=document.querySelector('.tab[data-tab="idea"]');
-    if(ideaBtn) ideaBtn.classList.add("active");
-  }
+  refreshProfNavVisibility();
+  if(activeTab==="admin" && !isAdmin()) forceTab("idea");
+  if((activeTab==="profStudents"||activeTab==="profAssignments") && !isProfessor()) forceTab("idea");
   render();
 }
 /* ===== 왼쪽 메뉴·플롯 목록·미리보기 접기/펼치기 (곰국을끼리오너라 프로젝트 참고) =====
@@ -436,7 +444,8 @@ function render(){
     if(!P.explore) P.explore=blankExplore();
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
-      event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin};
+      event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
+      profStudents:rProfStudents, profAssignments:rProfAssignments};
     (renderers[activeTab]||rIdea)();
   }catch(e){
     console.error("렌더링 오류:", e);
@@ -1299,7 +1308,7 @@ function rPlan(){
   if(!P.planDoc) P.planDoc=blankPlanDoc();
   const pd=P.planDoc;
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.file} 기획서 작성</h2>
+  c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.file} 기획서 작성</h2>${submitBtnHtml()}</div>
     <p class="hint">항목별로 작성하면 상단 '내보내기 → 기획서 출력(.docx)'에서 정해진 양식의 워드 파일로 받을 수 있습니다.</p>
     <div class="plan-row">
       <div class="plan-block"><label>일시</label><p class="plan-guide">작성한 날짜를 입력하세요. (예: 2026년 8월 18일)</p><input type="text" id="pd_date" placeholder="2026년 8월 18일"></div>
@@ -1317,6 +1326,7 @@ function rPlan(){
   bind(c.querySelector("#pd_date"),pd,"date");
   bind(c.querySelector("#pd_author"),pd,"author");
   PLAN_FIELDS.forEach(f=> bind(c.querySelector("#pd_"+f.k),pd,f.k));
+  wireSubmitBtn(c,"plan");
 }
 
 /* ===== 📖 플롯 생성 ===== */
@@ -1378,13 +1388,14 @@ function rPlot(){
   /* 헤더 */
   const struct=PLOT_STRUCTURES[P.plotDoc.structure];
   const head=document.createElement("div"); head.className="card";
-  head.innerHTML=`<h2>${ICONS.book} 플롯 생성</h2>
+  head.innerHTML=`<div class="card-h2-row"><h2>${ICONS.book} 플롯 생성</h2>${submitBtnHtml()}</div>
     <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 드래그 핸들로 순서를 바꿀 수 있습니다. 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
     <div class="plot-toolbar">
       <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
     </div>`;
   app.appendChild(head);
+  wireSubmitBtn(head,"plot");
   head.querySelector("#addSection").onclick=()=>{
     const name=prompt("새 섹션 이름:","새 섹션"); if(name===null)return;
     P.plotDoc.sections.push({id:uid(), name:name||"새 섹션", desc:"", ideaIds:[]});
@@ -1753,6 +1764,12 @@ function rWrite(){
     if(groupBtn.disabled) groupBtn.style.opacity=.45;
     groupBtn.onclick=groupSelectedBlocks;
     barRight.appendChild(groupBtn);
+  }
+  if(typeof currentUser!=="undefined" && currentUser && currentUser.role!=="professor"){
+    const submitBtn=document.createElement("button"); submitBtn.className="btn ghost sm icon-btn";
+    submitBtn.innerHTML=ICONS.upload+" 제출";
+    submitBtn.onclick=()=>openSubmitModal("write");
+    barRight.appendChild(submitBtn);
   }
   bar.appendChild(barRight);
   main.appendChild(bar);
@@ -3019,6 +3036,318 @@ async function doAdminReset(mode){
   const res=await apiFetch("admin", { method:"POST", body: JSON.stringify({mode}) });
   if(res.ok){ alert("초기화가 완료되었습니다."); adminUsersCache=null; renderAdminUsers(); }
   else alert((res.body && res.body.error) || "초기화에 실패했습니다.");
+}
+
+/* ===== 🎓 교수 그룹 설정 — 학생-교수 연결 / 과제 관리 / 제출·첨삭 =====
+   학생: 설정에서 교수 코드 입력 → 가입 → 기획서/플롯/글쓰기 탭의 "제출" 버튼으로 과제 폴더 선택해 제출
+   교수: 학생 관리(내 코드로 가입한 학생 명단) / 과제 관리(등록·마감 스위치·제출함 열람·첨삭)
+   제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
+   모달로 "임시로 열어" 보여주고 저장도 professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와
+   완전히 분리되어 있다. */
+const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기"};
+
+/* 현재 프로젝트에서 제출용 스냅샷을 만든다 (탭 종류별로 모양이 다름, 서버는 그대로 JSON 저장만 함) */
+function buildSubmissionData(type){
+  if(type==="plan") return P.planDoc || blankPlanDoc();
+  if(type==="plot"){
+    const sections=(P.plotDoc.sections||[]).map(s=>({
+      id:s.id, name:s.name, desc:s.desc,
+      ideaTexts:(s.ideaIds||[]).map(id=>plotIdeaText(id)).filter(t=>t&&t.trim()),
+    }));
+    return {structure:P.plotDoc.structure||"", sections};
+  }
+  if(type==="write"){
+    return allWriteBlocksOrdered().map(bl=>({
+      id:bl.id, title:bl.title||"",
+      text:(bl.items||[]).filter(it=>(it.text||"").trim())
+        .map(it=> it.type==="line" ? `${it.char||"(미지정)"}: ${it.text.trim()}` : it.text.trim()).join("\n"),
+    }));
+  }
+  return null;
+}
+
+/* 제출 버튼(학생 계정에서만 노출) — innerHTML 템플릿 안에서 쓰는 버전 */
+function submitBtnHtml(){
+  return (typeof currentUser!=="undefined" && currentUser && currentUser.role!=="professor")
+    ? `<button type="button" class="btn ghost sm icon-btn submit-tab-btn">${ICONS.upload} 제출</button>` : "";
+}
+function wireSubmitBtn(container, type){
+  const btn=container.querySelector(".submit-tab-btn");
+  if(btn) btn.onclick=()=>openSubmitModal(type);
+}
+
+/* 제출 대상 과제 선택 모달 (학생) */
+async function openSubmitModal(type){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`${TYPE_LABEL[type]} 제출`;
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div"); body.innerHTML=`<p class="hint">불러오는 중…</p>`;
+  box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  const res=await apiFetch("student-assignments");
+  if(!overlay.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const profId=res.body.profId, prof=res.body.prof, assignments=res.body.assignments||[];
+  if(!profId){
+    body.innerHTML=`<p class="hint">아직 가입한 교수 그룹이 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`;
+    return;
+  }
+  const openList=assignments.filter(a=>a.open);
+  if(!openList.length){
+    body.innerHTML=`<p class="hint">${esc(prof?prof.name:"교수")}님이 등록한, 제출 가능한(마감되지 않은) 과제가 없습니다.</p>`;
+    return;
+  }
+  body.innerHTML=`<p class="hint">제출할 과제 폴더를 선택하세요. (${esc(prof?prof.name:"")} 교수님)</p>
+    <div class="submit-assign-list">${openList.map(a=>{
+      const mine=(a.mySubmissions||[]).filter(s=>s.type===type);
+      const already=mine.length
+        ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":""}</span>`
+        : "";
+      return `<button type="button" class="submit-assign-item" data-id="${a.id}">
+        <b>${esc(a.title)}</b>
+        <span class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"}</span>
+        ${already}
+      </button>`;
+    }).join("")}</div>`;
+  body.querySelectorAll(".submit-already[data-view-id]").forEach(el=>{
+    el.onclick=(e)=>{ e.stopPropagation(); openMySubmissionView(Number(el.dataset.viewId)); };
+  });
+  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=async ()=>{
+      btn.disabled=true; btn.textContent="제출 중…";
+      const data=buildSubmissionData(type);
+      const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
+        assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
+      })});
+      if(r.ok){ alert("제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
+      else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
+    };
+  });
+}
+
+/* 내가 제출한 것 + 교수 첨삭 결과 읽기 전용 보기 (학생) */
+async function openMySubmissionView(id){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal wide";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="불러오는 중…";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div"); box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  const res=await apiFetch("student-submission?id="+id);
+  if(!overlay.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const sub=res.body.submission;
+  ttl.textContent=`${TYPE_LABEL[sub.type]} — ${sub.assignmentTitle}`;
+  const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
+  body.innerHTML = sub.feedback
+    ? pairs.map(p=>`<div class="review-pair">
+        <div class="plan-block review-before"><label>${esc(p.label)}</label><div class="review-before-text">${esc(p.before).replace(/\n/g,"<br>")||'<span class="muted">(내용 없음)</span>'}</div></div>
+        <div class="plan-block review-after"><label>${esc(p.label)} — 교수님 첨삭</label><div class="review-before-text">${esc(p.after).replace(/\n/g,"<br>")||'<span class="muted">(내용 없음)</span>'}</div></div>
+      </div>`).join("")
+    : `<p class="hint">아직 첨삭 전입니다.</p>`;
+}
+
+/* ===== 교수 — 학생 관리 ===== */
+async function rProfStudents(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>${ICONS.user} 학생 관리</h2>
+    <p class="hint">내 코드(<b>${esc((currentUser&&currentUser.profCode)||"-")}</b>)를 학생에게 알려주면, 학생이 설정에서 그 코드를 입력해 아래 명단에 나타납니다.</p>
+    <div id="profStudentsWrap"><p class="hint">불러오는 중…</p></div>
+  </div>`;
+  app.appendChild(c);
+  const res=await apiFetch("professor-students");
+  const wrap=document.getElementById("profStudentsWrap"); if(!wrap) return;
+  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const students=res.body.students||[];
+  if(!students.length){ wrap.innerHTML=`<p class="hint">아직 가입한 학생이 없습니다.</p>`; return; }
+  wrap.innerHTML=`<table class="admin-table"><thead><tr>
+    <th>학교</th><th>이름</th><th>아이디</th><th>이메일</th><th>가입일</th>
+  </tr></thead><tbody>${students.map(s=>`<tr>
+    <td>${esc(s.school)}</td><td>${esc(s.name)}</td><td>${esc(s.username)}</td><td>${esc(s.email)}</td><td>${fmtDate(s.created_at)}</td>
+  </tr>`).join("")}</tbody></table><p class="hint">총 ${students.length}명</p>`;
+}
+
+/* ===== 교수 — 과제 관리 ===== */
+function rProfAssignments(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>${ICONS.book} 과제 관리</h2>
+    <p class="hint">과제를 등록하면 아래에 폴더 형태로 표시됩니다. 폴더를 클릭하면 학생 제출함이 열립니다. 스위치를 끄면 학생이 더 이상 제출할 수 없습니다.</p>
+    <button class="btn" id="profNewAssignBtn">${ICONS.plus} 과제 등록</button>
+    <div id="profAssignWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>
+  </div>`;
+  app.appendChild(c);
+  c.querySelector("#profNewAssignBtn").onclick=openNewAssignmentModal;
+  renderProfAssignList();
+}
+async function renderProfAssignList(){
+  const wrap=document.getElementById("profAssignWrap"); if(!wrap) return;
+  const res=await apiFetch("professor-assignments");
+  if(!wrap.isConnected) return;
+  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const list=res.body.assignments||[];
+  if(!list.length){ wrap.innerHTML=`<p class="hint">등록된 과제가 없습니다.</p>`; return; }
+  wrap.innerHTML=list.map(a=>`<div class="assign-folder" data-id="${a.id}">
+    <div class="assign-folder-top">
+      <span class="assign-folder-title">${ICONS.book} ${esc(a.title)}</span>
+      <label class="assign-switch" title="제출 마감 스위치" onclick="event.stopPropagation()">
+        <input type="checkbox" ${a.open?"checked":""} data-id="${a.id}">
+        <span class="assign-switch-slider"></span>
+      </label>
+    </div>
+    <div class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
+  </div>`).join("");
+  wrap.querySelectorAll(".assign-switch input").forEach(inp=>{
+    inp.onchange=async ()=>{
+      const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:Number(inp.dataset.id), open:inp.checked})});
+      if(!r.ok){ alert((r.body&&r.body.error)||"변경에 실패했습니다."); inp.checked=!inp.checked; return; }
+      renderProfAssignList();
+    };
+  });
+  wrap.querySelectorAll(".assign-folder").forEach(el=>{
+    el.onclick=()=>openAssignmentFolder(Number(el.dataset.id));
+  });
+}
+function openNewAssignmentModal(){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="과제 등록";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  box.insertAdjacentHTML("beforeend",
+    `<label>과제명</label><input type="text" id="newAssignTitle" placeholder="예: 1차 기획서 과제">
+     <label>제출기한 (선택)</label><input type="date" id="newAssignDue">
+     <button class="btn" id="newAssignSaveBtn" style="margin-top:14px;width:100%">등록</button>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  box.querySelector("#newAssignSaveBtn").onclick=async ()=>{
+    const title=box.querySelector("#newAssignTitle").value.trim();
+    if(!title){ alert("과제명을 입력해주세요."); return; }
+    const dueStr=box.querySelector("#newAssignDue").value;
+    const dueAt=dueStr ? Math.floor(new Date(dueStr+"T23:59:59").getTime()/1000) : null;
+    const r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt})});
+    if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(); }
+    else alert((r.body&&r.body.error)||"등록에 실패했습니다.");
+  };
+}
+
+/* 과제 폴더 — 제출한 학생 목록 (교수) */
+async function openAssignmentFolder(id){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal wide";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="불러오는 중…";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div"); box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  const res=await apiFetch("professor-assignment?id="+id);
+  if(!overlay.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const assignment=res.body.assignment, submissions=res.body.submissions||[];
+  ttl.textContent=assignment.title+" — 제출함";
+  if(!submissions.length){ body.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
+  body.innerHTML=`<div class="submit-assign-list">${submissions.map(s=>`
+    <button type="button" class="submit-assign-item" data-id="${s.id}">
+      <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
+      <span class="assign-type-badge">${esc(s.type_label)}</span>
+      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}</span>
+    </button>`).join("")}</div>`;
+  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=()=>openSubmissionReview(Number(btn.dataset.id));
+  });
+}
+
+/* 제출물 상세 — 첨삭 화면 (교수). 제출본(위, 읽기전용) / 첨삭본(아래, 편집) 블럭 쌍으로 배치 */
+async function openSubmissionReview(id){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal wide";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="불러오는 중…";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div"); box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  const res=await apiFetch("professor-submission?id="+id);
+  if(!overlay.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const sub=res.body.submission;
+  ttl.textContent=`${sub.studentName} · ${TYPE_LABEL[sub.type]} — ${sub.assignmentTitle}`;
+  body.innerHTML=`<p class="hint">위: 학생이 제출한 원본(수정 불가) · 아래: 첨삭 입력란 — 저장하면 학생도 볼 수 있습니다.</p>
+    <div id="reviewPairs"></div>
+    <button class="btn" id="reviewSaveBtn" style="margin-top:10px;width:100%">첨삭 저장</button>`;
+  const pairsEl=document.getElementById("reviewPairs");
+  const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
+  pairsEl.innerHTML=pairs.map((p,i)=>`<div class="review-pair">
+    <div class="plan-block review-before"><label>${esc(p.label)}</label><div class="review-before-text">${esc(p.before).replace(/\n/g,"<br>")||'<span class="muted">(내용 없음)</span>'}</div></div>
+    <div class="plan-block review-after"><label>${esc(p.label)} — 첨삭</label><textarea data-idx="${i}" class="plan-ta-lg">${esc(p.after)}</textarea></div>
+  </div>`).join("");
+  document.getElementById("reviewSaveBtn").onclick=async ()=>{
+    const afterList=[...pairsEl.querySelectorAll("textarea")].map(t=>t.value);
+    const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList);
+    const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback})});
+    if(r.ok) alert("첨삭을 저장했습니다.");
+    else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
+  };
+}
+
+/* 제출 데이터(data) + 기존 첨삭(feedback) → 화면에 그릴 "블럭 쌍" 배열 (타입별로 모양이 다름) */
+function buildReviewPairs(type, data, feedback){
+  if(type==="plan"){
+    const fb=feedback||{};
+    return PLAN_FIELDS.map(f=>({
+      label:f.label, before:(data&&data[f.k])||"",
+      after: Object.prototype.hasOwnProperty.call(fb,f.k) ? fb[f.k] : ((data&&data[f.k])||""),
+    }));
+  }
+  if(type==="plot"){
+    const sections=(data&&data.sections)||[];
+    const fbArr=Array.isArray(feedback)?feedback:[];
+    return sections.map((s,i)=>{
+      const before=(s.desc||"")+((s.ideaTexts&&s.ideaTexts.length)?("\n\n[아이디어]\n"+s.ideaTexts.join("\n")):"");
+      const fbItem=fbArr[i];
+      return { label:s.name||`섹션 ${i+1}`, before, after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : before };
+    });
+  }
+  if(type==="write"){
+    const blocks=Array.isArray(data)?data:[];
+    const fbArr=Array.isArray(feedback)?feedback:[];
+    return blocks.map((b,i)=>{
+      const fbItem=fbArr[i];
+      return { label:b.title||`블록 ${i+1}`, before:b.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||"") };
+    });
+  }
+  return [];
+}
+/* 화면에서 편집한 첨삭 텍스트 배열 → 저장용 feedback 구조로 재조립 (buildReviewPairs와 순서가 항상 같음) */
+function buildFeedbackFromPairs(type, data, afterList){
+  if(type==="plan"){
+    const fb={};
+    PLAN_FIELDS.forEach((f,i)=>{ fb[f.k]=afterList[i]||""; });
+    return fb;
+  }
+  if(type==="plot"){
+    const sections=(data&&data.sections)||[];
+    return sections.map((s,i)=>({ id:s.id, text:afterList[i]||"" }));
+  }
+  if(type==="write"){
+    const blocks=Array.isArray(data)?data:[];
+    return blocks.map((b,i)=>({ id:b.id, text:afterList[i]||"" }));
+  }
+  return null;
 }
 
 /* 정보 */

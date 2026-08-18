@@ -461,6 +461,50 @@ body.logged-in .login-overlay { display: none; }
 .admin-reset-box { flex: 1; min-width: 220px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .admin-reset-box .plan-guide { margin: 4px 0 10px; }
 
+.muted { color: var(--muted); }
+
+/* 카드 제목 줄에 버튼(제출 등)을 오른쪽에 나란히 배치 */
+.card-h2-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.card-h2-row h2 { margin: 0; }
+
+/* 넓은 모달(과제 제출함/첨삭 화면 등) */
+.plot-modal.wide { width: 760px; }
+
+/* 교수 코드 입력/표시 (설정) */
+.prof-code-display { font-size: 28px; font-weight: 700; letter-spacing: .12em; color: var(--accent);
+  text-align: center; background: var(--accent2); border-radius: 10px; padding: 14px; margin-top: 6px; }
+
+/* 제출 대상 과제 선택 목록 (학생) / 제출함 목록 (교수) — 공용 */
+.submit-assign-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.submit-assign-item { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
+  width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; cursor: pointer; }
+.submit-assign-item:hover { border-color: var(--accent); background: var(--accent2); }
+.submit-already { font-size: 12px; color: var(--accent); font-weight: 600; }
+.assign-type-badge { display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent);
+  background: var(--accent2); border-radius: 999px; padding: 2px 9px; }
+
+/* 교수 — 과제 폴더 그리드 */
+.prof-assign-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+.assign-folder { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; cursor: pointer; background: #fff; }
+.assign-folder:hover { border-color: var(--accent); background: var(--accent2); }
+.assign-folder-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.assign-folder-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 5px; }
+
+/* 제출 마감 스위치 */
+.assign-switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+.assign-switch input { opacity: 0; width: 0; height: 0; }
+.assign-switch-slider { position: absolute; inset: 0; background: var(--line); border-radius: 999px; cursor: pointer; transition: background .15s; }
+.assign-switch-slider::before { content: ""; position: absolute; width: 16px; height: 16px; left: 2px; top: 2px;
+  background: #fff; border-radius: 50%; transition: transform .15s; }
+.assign-switch input:checked + .assign-switch-slider { background: var(--ok); }
+.assign-switch input:checked + .assign-switch-slider::before { transform: translateX(16px); }
+
+/* 첨삭 화면 — 제출본(위) / 첨삭본(아래) 블럭 쌍 */
+.review-pair { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.review-before-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6; color: var(--ink); }
+.review-before { background: #fbfaf7; }
+.review-after textarea { min-height: 90px; }
+
 /* ===== 심플라인 아이콘 / 아이콘 버튼 ===== */
 .icon{width:15px;height:15px;vertical-align:-3px;flex-shrink:0}
 .icon-btn{display:inline-flex;align-items:center;gap:5px}

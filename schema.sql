@@ -12,8 +12,33 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   role TEXT NOT NULL DEFAULT 'student', -- 'student' | 'professor'
-  prof_code TEXT -- 교수 계정만: 학생이 그룹 가입 시 입력하는 6자리 코드
+  prof_code TEXT, -- 교수 계정만: 학생이 그룹 가입 시 입력하는 6자리 코드
+  prof_id INTEGER -- 학생 계정만: 가입한 교수의 users.id (그룹 미가입이면 NULL)
 );
+
+CREATE TABLE IF NOT EXISTS assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  prof_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  due_at INTEGER,             -- 제출기한(unix seconds), NULL이면 기한 없음
+  open INTEGER NOT NULL DEFAULT 1, -- 제출 마감 스위치: 1=제출 가능, 0=마감
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_assignments_prof ON assignments(prof_id);
+
+CREATE TABLE IF NOT EXISTS submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  assignment_id INTEGER NOT NULL,
+  student_id INTEGER NOT NULL,
+  type TEXT NOT NULL,          -- 'plan' | 'plot' | 'write'
+  project_name TEXT,
+  data TEXT NOT NULL,          -- 제출 당시 스냅샷(JSON) — 원본, 이후 변경 안 됨
+  feedback TEXT,               -- 교수 첨삭본(JSON) — 첨삭 전에는 NULL
+  submitted_at INTEGER NOT NULL,
+  feedback_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
+CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);
 
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
@@ -55,3 +80,31 @@ ALTER TABLE users ADD COLUMN prof_code TEXT;
 -- (아이디만 바뀝니다. 비밀번호는 그대로이니 새 아이디 studio.inknpen 으로 로그인하세요)
 UPDATE users SET username = 'studio.inknpen', role = 'professor', prof_code = '360544'
   WHERE username = 'profh';
+
+-- ===== 2026-08-18 (2): 교수 그룹 설정 — 학생-교수 연결, 과제, 제출 =====
+-- 이미 DB를 만든 뒤라면 아래 3줄을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+ALTER TABLE users ADD COLUMN prof_id INTEGER;
+
+CREATE TABLE IF NOT EXISTS assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  prof_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  due_at INTEGER,
+  open INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_assignments_prof ON assignments(prof_id);
+
+CREATE TABLE IF NOT EXISTS submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  assignment_id INTEGER NOT NULL,
+  student_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  project_name TEXT,
+  data TEXT NOT NULL,
+  feedback TEXT,
+  submitted_at INTEGER NOT NULL,
+  feedback_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
+CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);
