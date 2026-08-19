@@ -2,6 +2,47 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-19 (18) — 관리자 회원 관리: 계정 개별 삭제 버튼 추가
+
+**요청**: "회원 관리에서 계정을 개별적으로 삭제할 수 있도록 해줘."
+
+- **functions/api/admin.js**: `onRequestPost`에 `mode:"deleteUser"`(body: `{userId}`) 신규 추가. 관리자
+  본인/`ADMIN_USERNAME` 계정은 삭제 거부. FK CASCADE가 없는 스키마라 수동 순서로 삭제: 대상이
+  `role==="professor"`면 그 교수의 `assignments` → 각 과제의 `submissions` 삭제 → `assignments` 삭제 →
+  그 교수 그룹 학생들의 `users.prof_id`를 NULL로 초기화(학생 계정 자체는 유지, 소속만 해제). 이어서
+  역할 무관 공통으로 `submissions WHERE student_id=?`, `user_data`, `sessions`, `password_resets` 삭제 →
+  마지막에 `users` 삭제.
+- **app.js**: `renderAdminUsers()` 표 마지막 열에 삭제 버튼(`.admin-user-del`, 관리자 자신 행은 버튼 없음)
+  추가, `doAdminDeleteUser()`가 `confirm()` 한 번 거쳐 `admin` API를 `deleteUser` 모드로 호출 후 표 새로고침.
+- **검증**: 로그인/D1이 필요한 실제 삭제 흐름은 이 환경에서 재현 불가해 `node --check`로 app.js/
+  admin.js 문법 오류만 확인. 실사용 중 문제가 있으면 알려달라고 안내 필요.
+
+## 2026-08-19 (17) — 회원가입 시 학생/교수 선택 제거, 항상 학생으로 가입 (교수 등급은 관리자만 부여)
+
+**요청**: "가입할 때 학생/교수 선택하는 거 없애주고, 무조건 학생으로 가입되도록 해줘. 교수 계정은
+관리자가 변경시에만 적용되도록 해줘."
+
+- **index.html**: 회원가입 폼의 학생/교수 라디오 버튼(`.signup-role`)과 안내 문구 제거.
+- **auth.js**: 회원가입 제출 시 라디오값을 읽던 코드를 없애고 `role`을 항상 `"student"`로 고정.
+- **functions/api/signup.js**: 요청 본문에 `role`이 와도 무시하고 서버에서도 항상 `"student"`로 저장(누가
+  API를 직접 두드려도 교수로 가입 불가). 가입 시 교수 코드(profCode) 발급 로직도 함께 제거(항상 null).
+  이제 교수 등급은 `functions/api/admin.js`의 `setRole`(관리자 전용, 기존 기능)로만 부여됨.
+- **style.css**: 더 이상 안 쓰는 `.signup-role`/`.signup-role-opt`/`.signup-role-hint` 규칙 삭제.
+- **검증**: `node --check`로 auth.js/signup.js 문법 확인. 실제 가입 흐름은 D1이 필요해 이 환경에서
+  재현 불가.
+
+## 2026-08-19 (16) — 과제 폴더 제출함 목록을 한 줄(가로) 블록으로 압축
+
+**요청**: "과제관리에서 생성한 과제폴더 안에 있는 제출된 과제들을 한줄로 된 블록으로 보이게 해줘. 지금은
+두줄로 되어있어서 블록이 너무 커."
+
+- **style.css**: `.submit-assign-item`이 학생 과제 선택/제출 목록과 공용이라, 교수 쪽 제출함에만 별도
+  수정자 클래스 `.submit-assign-list--compact`를 추가하고 그 안에서만 `flex-direction: row`로 바꿔
+  이름·아이디·유형 배지·제출일이 한 줄에 표시되게 함(좁으면 가로 스크롤, 다른 두 목록은 영향 없음).
+- **app.js**: `rProfAssignmentFolder()`의 제출함 목록 `<div>`에 `submit-assign-list--compact` 클래스 추가.
+- **검증**: Playwright로 정적 미리보기 HTML(이름/아이디가 아주 긴 케이스 포함)을 렌더링해 스크린샷으로
+  한 줄 레이아웃과 오른쪽 정렬을 확인.
+
 ## 2026-08-19 (15) — 과제 관리: 과제 폴더 삭제 + 제출물 PDF 일괄 다운로드 추가
 
 **요청**: "1. 과제 관리에서 등록한 과제 폴더 삭제 할 수 있도록 해줘. 2. 과제폴더에 제출된 과제들을
