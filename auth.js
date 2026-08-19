@@ -226,6 +226,7 @@ async function doServerSave(pid) {
   if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
   if (typeof projSaveState === "object") projSaveState[pid] = res.ok ? "saved" : "error";
   if (typeof updateTabDot === "function") updateTabDot(pid);
+  if (typeof showSaveToast === "function") showSaveToast(res.ok ? "saved" : "error");
 }
 function saveToServer() {
   if (!getToken()) return;

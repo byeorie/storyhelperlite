@@ -209,12 +209,26 @@ function updateTabDot(id){
 }
 function updateAllTabDots(){ (DB.openIds||[]).forEach(id=>updateTabDot(id)); }
 
+/* 화면 상단 가운데 저장 상태 배너. state: "saving" | "saved" | "error" */
+let saveToastTimer=null;
+function showSaveToast(state){
+  const el=document.getElementById("saveToast");
+  if(!el) return;
+  clearTimeout(saveToastTimer);
+  el.className="save-toast "+state;
+  el.textContent = state==="saving" ? "저장 중…" : state==="error" ? "저장 실패" : "저장됨";
+  el.hidden=false;
+  if(state!=="saving") saveToastTimer=setTimeout(()=>{ el.hidden=true; }, 1200);
+}
 function save(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
   if(typeof getToken==="function" && getToken()){
     projSaveState[DB.current]="pending"; updateTabDot(DB.current);
+    showSaveToast("saving"); // 서버 저장이 끝나면 doServerSave(auth.js)가 "saved"/"error"로 바꾼다
+  }else{
+    showSaveToast("saved"); // 로그인 전(로컬 전용)에는 저장이 즉시 끝나므로 바로 완료 표시
   }
   if(typeof saveToServer==="function") saveToServer();
   scheduleUndoCheckpoint();
@@ -367,7 +381,13 @@ function forceSaveNow(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
-  if(typeof getToken==="function" && getToken() && typeof forceSaveToServer==="function") forceSaveToServer();
+  if(typeof getToken==="function" && getToken() && typeof forceSaveToServer==="function"){
+    projSaveState[DB.current]="pending"; updateTabDot(DB.current);
+    showSaveToast("saving");
+    forceSaveToServer();
+  }else{
+    showSaveToast("saved");
+  }
 }
 window.addEventListener("keydown", e=>{
   if(!(e.ctrlKey||e.metaKey)) return;

@@ -21,6 +21,16 @@ a{color:var(--accent)}
 .proj-controls button:hover{background:var(--accent2)}
 .save-status{font-size:12px;color:var(--ok);min-width:48px;white-space:nowrap;flex-shrink:0}
 .save-status .icon{width:12px;height:12px;vertical-align:-2px;margin-right:1px}
+
+/* 화면 상단 가운데에 뜨는 저장 상태 배너 — "저장 중…" / "저장됨" / "저장 실패" */
+.save-toast{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:2000;
+  padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;
+  box-shadow:0 4px 14px rgba(0,0,0,.18);pointer-events:none;
+  opacity:0;transition:opacity .2s}
+.save-toast:not([hidden]){opacity:1}
+.save-toast.saving{background:#d9a441}
+.save-toast.saved{background:var(--ok)}
+.save-toast.error{background:#e05050}
 .user-auth{display:flex;align-items:center;gap:8px;margin-left:8px;flex-shrink:0}
 .user-menu-wrap{position:relative;flex-shrink:0}
 #userMenuBtn.avatar-btn{padding:0;border:none;background:transparent;border-radius:50%;
