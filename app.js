@@ -2069,6 +2069,10 @@ function rWrite(){
     submitBtn.innerHTML=ICONS.upload+" 제출";
     submitBtn.onclick=()=>openSubmitModal("write");
     barRight.appendChild(submitBtn);
+    const feedbackBtn=document.createElement("button"); feedbackBtn.className="btn ghost sm icon-btn";
+    feedbackBtn.innerHTML=ICONS.chat+" 첨삭 보기";
+    feedbackBtn.onclick=()=>openMyFeedbackListModal("write");
+    barRight.appendChild(feedbackBtn);
   }
   bar.appendChild(barRight);
   main.appendChild(bar);
@@ -3410,11 +3414,16 @@ function buildSubmissionData(type){
 /* 제출 버튼(학생 계정에서만 노출) — innerHTML 템플릿 안에서 쓰는 버전 */
 function submitBtnHtml(){
   return (typeof currentUser!=="undefined" && currentUser && currentUser.role!=="professor")
-    ? `<button type="button" class="btn ghost sm icon-btn submit-tab-btn">${ICONS.upload} 제출</button>` : "";
+    ? `<div class="submit-btn-group">
+        <button type="button" class="btn ghost sm icon-btn submit-tab-btn">${ICONS.upload} 제출</button>
+        <button type="button" class="btn ghost sm icon-btn feedback-tab-btn">${ICONS.chat} 첨삭 보기</button>
+      </div>` : "";
 }
 function wireSubmitBtn(container, type){
   const btn=container.querySelector(".submit-tab-btn");
   if(btn) btn.onclick=()=>openSubmitModal(type);
+  const fbBtn=container.querySelector(".feedback-tab-btn");
+  if(fbBtn) fbBtn.onclick=()=>openMyFeedbackListModal(type);
 }
 
 /* 제출 대상 과제 선택 모달 (학생) */
@@ -3471,6 +3480,40 @@ async function openSubmitModal(type){
   });
 }
 
+/* 제출 버튼 옆 [첨삭 보기] — 이 탭(기획서/플롯/글쓰기) 종류로 내가 제출한 것들을 한 번에 모아 보여줌
+   (기존엔 [제출] 모달을 열어야만 "이미 제출함 · 첨삭 완료(보기)" 링크를 찾을 수 있었음) */
+async function openMyFeedbackListModal(type){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`${TYPE_LABEL[type]} 첨삭 보기`;
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div"); body.innerHTML=`<p class="hint">불러오는 중…</p>`;
+  box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  const res=await apiFetch("student-assignments");
+  if(!overlay.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const assignments=res.body.assignments||[];
+  const list=[];
+  assignments.forEach(a=>{
+    (a.mySubmissions||[]).filter(s=>s.type===type).forEach(s=>list.push({...s, assignmentTitle:a.title}));
+  });
+  list.sort((x,y)=>(y.submitted_at||0)-(x.submitted_at||0));
+  if(!list.length){ body.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
+  body.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
+    <button type="button" class="submit-assign-item" data-id="${s.id}">
+      <b>${esc(s.assignmentTitle)}</b>
+      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
+    </button>`).join("")}</div>`;
+  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=()=>openMySubmissionView(Number(btn.dataset.id));
+  });
+}
+
 /* 내가 제출한 것 + 교수 첨삭 결과 읽기 전용 보기 (학생) */
 async function openMySubmissionView(id){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
@@ -3489,8 +3532,24 @@ async function openMySubmissionView(id){
   const sub=res.body.submission;
   ttl.textContent=`${TYPE_LABEL[sub.type]} — ${sub.assignmentTitle}`;
   if(!sub.feedback){ body.innerHTML=`<p class="hint">아직 첨삭 전입니다.</p>`; return; }
+  const caveat={
+    plan:"",
+    plot:" 섹션 설명(예시 설명)에 첨삭 내용 전체가 반영되고, 배치된 아이디어 카드는 그대로 유지됩니다.",
+    write:" \"이름: 대사\" 형식의 줄만 대사로 인식해서 되돌리며, 분기 블록은 복원되지 않습니다.",
+  }[sub.type]||"";
+  const mismatch = sub.projectName && P.name && sub.projectName!==P.name;
+  body.innerHTML=`<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
+    ${mismatch?`<br><b style="color:#b3503a">※ 이 과제는 "${esc(sub.projectName)}" 작품에서 제출했는데, 지금 열려있는 작품은 "${esc(P.name)}"입니다. 다른 작품에 반영될 수 있으니 확인해주세요.</b>`:""}</p>
+    <button class="btn" id="applyFeedbackBtn" style="margin-bottom:14px;width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>
+    <div id="feedbackPairs"></div>`;
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  renderReviewPairs(body, pairs, false, null);
+  renderReviewPairs(document.getElementById("feedbackPairs"), pairs, false, null);
+  document.getElementById("applyFeedbackBtn").onclick=()=>{
+    if(!confirm(`이 첨삭 내용을 지금 작업 중인 "${P.name||""}"의 ${TYPE_LABEL[sub.type]}에 덮어씁니다.\n제출 이후 더 수정한 내용이 있다면 사라질 수 있습니다. 계속할까요?`)) return;
+    applyFeedbackToProject(sub.type, sub.feedback);
+    alert("내 작업물에 반영했습니다.");
+    if(overlay.isConnected) document.body.removeChild(overlay);
+  };
 }
 
 /* ===== 교수 — 학생 관리 ===== */
@@ -3765,6 +3824,42 @@ function buildFeedbackFromPairs(type, data, afterList){
     return blocks.map((b,i)=>({ id:b.id, text:afterList[i]||"" }));
   }
   return null;
+}
+
+/* "캐릭터: 대사" 형식의 줄만 대사(line) 아이템으로 되돌리고, 나머지는 지문(text) 아이템으로 만든다.
+   (buildSubmissionData의 write 변환 — 지문/대사를 "캐릭터: 대사" 한 줄로 합치는 것의 역변환.
+   제출 시점에 이미 분기(branches)는 합쳐져 사라지므로 되돌릴 수 없다) */
+function parseFeedbackTextToItems(text){
+  return (text||"").split("\n")
+    .map(line=>{
+      const m=line.match(/^([^:：\n]{1,20}):\s(.*)$/);
+      return m ? {id:uid(), type:"line", char:m[1].trim(), text:m[2]} : {id:uid(), type:"text", char:"", text:line};
+    })
+    .filter(it=>it.text.trim().length);
+}
+/* 교수 첨삭(feedback)을 학생의 지금 작업 중인 작품(P)에 그대로 덮어쓴다 — 학생이 직접 버튼을 눌러야만 실행됨.
+   plan(기획서): 항목별로 그대로 대입(손실 없음)
+   plot(플롯): 섹션의 desc(설명)에 첨삭 텍스트 전체를 대입 — 아이디어 카드 배치(ideaIds)는 건드리지 않음
+   write(글쓰기): 위 parseFeedbackTextToItems로 블록의 items를 다시 만듦(분기는 복원 안 됨) */
+function applyFeedbackToProject(type, feedback){
+  if(!feedback) return;
+  if(type==="plan"){
+    if(!P.planDoc) P.planDoc=blankPlanDoc();
+    PLAN_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.planDoc[f.k]=feedback[f.k]; });
+  }else if(type==="plot"){
+    if(!P.plotDoc || !Array.isArray(P.plotDoc.sections)) return;
+    (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
+      const sec=P.plotDoc.sections.find(s=>s.id===fb.id);
+      if(sec) sec.desc=fb.text||"";
+    });
+  }else if(type==="write"){
+    if(!P.writeDoc || !Array.isArray(P.writeDoc.blocks)) return;
+    (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
+      const bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
+      if(bl) bl.items=parseFeedbackTextToItems(fb.text||"");
+    });
+  }
+  save(); render();
 }
 
 /* 정보 */

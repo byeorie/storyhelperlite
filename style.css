@@ -551,6 +551,9 @@ body.logged-in .login-overlay { display: none; }
 .icon{width:15px;height:15px;vertical-align:-3px;flex-shrink:0}
 .icon-btn{display:inline-flex;align-items:center;gap:5px}
 .icon-btn .icon{vertical-align:-2px}
+/* 탭 헤더의 [제출]/[첨삭 보기] 버튼을 한 덩어리로 묶어서, card-h2-row(space-between)에서
+   h2와 떨어진 오른쪽 끝에 나란히 붙어있게 함 */
+.submit-btn-group{display:flex;gap:6px;flex-shrink:0}
 
 /* ===== 상단 툴바 왼쪽 아이콘 그룹 (새로 만들기/저장/불러오기/내보내기) ===== */
 .mb-left{display:flex;align-items:center;gap:2px;flex-shrink:0}
