@@ -3596,7 +3596,7 @@ async function rProfAssignmentFolder(id){
   const wrap=document.getElementById("assignFolderWrap");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const assignment=res.body.assignment, submissions=res.body.submissions||[];
-  if(titleEl) titleEl.textContent=`${ICONS.book} ${esc(assignment.title)} — 제출함`;
+  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(assignment.title)} — 제출함`;
   if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
   wrap.innerHTML=`<div class="submit-assign-list">${submissions.map(s=>`
     <button type="button" class="submit-assign-item" data-id="${s.id}">
@@ -3628,7 +3628,7 @@ async function rProfSubmissionReview(id){
   const pairsEl=document.getElementById("reviewPairs");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const sub=res.body.submission;
-  if(titleEl) titleEl.textContent=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}`;
+  if(titleEl) titleEl.innerHTML=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}`;
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
   reviewSplitIds=new Set(pairs.filter(p=>p.after!==p.before).map(p=>p.id));
   renderReviewPairs(pairsEl, pairs, true, reviewSplitIds);
