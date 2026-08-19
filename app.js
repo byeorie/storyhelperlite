@@ -126,12 +126,14 @@ function doUndo(){
   const prev=undoStack.pop();
   redoStack.push(undoBaseline); if(redoStack.length>UNDO_LIMIT) redoStack.shift();
   restoreUndoSnapshot(prev);
+  updateUndoButtons();
 }
 function doRedo(){
   if(!redoStack.length) return;
   const next=redoStack.pop();
   undoStack.push(undoBaseline); if(undoStack.length>UNDO_LIMIT) undoStack.shift();
   restoreUndoSnapshot(next);
+  updateUndoButtons();
 }
 function updateUndoButtons(){
   const ub=document.getElementById("undoBtn"), rb=document.getElementById("redoBtn");
