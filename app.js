@@ -446,7 +446,7 @@ function render(){
   try{
     refreshProjSelect();
     app.innerHTML="";
-    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event");
+    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||(activeTab==="character"&&!!charDetailFor));
     if(!P) P=currentProject();
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
@@ -861,8 +861,7 @@ function rExplore(){
 }
 
 /* ① 캐릭터 */
-let charModalFor=null;      // 신규 생성 팝업이 열린 캐릭터 id
-let charDetailFor=null;     // 상세 수정 페이지가 열린 캐릭터 id
+let charDetailFor=null;     // 상세 수정 페이지(신규 생성 포함)가 열린 캐릭터 id
 let charViewMode="gallery"; // "gallery" | "graph"
 /* 존재하지 않는 캐릭터를 가리키는 관계 정리 */
 function cleanCharRelationships(){
@@ -874,7 +873,15 @@ function rChar(){
   cleanCharRelationships();
   if(charDetailFor){
     const dch=P.characters.find(x=>x.id===charDetailFor);
-    if(dch){ app.appendChild(charDetailPage(dch)); return; }
+    if(dch){
+      /* 배경 설정 페이지와 동일한 폭(.setting-split > .setting-main, main 60%)으로 맞춘다 */
+      const layout=document.createElement("div"); layout.className="setting-split";
+      const left=document.createElement("div"); left.className="setting-main";
+      left.appendChild(charDetailPage(dch));
+      layout.appendChild(left);
+      app.appendChild(layout);
+      return;
+    }
     charDetailFor=null;
   }
   const c=document.createElement("div");
@@ -891,7 +898,7 @@ function rChar(){
   app.appendChild(c);
   c.querySelectorAll(".char-view-btn").forEach(b=>b.onclick=()=>{ charViewMode=b.dataset.view; render(); });
   c.querySelector("#addCharBtn").onclick=()=>{
-    const nc=blankChar(); P.characters.push(nc); save(); charModalFor=nc.id; render();
+    const nc=blankChar(); P.characters.push(nc); save(); charDetailFor=nc.id; render();
   };
   const body=c.querySelector("#charBody");
   if(charViewMode==="graph"){
@@ -904,10 +911,6 @@ function rChar(){
       P.characters.forEach(ch=>grid.appendChild(charGalleryCard(ch)));
     }
     body.appendChild(grid);
-  }
-  if(charModalFor){
-    const ch=P.characters.find(x=>x.id===charModalFor);
-    if(ch) app.appendChild(charModal(ch)); else charModalFor=null;
   }
 }
 /* 캐릭터 사진 업로드 — 500KB 이하만 허용, 300x300으로 잘라 압축(JPEG)한 뒤 데이터URL로 저장 */
@@ -960,7 +963,6 @@ function charGalleryCard(ch){
   };
   return d;
 }
-/* 캐릭터 편집 팝업 — 기본 정보 + 다른 캐릭터와의 관계 */
 /* MBTI/에니어그램 select 아래에 해당 유형의 상세 설명을 보여준다(선택 즉시 갱신) */
 function wireTypeDesc(body){
   const mbtiSel=body.querySelector('[data-k="mbti"]');
@@ -978,105 +980,7 @@ function wireTypeDesc(body){
     refresh();
   }
 }
-function charModal(ch){
-  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
-  overlay.onclick=e=>{ if(e.target===overlay){ charModalFor=null; render(); } };
-  const box=document.createElement("div"); box.className="plot-modal char-modal";
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.innerHTML=ICONS.edit+" "+esc(ch.name||"새 캐릭터");
-  const closeBtn=iconBtn(ICONS.close,"닫기",()=>{ charModalFor=null; render(); });
-  top.append(ttl, closeBtn);
-  box.appendChild(top);
-
-  const body=document.createElement("div"); body.className="char-modal-body";
-  const enOpts=ENNEAGRAM.map(e=>`<option value="${e.n}">${e.n} — ${e.d}</option>`).join("");
-  const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m}</option>`).join("");
-  const roleOpts=VOGLER_ROLES.map(r=>`<option value="${r.n}">${r.n} — ${r.d}</option>`).join("");
-  body.innerHTML=`
-    <div class="char-img-row">
-      <div class="char-avatar char-avatar-lg" id="charImgPreview"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
-      <div class="char-img-actions">
-        <label class="btn ghost sm">사진 선택<input type="file" id="charImgInput" accept="image/*" style="display:none"></label>
-        <button type="button" class="btn ghost sm" id="charImgRemove"${ch.image?"":" disabled"}>제거</button>
-        <p class="hint" style="margin:4px 0 0">500KB 이하 이미지, 300×300px로 자동 압축됩니다.</p>
-      </div>
-    </div>
-    <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
-    <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
-    <div class="row"><div><label>직업/신분</label><input type="text" data-k="job" placeholder="예: 고등학생, 헌터 길드 마스터"></div>
-    <div><label>소속/세력</label><input type="text" data-k="affiliation" placeholder="예: OO가문, 무소속"></div></div>
-    <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select><div class="type-desc-box" id="mbtiDescBox"></div></div>
-    <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select><div class="type-desc-box" id="enneaDescBox"></div></div></div>
-    <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
-    <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
-    <div class="row"><div><label>강점 (장점)</label><input type="text" data-k="strength"></div>
-    <div><label>비밀</label><input type="text" data-k="secret" placeholder="아직 밝혀지지 않은 것"></div></div>
-    <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도"></textarea></div>
-    <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 모습"></textarea></div></div>
-    <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
-    <label>다른 캐릭터와의 관계</label>
-    <div class="char-rel-list" id="charRelList"></div>
-    <div class="char-rel-add" id="charRelAdd"></div>`;
-  body.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
-  wireTypeDesc(body);
-  const nameInput=body.querySelector('[data-k="name"]');
-  nameInput.addEventListener("input", ()=>{ ttl.innerHTML=ICONS.edit+" "+esc(nameInput.value||"새 캐릭터"); });
-
-  const imgPreview=body.querySelector("#charImgPreview");
-  const imgInput=body.querySelector("#charImgInput");
-  const imgRemoveBtn=body.querySelector("#charImgRemove");
-  function refreshImgPreview(){
-    imgPreview.innerHTML=charAvatarHtml(ch);
-    imgPreview.style.background=ch.image?"":TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length];
-    imgRemoveBtn.disabled=!ch.image;
-  }
-  imgInput.onchange=e=>{ handleCharImageFile(e.target.files[0], ch, refreshImgPreview); e.target.value=""; };
-  imgRemoveBtn.onclick=()=>{ ch.image=""; save(); refreshImgPreview(); };
-
-  function renderRelList(){
-    const listEl=body.querySelector("#charRelList");
-    listEl.innerHTML="";
-    if(!(ch.relationships||[]).length){ listEl.innerHTML='<p class="hint" style="margin:4px 0">아직 등록된 관계가 없습니다.</p>'; return; }
-    ch.relationships.forEach((rel,i)=>{
-      const target=P.characters.find(c=>c.id===rel.targetId);
-      const row=document.createElement("div"); row.className="char-rel-item";
-      const tgt=document.createElement("span"); tgt.className="char-rel-target";
-      tgt.textContent=(rel.mutual?"↔ ":"→ ")+(target?target.name||"(이름 없음)":"(삭제된 캐릭터)");
-      const lbl=document.createElement("span"); lbl.className="char-rel-label"; lbl.textContent=rel.label||"-";
-      const x=document.createElement("button"); x.type="button"; x.className="chip-x"; x.innerHTML=ICONS.close; x.title="삭제";
-      x.onclick=()=>{ ch.relationships.splice(i,1); save(); renderRelList(); };
-      row.append(tgt, lbl, x);
-      listEl.appendChild(row);
-    });
-  }
-  renderRelList();
-
-  const addWrap=body.querySelector("#charRelAdd");
-  const others=P.characters.filter(c=>c.id!==ch.id);
-  if(others.length){
-    const sel=document.createElement("select");
-    sel.innerHTML=others.map(c=>`<option value="${c.id}">${esc(c.name)||"(이름 없음)"}</option>`).join("");
-    const txt=document.createElement("input"); txt.type="text"; txt.placeholder="관계 (예: 사랑, 증오, 무관심)";
-    const mutualWrap=document.createElement("label"); mutualWrap.className="char-rel-mutual";
-    const mutualChk=document.createElement("input"); mutualChk.type="checkbox";
-    mutualWrap.append(mutualChk, document.createTextNode(" 양방향(서로 같은 관계)"));
-    const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="btn ghost sm"; addBtn.innerHTML=ICONS.plus+" 관계 추가";
-    addBtn.onclick=()=>{
-      ch.relationships=ch.relationships||[];
-      ch.relationships.push({id:uid(), targetId:sel.value, label:txt.value.trim(), mutual:mutualChk.checked});
-      txt.value=""; mutualChk.checked=false; save(); renderRelList();
-    };
-    addWrap.append(sel, txt, mutualWrap, addBtn);
-  }else{
-    addWrap.innerHTML='<p class="hint" style="margin:4px 0">관계를 맺으려면 캐릭터가 2명 이상 있어야 합니다.</p>';
-  }
-
-  box.appendChild(body);
-  overlay.appendChild(box);
-  setTimeout(()=>{ nameInput.focus(); },0);
-  return overlay;
-}
-/* 캐릭터 상세 수정 페이지 — 기본 정보 + 관계 + 서사 확장 항목(외모/말투/과거사/취향/대사) */
+/* 캐릭터 상세 수정 페이지 — 신규 생성/기존 수정 공용. 기본 정보 + 관계 + 서사 확장 항목(외모/말투/과거사/취향/대사) */
 function charDetailPage(ch){
   const wrap=document.createElement("div"); wrap.className="card char-detail-page";
   const top=document.createElement("div"); top.className="char-detail-top";
@@ -1088,7 +992,7 @@ function charDetailPage(ch){
 
   const body=document.createElement("div"); body.className="char-modal-body";
   const enOpts=ENNEAGRAM.map(e=>`<option value="${e.n}">${e.n} — ${e.d}</option>`).join("");
-  const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m}</option>`).join("");
+  const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m} — ${MBTI_SHORT[m]}</option>`).join("");
   const roleOpts=VOGLER_ROLES.map(r=>`<option value="${r.n}">${r.n} — ${r.d}</option>`).join("");
   const arcTypeList=(STORY_GUIDE_SLOTS.find(s=>s.key==="change")||{options:[]}).options.map(o=>o.v);
   const arcTypeOpts=arcTypeList.map(v=>`<option value="${v}">${v}</option>`).join("");

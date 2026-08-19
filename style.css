@@ -624,9 +624,7 @@ body.logged-in .login-overlay { display: none; }
 .char-card-mini:hover .char-card-del{opacity:1}
 .char-card-del:hover{color:#b3503a;background:var(--accent2)}
 .char-card-del .icon{width:13px;height:13px}
-.char-modal{width:560px}
 .char-modal-body{overflow-y:auto;flex:1}
-.char-detail-page{max-width:640px}
 .char-detail-top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .char-detail-top h2{margin:0}
 .char-detail-sub{margin:18px 0 4px;font-size:14px;border-top:1px dashed var(--line);padding-top:14px}
