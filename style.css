@@ -774,3 +774,29 @@ body.logged-in .login-overlay { display: none; }
 .draw-toolbar .icon-btn.on{background:var(--accent2);border-color:var(--accent);color:var(--accent)}
 .draw-canvas-wrap{border:1px solid var(--line);background:#fff;align-self:center;border-radius:4px;overflow:hidden}
 canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
+
+/* ===== 📚 학습 메뉴 (스토리텔링 구성요소 & 로그라인 카드) ===== */
+.learn-section{margin-top:22px}
+.learn-section:first-child{margin-top:4px}
+.learn-section-title{font-size:16px;font-weight:800;color:var(--ink);margin:0 0 2px}
+.learn-formula{margin:8px 0 14px;padding:10px 14px;background:#fbf8f3;border:1px dashed var(--line);
+  border-radius:8px;font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.2px}
+.learn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.learn-card-mini{border:1px solid var(--line);border-radius:12px;padding:14px 14px 12px;
+  background:#fcfbf9;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.learn-card-mini:hover{border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.learn-card-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+  border-radius:50%;background:var(--accent2);color:var(--accent);font-size:11px;font-weight:800;margin-bottom:8px}
+.learn-card-title{font-size:14px;font-weight:800;color:var(--ink);margin-bottom:6px}
+.learn-card-summary{font-size:12px;color:var(--muted);line-height:1.5}
+.learn-card-count{margin-top:8px;font-size:10px;color:var(--accent);font-weight:700}
+.learn-detail-body{overflow-y:auto}
+.learn-table{width:100%;border-collapse:collapse;margin-bottom:14px}
+.learn-table th,.learn-table td{border:1px solid var(--line);padding:9px 12px;font-size:13px;text-align:left;vertical-align:top}
+.learn-table th{width:34%;background:#fbf8f3;color:var(--ink);font-weight:700;white-space:nowrap}
+.learn-table td{color:var(--muted)}
+.learn-bullets{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:0 0 14px}
+.learn-bullets li{background:var(--accent2);color:var(--accent);font-size:12px;font-weight:700;
+  border-radius:8px;padding:6px 12px}
+.learn-notes{display:flex;flex-direction:column;gap:6px}
+.learn-note{font-size:12px;color:var(--ok);background:#e7f0e9;border-radius:8px;padding:8px 12px;font-weight:600}

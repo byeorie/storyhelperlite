@@ -473,7 +473,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profStudents:rProfStudents, profAssignments:rProfAssignments};
+      profStudents:rProfStudents, profAssignments:rProfAssignments, learn:rLearn};
     (renderers[activeTab]||rIdea)();
   }catch(e){
     console.error("렌더링 오류:", e);
@@ -488,6 +488,78 @@ function render(){
       P=fresh; resetUndoHistory(); save(); render();
     };
   }
+}
+
+/* ===== 📚 학습 (스토리텔링 구성요소 & 로그라인 설계 카드) ===== */
+let learnDetailFor=null; // "섹션id:카드index" 형태로 상세 페이지가 열린 카드
+
+function rLearn(){
+  if(learnDetailFor){
+    const [sid, idxStr]=learnDetailFor.split(":");
+    const sec=(typeof LEARN_SECTIONS!=="undefined"?LEARN_SECTIONS:[]).find(s=>s.id===sid);
+    const card=sec && sec.cards[Number(idxStr)];
+    if(sec && card){ app.appendChild(learnDetailPage(sec, card)); return; }
+    learnDetailFor=null;
+  }
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>${ICONS.book} 스토리텔링 학습</h2>
+    <p class="hint">웹툰 스토리텔링의 핵심 구성요소와 로그라인 설계 재료를 주제별 카드로 정리했습니다. 카드를 클릭하면 자세한 설명을 볼 수 있습니다.</p>
+    <div id="learnBody"></div></div>`;
+  app.appendChild(c);
+  const body=c.querySelector("#learnBody");
+  const sections=typeof LEARN_SECTIONS!=="undefined"?LEARN_SECTIONS:[];
+  sections.forEach(sec=>{
+    const secWrap=document.createElement("div"); secWrap.className="learn-section";
+    secWrap.innerHTML=`<h3 class="learn-section-title">${esc(sec.title)}</h3>
+      <p class="hint">${esc(sec.desc||"")}</p>
+      ${sec.intro?`<div class="learn-formula">${esc(sec.intro)}</div>`:""}
+      <div class="learn-grid"></div>`;
+    const grid=secWrap.querySelector(".learn-grid");
+    sec.cards.forEach((card,idx)=>grid.appendChild(learnCardMini(sec,card,idx)));
+    body.appendChild(secWrap);
+  });
+}
+/* 학습 카드 미리보기(요약) — 클릭 시 상세 페이지로 이동 */
+function learnCardMini(sec,card,idx){
+  const d=document.createElement("div"); d.className="learn-card-mini";
+  const count=(card.rows&&card.rows.length)||(card.bullets&&card.bullets.length)||0;
+  d.innerHTML=`<div class="learn-card-num">${esc(card.num)}</div>
+    <div class="learn-card-title">${esc(card.title)}</div>
+    <div class="learn-card-summary">${esc(card.summary||"")}</div>
+    ${count?`<div class="learn-card-count">${count}개 항목</div>`:""}`;
+  d.onclick=()=>{ learnDetailFor=`${sec.id}:${idx}`; render(); window.scrollTo(0,0); };
+  return d;
+}
+/* 학습 카드 상세 페이지 — 표/목록/참고 메모를 그대로 보여준다 */
+function learnDetailPage(sec,card){
+  const wrap=document.createElement("div"); wrap.className="card learn-detail-page";
+  const top=document.createElement("div"); top.className="char-detail-top";
+  const backBtn=document.createElement("button"); backBtn.type="button"; backBtn.className="btn ghost sm"; backBtn.textContent="← 목록으로";
+  backBtn.onclick=()=>{ learnDetailFor=null; render(); window.scrollTo(0,0); };
+  const ttl=document.createElement("h2"); ttl.textContent=`${card.num} ${card.title}`;
+  top.append(backBtn, ttl);
+  wrap.appendChild(top);
+
+  const body=document.createElement("div"); body.className="learn-detail-body";
+  let html="";
+  if(card.rows&&card.rows.length){
+    html+=`<table class="learn-table"><tbody>`
+      +card.rows.map(r=>`<tr><th>${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join("")
+      +`</tbody></table>`;
+  }
+  if(card.bullets&&card.bullets.length){
+    html+=`<ul class="learn-bullets">`
+      +card.bullets.map(b=>`<li>${esc(b)}</li>`).join("")
+      +`</ul>`;
+  }
+  if(card.notes&&card.notes.length){
+    html+=`<div class="learn-notes">`
+      +card.notes.map(n=>`<div class="learn-note">${esc(n)}</div>`).join("")
+      +`</div>`;
+  }
+  body.innerHTML=html;
+  wrap.appendChild(body);
+  return wrap;
 }
 
 /* ===== 💡 아이디어 모음 ===== */
