@@ -1709,10 +1709,6 @@ function plotSectionCard(sec, idx, secWrap){
     const nm=prompt("섹션 이름:",sec.name); if(nm===null)return;
     sec.name=nm||sec.name; save(); render();
   });
-  // 아이디어 가져오기 (아이디어 수집에서 골라오기)
-  const importBtn=iconBtn(ICONS.download,"아이디어 가져오기",()=>togglePicker(sec));
-  // 아이디어 생성 (플롯 생성에서 바로 새 블록 작성)
-  const createBtn=iconBtn(ICONS.plus,"아이디어 생성",()=>createIdeaInSection(sec));
   // 섹션 이동 핸들
   const moveBtn=iconBtn(ICONS.grip,"드래그해서 섹션 순서 변경",null);
   moveBtn.classList.add("plot-sec-move");
@@ -1739,7 +1735,7 @@ function plotSectionCard(sec, idx, secWrap){
     P.plotDoc.sections=P.plotDoc.sections.filter(x=>x.id!==sec.id); save(); render();
   });
   delBtn.classList.add("plot-sec-del");
-  h.append(num, nameEl, spacer, cnt, editBtn, importBtn, createBtn, moveBtn, collBtn, delBtn);
+  h.append(moveBtn, num, nameEl, spacer, cnt, editBtn, collBtn, delBtn);
   card.appendChild(h);
 
   if(collapsed) return card;
