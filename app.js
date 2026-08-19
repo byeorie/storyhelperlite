@@ -1851,7 +1851,10 @@ function goToIdeaCollection(id){
 }
 /* 아이디어 선택 팝업 (미배치 아이디어 + 태그 필터) */
 function plotPickerModal(sec){
-  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  /* center-content: 왼쪽 사이드바 폭만큼 빼고 "화면(작업 영역)" 가운데에 뜨도록 함
+     (그냥 inset:0만 쓰면 사이드바까지 포함한 브라우저 창 전체 기준으로 가운데 계산돼서,
+     실제 콘텐츠 영역에서 보면 왼쪽으로 치우쳐 보임) */
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay center-content";
   overlay.onclick=e=>{ if(e.target===overlay){ plotPickerFor=null; render(); } };
   const box=document.createElement("div"); box.className="plot-modal";
   const avail=unplacedIdeas();
