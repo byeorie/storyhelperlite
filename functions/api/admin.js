@@ -1,4 +1,4 @@
-import { requireAdmin, jsonResponse } from "./_utils.js";
+import { requireAdmin, jsonResponse, ADMIN_USERNAME } from "./_utils.js";
 
 /* GET /api/admin — 회원 명단 조회 (관리자 전용) */
 export async function onRequestGet({ request, env }) {
@@ -68,5 +68,33 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ ok: true, mode: "setRole", userId, role, profCode });
   }
 
-  return jsonResponse({ error: "mode는 'data', 'all', 'setRole' 중 하나여야 합니다." }, 400);
+  if (mode === "deleteUser") {
+    const userId = Number(body.userId);
+    if (!userId) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+    if (userId === auth.user.id) return jsonResponse({ error: "관리자 본인 계정은 삭제할 수 없습니다." }, 400);
+
+    const target = await env.DB.prepare("SELECT id, username, role FROM users WHERE id = ?").bind(userId).first();
+    if (!target) return jsonResponse({ error: "회원을 찾을 수 없습니다." }, 404);
+    if (target.username === ADMIN_USERNAME) return jsonResponse({ error: "관리자 계정은 삭제할 수 없습니다." }, 400);
+
+    if (target.role === "professor") {
+      // 이 교수가 낸 과제들의 제출물부터 지우고, 과제를 지운 뒤, 이 교수 그룹에 속한 학생들의 연결을 끊는다
+      const { results: assigns } = await env.DB.prepare("SELECT id FROM assignments WHERE prof_id = ?").bind(userId).all();
+      for (const a of (assigns || [])) {
+        await env.DB.prepare("DELETE FROM submissions WHERE assignment_id = ?").bind(a.id).run();
+      }
+      await env.DB.prepare("DELETE FROM assignments WHERE prof_id = ?").bind(userId).run();
+      await env.DB.prepare("UPDATE users SET prof_id = NULL WHERE prof_id = ?").bind(userId).run();
+    }
+    // 학생 계정이든(자신이 제출한 것) 교수 계정이든(교수 자신도 제출자로 남아있을 수 있음) 제출물 정리
+    await env.DB.prepare("DELETE FROM submissions WHERE student_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM user_data WHERE user_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM password_resets WHERE user_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
+
+    return jsonResponse({ ok: true, mode: "deleteUser", userId });
+  }
+
+  return jsonResponse({ error: "mode는 'data', 'all', 'setRole', 'deleteUser' 중 하나여야 합니다." }, 400);
 }

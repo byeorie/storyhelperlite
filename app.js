@@ -3375,14 +3375,26 @@ async function renderAdminUsers(){
     </select></td>
     <td>${u.role==="professor"?esc(u.prof_code||"-"):"-"}</td>
     <td>${esc(u.email)}</td><td>${fmtDate(u.created_at)}</td>
+    <td>${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
   </tr>`).join("");
   wrap.innerHTML=`<table class="admin-table"><thead><tr>
-    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th>교수 코드</th><th>이메일</th><th>가입일</th>
+    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th>교수 코드</th><th>이메일</th><th>가입일</th><th></th>
   </tr></thead><tbody>${rows}</tbody></table>
   <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.</p>`;
   wrap.querySelectorAll(".admin-role-select").forEach(sel=>{
     sel.onchange=()=>doAdminSetRole(sel);
   });
+  wrap.querySelectorAll(".admin-user-del").forEach(btn=>{
+    btn.onclick=()=>doAdminDeleteUser(btn);
+  });
+}
+async function doAdminDeleteUser(btn){
+  const uid=Number(btn.dataset.uid), name=btn.dataset.name;
+  if(!confirm(`'${name}' 회원을 삭제할까요?\n이 회원의 계정과 제출물 등 관련 데이터가 모두 영구적으로 삭제되며 되돌릴 수 없습니다.`)) return;
+  btn.disabled=true; btn.textContent="삭제 중…";
+  const res=await apiFetch("admin", { method:"POST", body: JSON.stringify({mode:"deleteUser", userId:uid}) });
+  if(res.ok){ adminUsersCache=null; renderAdminUsers(); }
+  else { alert((res.body && res.body.error) || "삭제에 실패했습니다."); btn.disabled=false; btn.innerHTML=`${ICONS.trash} 삭제`; }
 }
 async function doAdminSetRole(selectEl){
   const uid=selectEl.dataset.uid, role=selectEl.value, prevRole=role==="professor"?"student":"professor";
