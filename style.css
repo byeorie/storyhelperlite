@@ -148,8 +148,10 @@ textarea{resize:vertical;min-height:70px}
 .idea-filter-bar{display:flex;flex-wrap:wrap;gap:6px}
 .idea-block-list{display:flex;flex-direction:column;gap:8px}
 .idea-block{position:relative;background:var(--card);border:1px solid var(--line);
-  border-left:7px solid var(--ok);border-radius:8px;padding:9px 30px 8px 30px;transition:opacity .15s}
+  border-left:7px solid var(--ok);border-radius:8px;padding:9px 30px 8px 30px;transition:opacity .15s,background .4s}
 .idea-block.dragging{opacity:.4}
+/* 플롯 생성에서 "아이디어 수집으로 보내기"로 넘어왔을 때 잠깐 강조 */
+.idea-block.idea-flash{background:var(--accent2)}
 .idea-handle{position:absolute;left:7px;top:50%;transform:translateY(-50%);
   cursor:grab;color:var(--muted);font-size:12px;line-height:1;user-select:none;padding:5px 3px;border-radius:4px}
 .idea-handle:hover{color:var(--ink);background:var(--bg)}
@@ -227,12 +229,14 @@ textarea{resize:vertical;min-height:70px}
   font-size:12px;line-height:1;padding:2px 4px;flex-shrink:0}
 .plot-idea-rm:hover{color:#b3503a}
 .plot-idea-rm .icon{width:11px;height:11px;vertical-align:middle}
-/* ＋ 아이디어 추가 박스 */
-.plot-add-box{display:flex;align-items:center;justify-content:center;gap:6px;
+/* ＋ 아이디어 가져오기 / ＋ 아이디어 생성 박스 */
+.plot-add-row{display:flex;gap:8px}
+.plot-add-box{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
   border:1px dashed var(--line);border-radius:8px;padding:11px;cursor:pointer;
   background:#faf8f4;color:var(--muted);font-size:13px;font-weight:600;transition:border-color .12s,color .12s}
 .plot-add-box:hover,.plot-add-box.drop-hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
 .plot-add-plus{font-size:16px;line-height:1}
+.plot-add-plus .icon{width:14px;height:14px;vertical-align:middle}
 /* 아이디어 선택 팝업 */
 .plot-modal-overlay{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.4);
   display:flex;align-items:center;justify-content:center;padding:20px}
@@ -520,11 +524,28 @@ body.logged-in .login-overlay { display: none; }
 .assign-switch input:checked + .assign-switch-slider { background: var(--ok); }
 .assign-switch input:checked + .assign-switch-slider::before { transform: translateX(16px); }
 
-/* 첨삭 화면 — 제출본(위) / 첨삭본(아래) 블럭 쌍 */
+/* 첨삭 화면 — 기본은 원본 블록 한 줄, 우클릭해서 [첨삭]을 누른 블록만 이전 버전(위)/첨삭(아래)으로 분리 */
 .review-pair { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.review-pair.split { gap: 0; }
 .review-before-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .review-before { background: #fbfaf7; }
 .review-after textarea { min-height: 90px; }
+
+/* 이전 버전(위)과 첨삭/첨삭 결과(아래)를 여백 없이 붙여서, 맞닿는 모서리만 직각으로 만든다 */
+.ta-wrap{border:1px solid var(--line);border-radius:10px;background:#fbfaf7;padding:12px 14px;margin-bottom:12px}
+.ta-wrap label{margin:0 0 2px;color:var(--accent);display:block}
+.ta-wrap textarea{min-height:90px}
+.version-prev{border:1px solid var(--line);border-bottom:none;border-radius:6px 6px 0 0;
+  background:#f6f2e9;padding:0}
+.version-prev-toggle{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);
+  cursor:pointer;user-select:none;padding:4px 8px}
+.version-prev-toggle:hover{color:var(--accent)}
+.version-prev-text{white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.5;
+  color:var(--muted);padding:0 8px 6px}
+.version-prev.collapsed .version-prev-text{display:none}
+/* 이전 버전 안에서, 지금 입력 중인 첨삭 내용과 비교했을 때 실제로 달라진 부분만 옅은 붉은 배경으로 표시 */
+.version-prev-text .diff-bg{background:#f6d3cc;border-radius:2px}
+.ta-wrap.version-current{border-radius:0 0 6px 6px;border-color:var(--line);background:#fff}
 
 /* ===== 심플라인 아이콘 / 아이콘 버튼 ===== */
 .icon{width:15px;height:15px;vertical-align:-3px;flex-shrink:0}

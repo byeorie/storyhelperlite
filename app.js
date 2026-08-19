@@ -479,6 +479,7 @@ let dndDropHandled=false;
 let ideaFilterTags=[];
 let ideaPendingTags=[];
 let ideaTagPickerFor=null;
+let ideaHighlightId=null; // 플롯 생성에서 "아이디어 수집으로 보내기"로 넘어온 뒤 한 번 스크롤·강조할 아이디어 id
 
 /* 태그 색상 팔레트 & 유틸 */
 const TAG_PALETTE=["#c4654a","#5a8f6b","#4a7fc4","#c4a34a","#8a4ac4","#c44a91","#3fada0","#c47a4a","#6a6ac4","#a0a842"];
@@ -754,6 +755,16 @@ function ideaBlockCard(b, allTags, list){
     };
     picker.appendChild(newInput);
     d.appendChild(picker);
+  }
+  /* 플롯 생성에서 "아이디어 수집으로 보내기"로 방금 넘어온 블록이면 스크롤 후 한 번 강조 */
+  if(ideaHighlightId===b.id){
+    ideaHighlightId=null;
+    setTimeout(()=>{
+      if(!d.isConnected) return;
+      d.scrollIntoView({behavior:"smooth", block:"center"});
+      d.classList.add("idea-flash");
+      setTimeout(()=>d.classList.remove("idea-flash"),1600);
+    },0);
   }
   return d;
 }
@@ -1625,7 +1636,7 @@ function rPlot(){
   const struct=PLOT_STRUCTURES[P.plotDoc.structure];
   const head=document.createElement("div"); head.className="card";
   head.innerHTML=`<div class="card-h2-row"><h2>${ICONS.book} 플롯 생성</h2>${submitBtnHtml()}</div>
-    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 드래그 핸들로 순서를 바꿀 수 있습니다. 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
+    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 가져오기</b>로 아이디어 수집에서 아이디어를 담거나, <b>＋ 아이디어 생성</b>으로 여기서 바로 새 아이디어를 만들 수 있습니다. 아이디어 카드를 우클릭하면 아이디어 수집 페이지로 보낼 수 있어요. 드래그 핸들로 순서를 바꿀 수 있고, 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
     <div class="plot-toolbar">
       <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
@@ -1696,8 +1707,10 @@ function plotSectionCard(sec, idx, secWrap){
     const nm=prompt("섹션 이름:",sec.name); if(nm===null)return;
     sec.name=nm||sec.name; save(); render();
   });
-  // 아이디어 추가
-  const addBtn=iconBtn(ICONS.plus,"아이디어 추가",()=>togglePicker(sec));
+  // 아이디어 가져오기 (아이디어 수집에서 골라오기)
+  const importBtn=iconBtn(ICONS.download,"아이디어 가져오기",()=>togglePicker(sec));
+  // 아이디어 생성 (플롯 생성에서 바로 새 블록 작성)
+  const createBtn=iconBtn(ICONS.plus,"아이디어 생성",()=>createIdeaInSection(sec));
   // 섹션 이동 핸들
   const moveBtn=iconBtn(ICONS.grip,"드래그해서 섹션 순서 변경",null);
   moveBtn.classList.add("plot-sec-move");
@@ -1724,7 +1737,7 @@ function plotSectionCard(sec, idx, secWrap){
     P.plotDoc.sections=P.plotDoc.sections.filter(x=>x.id!==sec.id); save(); render();
   });
   delBtn.classList.add("plot-sec-del");
-  h.append(num, nameEl, spacer, cnt, editBtn, addBtn, moveBtn, collBtn, delBtn);
+  h.append(num, nameEl, spacer, cnt, editBtn, importBtn, createBtn, moveBtn, collBtn, delBtn);
   card.appendChild(h);
 
   if(collapsed) return card;
@@ -1752,23 +1765,30 @@ function plotSectionCard(sec, idx, secWrap){
     commitPlotIdeaOrder(secWrap);
   });
 
-  /* ＋ 아이디어 추가 박스 (드래그로 이 섹션에 떨어뜨리는 것도 가능) */
-  const addBox=document.createElement("div"); addBox.className="plot-add-box";
-  addBox.innerHTML=`<span class="plot-add-plus">＋</span><span class="plot-add-label">아이디어 추가</span>`;
-  addBox.onclick=()=>togglePicker(sec);
-  addBox.addEventListener("dragover", e=>{
-    const dragging=document.querySelector(".plot-idea.dragging");
-    if(!dragging) return;
-    e.preventDefault();
-    body.appendChild(dragging); addBox.classList.add("drop-hover");
+  /* ＋ 아이디어 가져오기 / ＋ 아이디어 생성 박스 (드래그로 이 섹션에 떨어뜨리는 것도 가능) */
+  const addRow=document.createElement("div"); addRow.className="plot-add-row";
+  const importBox=document.createElement("div"); importBox.className="plot-add-box";
+  importBox.innerHTML=`<span class="plot-add-plus">${ICONS.download}</span><span class="plot-add-label">아이디어 가져오기</span>`;
+  importBox.onclick=()=>togglePicker(sec);
+  const createBox=document.createElement("div"); createBox.className="plot-add-box";
+  createBox.innerHTML=`<span class="plot-add-plus">＋</span><span class="plot-add-label">아이디어 생성</span>`;
+  createBox.onclick=()=>createIdeaInSection(sec);
+  [importBox, createBox].forEach(box=>{
+    box.addEventListener("dragover", e=>{
+      const dragging=document.querySelector(".plot-idea.dragging");
+      if(!dragging) return;
+      e.preventDefault();
+      body.appendChild(dragging); box.classList.add("drop-hover");
+    });
+    box.addEventListener("dragleave", ()=>box.classList.remove("drop-hover"));
+    box.addEventListener("drop", e=>{
+      if(!document.querySelector(".plot-idea.dragging")) return;
+      e.preventDefault();
+      commitPlotIdeaOrder(secWrap);
+    });
   });
-  addBox.addEventListener("dragleave", ()=>addBox.classList.remove("drop-hover"));
-  addBox.addEventListener("drop", e=>{
-    if(!document.querySelector(".plot-idea.dragging")) return;
-    e.preventDefault();
-    commitPlotIdeaOrder(secWrap);
-  });
-  card.appendChild(addBox);
+  addRow.append(importBox, createBox);
+  card.appendChild(addRow);
 
   return card;
 }
@@ -1784,6 +1804,48 @@ function togglePicker(sec){
   if(plotPickerFor===sec.id){ plotPickerFor=null; }
   else { plotPickerFor=sec.id; plotPickerFilter=[]; }
   render();
+}
+/* 플롯 생성 페이지에서 바로 새 아이디어 블록을 만들어 이 섹션에 배치
+   (아이디어 수집과 같은 저장소(P.ideaBlocks)를 쓰므로 아이디어 수집 목록에도 자동으로 나타난다) */
+function createIdeaInSection(sec){
+  const text=prompt("새 아이디어 내용을 입력하세요:", "");
+  if(text===null) return;
+  const trimmed=text.trim();
+  if(!trimmed) return;
+  if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
+  const id=uid();
+  P.ideaBlocks.push({id, text:trimmed, tags:[]});
+  sec.ideaIds=sec.ideaIds||[];
+  sec.ideaIds.push(id);
+  save(); render();
+}
+/* 플롯 생성의 아이디어 블록 우클릭 메뉴 — 아이디어 수집 페이지로 이동해서 보여주기 */
+function openPlotIdeaCtxMenu(x, y, b){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  const items=[
+    ["아이디어 수집으로 보내기",ICONS.upload,()=>goToIdeaCollection(b.id)]
+  ];
+  m.innerHTML="";
+  items.forEach(([label,icon,fn])=>{
+    const btn=document.createElement("button");
+    btn.innerHTML=icon+" "+label;
+    btn.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(btn);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
+/* 아이디어 수집 탭으로 전환하고 해당 아이디어 블록으로 스크롤·강조 */
+function goToIdeaCollection(id){
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  const btn=document.querySelector('.tab[data-tab="idea"]');
+  if(btn) btn.classList.add("active");
+  activeTab="idea"; localStorage.setItem(TAB_KEY, activeTab);
+  ideaHighlightId=id;
+  render();
+  window.scrollTo(0,0);
 }
 /* 아이디어 선택 팝업 (미배치 아이디어 + 태그 필터) */
 function plotPickerModal(sec){
@@ -1874,6 +1936,7 @@ function plotIdeaCard(b, secWrap){
   const d=document.createElement("div"); d.className="plot-idea"; d.dataset.id=b.id; d.draggable=false;
   const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
   d.style.borderLeftColor=color;
+  d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openPlotIdeaCtxMenu(e.clientX, e.clientY, b); });
   const handle=document.createElement("span"); handle.className="plot-idea-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 이동";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
@@ -3293,9 +3356,36 @@ async function doAdminReset(mode){
    학생: 설정에서 교수 코드 입력 → 가입 → 기획서/플롯/글쓰기 탭의 "제출" 버튼으로 과제 폴더 선택해 제출
    교수: 학생 관리(내 코드로 가입한 학생 명단) / 과제 관리(등록·마감 스위치·제출함 열람·첨삭)
    제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
-   모달로 "임시로 열어" 보여주고 저장도 professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와
-   완전히 분리되어 있다. */
+   "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
+   professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
 const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기"};
+/* "과제 관리" 탭 안의 현재 화면 상태(팝업 대신 같은 탭 안에서 페이지처럼 전환) */
+let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
+let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
+let reviewSplitIds=new Set();// 첨삭 화면에서 "이전 버전 / 첨삭"으로 위아래 분리된 블록 id 모음
+
+/* 두 텍스트를 단어 단위로 비교해, 이전 텍스트(before)에서 지금(after)과 달라진 부분만
+   <span class="diff-bg">로 감싼 HTML을 만든다 (LCS 기반의 간단한 단어 단위 diff) */
+function diffPrevHtml(beforeText, afterText){
+  const a=(beforeText||"").split(/(\s+)/);
+  const b=(afterText||"").split(/(\s+)/);
+  const n=a.length, m=b.length;
+  if(!n) return '<span class="muted">(내용 없음)</span>';
+  const dp=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--){
+    for(let j=m-1;j>=0;j--){
+      dp[i][j]= a[i]===b[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j], dp[i][j+1]);
+    }
+  }
+  let i=0,j=0, out="";
+  while(i<n && j<m){
+    if(a[i]===b[j]){ out+=esc(a[i]); i++; j++; }
+    else if(dp[i+1][j]>=dp[i][j+1]){ out+= a[i].trim() ? `<span class="diff-bg">${esc(a[i])}</span>` : esc(a[i]); i++; }
+    else { j++; }
+  }
+  while(i<n){ out+= a[i].trim() ? `<span class="diff-bg">${esc(a[i])}</span>` : esc(a[i]); i++; }
+  return out;
+}
 
 /* 현재 프로젝트에서 제출용 스냅샷을 만든다 (탭 종류별로 모양이 다름, 서버는 그대로 JSON 저장만 함) */
 function buildSubmissionData(type){
@@ -3398,13 +3488,9 @@ async function openMySubmissionView(id){
   if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const sub=res.body.submission;
   ttl.textContent=`${TYPE_LABEL[sub.type]} — ${sub.assignmentTitle}`;
+  if(!sub.feedback){ body.innerHTML=`<p class="hint">아직 첨삭 전입니다.</p>`; return; }
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  body.innerHTML = sub.feedback
-    ? pairs.map(p=>`<div class="review-pair">
-        <div class="plan-block review-before"><label>${esc(p.label)}</label><div class="review-before-text">${esc(p.before).replace(/\n/g,"<br>")||'<span class="muted">(내용 없음)</span>'}</div></div>
-        <div class="plan-block review-after"><label>${esc(p.label)} — 교수님 첨삭</label><div class="review-before-text">${esc(p.after).replace(/\n/g,"<br>")||'<span class="muted">(내용 없음)</span>'}</div></div>
-      </div>`).join("")
-    : `<p class="hint">아직 첨삭 전입니다.</p>`;
+  renderReviewPairs(body, pairs, false, null);
 }
 
 /* ===== 교수 — 학생 관리 ===== */
@@ -3427,8 +3513,12 @@ async function rProfStudents(){
   </tr>`).join("")}</tbody></table><p class="hint">총 ${students.length}명</p>`;
 }
 
-/* ===== 교수 — 과제 관리 ===== */
+/* ===== 교수 — 과제 관리 =====
+   팝업이 아니라 이 탭 안에서 화면만 바뀐다: 과제 목록 → (폴더 클릭) 제출함 → (제출물 클릭) 첨삭 화면.
+   profAssignFolderId/profReviewId 상태값으로 어느 화면을 보여줄지 결정한다(뒤로가기 버튼이 각각 null로 리셋). */
 function rProfAssignments(){
+  if(profReviewId){ rProfSubmissionReview(profReviewId); return; }
+  if(profAssignFolderId){ rProfAssignmentFolder(profAssignFolderId); return; }
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>${ICONS.book} 과제 관리</h2>
     <p class="hint">과제를 등록하면 아래에 폴더 형태로 표시됩니다. 폴더를 클릭하면 학생 제출함이 열립니다. 스위치를 끄면 학생이 더 이상 제출할 수 없습니다.</p>
@@ -3464,7 +3554,7 @@ async function renderProfAssignList(){
     };
   });
   wrap.querySelectorAll(".assign-folder").forEach(el=>{
-    el.onclick=()=>openAssignmentFolder(Number(el.dataset.id));
+    el.onclick=()=>{ profAssignFolderId=Number(el.dataset.id); render(); };
   });
 }
 function openNewAssignmentModal(){
@@ -3491,66 +3581,69 @@ function openNewAssignmentModal(){
   };
 }
 
-/* 과제 폴더 — 제출한 학생 목록 (교수) */
-async function openAssignmentFolder(id){
-  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
-  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  const box=document.createElement("div"); box.className="plot-modal wide";
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="불러오는 중…";
-  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
-  box.appendChild(top);
-  const body=document.createElement("div"); box.appendChild(body);
-  overlay.appendChild(box); document.body.appendChild(overlay);
+/* 과제 폴더 — 제출한 학생 목록 (교수). "과제 관리" 탭 안에서 페이지처럼 전환(팝업 아님) */
+async function rProfAssignmentFolder(id){
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<button class="btn ghost sm" id="assignBackBtn" style="margin-bottom:10px">${ICONS.close} 과제 목록으로</button>
+    <h2 id="assignFolderTitle">${ICONS.book} 불러오는 중…</h2>
+    <div id="assignFolderWrap"><p class="hint">불러오는 중…</p></div>`;
+  app.appendChild(c);
+  c.querySelector("#assignBackBtn").onclick=()=>{ profAssignFolderId=null; render(); };
 
   const res=await apiFetch("professor-assignment?id="+id);
-  if(!overlay.isConnected) return;
-  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  if(!c.isConnected) return;
+  const titleEl=document.getElementById("assignFolderTitle");
+  const wrap=document.getElementById("assignFolderWrap");
+  if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const assignment=res.body.assignment, submissions=res.body.submissions||[];
-  ttl.textContent=assignment.title+" — 제출함";
-  if(!submissions.length){ body.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
-  body.innerHTML=`<div class="submit-assign-list">${submissions.map(s=>`
+  if(titleEl) titleEl.textContent=`${ICONS.book} ${esc(assignment.title)} — 제출함`;
+  if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
+  wrap.innerHTML=`<div class="submit-assign-list">${submissions.map(s=>`
     <button type="button" class="submit-assign-item" data-id="${s.id}">
       <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
       <span class="assign-type-badge">${esc(s.type_label)}</span>
       <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}</span>
     </button>`).join("")}</div>`;
-  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
-    btn.onclick=()=>openSubmissionReview(Number(btn.dataset.id));
+  wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); render(); };
   });
 }
 
-/* 제출물 상세 — 첨삭 화면 (교수). 제출본(위, 읽기전용) / 첨삭본(아래, 편집) 블럭 쌍으로 배치 */
-async function openSubmissionReview(id){
-  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
-  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  const box=document.createElement("div"); box.className="plot-modal wide";
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="불러오는 중…";
-  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
-  box.appendChild(top);
-  const body=document.createElement("div"); box.appendChild(body);
-  overlay.appendChild(box); document.body.appendChild(overlay);
+/* 제출물 상세 — 첨삭 화면 (교수, 페이지). 기본은 원본 블록만 한 줄로 보여주고,
+   블록을 우클릭해 [첨삭]을 선택해야 그 블록만 이전 버전(위)/첨삭 입력란(아래)으로 분리된다.
+   이미 첨삭이 저장되어 원본과 달라진 블록은 처음부터 분리된 채로 보여준다. */
+async function rProfSubmissionReview(id){
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} 제출함으로</button>
+    <h2 id="reviewTitle">${ICONS.edit} 불러오는 중…</h2>
+    <p class="hint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>을 선택하면 이전 버전(위)·첨삭 입력란(아래)으로 나뉩니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
+    <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
+    <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
+  app.appendChild(c);
+  c.querySelector("#reviewBackBtn").onclick=()=>{ profReviewId=null; render(); };
 
   const res=await apiFetch("professor-submission?id="+id);
-  if(!overlay.isConnected) return;
-  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
-  const sub=res.body.submission;
-  ttl.textContent=`${sub.studentName} · ${TYPE_LABEL[sub.type]} — ${sub.assignmentTitle}`;
-  body.innerHTML=`<p class="hint">위: 학생이 제출한 원본(수정 불가) · 아래: 첨삭 입력란 — 저장하면 학생도 볼 수 있습니다.</p>
-    <div id="reviewPairs"></div>
-    <button class="btn" id="reviewSaveBtn" style="margin-top:10px;width:100%">첨삭 저장</button>`;
+  if(!c.isConnected) return;
+  const titleEl=document.getElementById("reviewTitle");
   const pairsEl=document.getElementById("reviewPairs");
+  if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
+  const sub=res.body.submission;
+  if(titleEl) titleEl.textContent=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}`;
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  pairsEl.innerHTML=pairs.map((p,i)=>`<div class="review-pair">
-    <div class="plan-block review-before"><label>${esc(p.label)}</label><div class="review-before-text">${esc(p.before).replace(/\n/g,"<br>")||'<span class="muted">(내용 없음)</span>'}</div></div>
-    <div class="plan-block review-after"><label>${esc(p.label)} — 첨삭</label><textarea data-idx="${i}" class="plan-ta-lg">${esc(p.after)}</textarea></div>
-  </div>`).join("");
+  reviewSplitIds=new Set(pairs.filter(p=>p.after!==p.before).map(p=>p.id));
+  renderReviewPairs(pairsEl, pairs, true, reviewSplitIds);
+
   document.getElementById("reviewSaveBtn").onclick=async ()=>{
-    const afterList=[...pairsEl.querySelectorAll("textarea")].map(t=>t.value);
+    const byId={}; pairs.forEach(p=>byId[p.id]=p);
+    pairsEl.querySelectorAll(".review-pair.split textarea").forEach(ta=>{
+      const wrap=ta.closest(".review-pair");
+      const pid=wrap && wrap.dataset.id;
+      if(pid!=null && byId[pid]) byId[pid].after=ta.value;
+    });
+    const afterList=pairs.map(p=>p.after);
     const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList);
     const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback})});
-    if(r.ok) alert("첨삭을 저장했습니다.");
+    if(r.ok) alert("피드백을 학생에게 전달했습니다.");
     else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
   };
 }
@@ -3560,7 +3653,7 @@ function buildReviewPairs(type, data, feedback){
   if(type==="plan"){
     const fb=feedback||{};
     return PLAN_FIELDS.map(f=>({
-      label:f.label, before:(data&&data[f.k])||"",
+      id:f.k, label:f.label, before:(data&&data[f.k])||"",
       after: Object.prototype.hasOwnProperty.call(fb,f.k) ? fb[f.k] : ((data&&data[f.k])||""),
     }));
   }
@@ -3570,7 +3663,7 @@ function buildReviewPairs(type, data, feedback){
     return sections.map((s,i)=>{
       const before=(s.desc||"")+((s.ideaTexts&&s.ideaTexts.length)?("\n\n[아이디어]\n"+s.ideaTexts.join("\n")):"");
       const fbItem=fbArr[i];
-      return { label:s.name||`섹션 ${i+1}`, before, after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : before };
+      return { id:s.id||("i"+i), label:s.name||`섹션 ${i+1}`, before, after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : before };
     });
   }
   if(type==="write"){
@@ -3578,10 +3671,83 @@ function buildReviewPairs(type, data, feedback){
     const fbArr=Array.isArray(feedback)?feedback:[];
     return blocks.map((b,i)=>{
       const fbItem=fbArr[i];
-      return { label:b.title||`블록 ${i+1}`, before:b.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||"") };
+      return { id:b.id||("i"+i), label:b.title||`블록 ${i+1}`, before:b.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||"") };
     });
   }
   return [];
+}
+/* 첨삭 화면 공통 렌더러 — editable=true(교수: 원본 블록 우클릭으로 첨삭 분리, textarea로 입력)
+   editable=false(학생: 읽기전용, 원본과 다른 블록만 자동으로 위/아래 분리해서 보여줌) */
+function renderReviewPairs(container, pairs, editable, splitIds){
+  container.innerHTML="";
+  if(!pairs.length){ container.innerHTML=`<p class="hint">내용이 없습니다.</p>`; return; }
+  pairs.forEach(p=>{
+    const changed=p.after!==p.before;
+    const split = editable ? splitIds.has(p.id) : changed;
+    const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":""); wrap.dataset.id=p.id;
+    if(!split){
+      const box=document.createElement("div"); box.className="plan-block review-before";
+      const lbl=document.createElement("label"); lbl.textContent=p.label;
+      const txt=document.createElement("div"); txt.className="review-before-text";
+      if(p.before && p.before.trim()) txt.textContent=p.before;
+      else txt.innerHTML='<span class="muted">(내용 없음)</span>';
+      box.append(lbl, txt);
+      wrap.appendChild(box);
+      if(editable) wrap.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openReviewBlockCtxMenu(e.clientX, e.clientY, p, wrap, container, pairs, splitIds, editable); });
+    }else{
+      const prev=document.createElement("div"); prev.className="version-prev";
+      const toggle=document.createElement("div"); toggle.className="version-prev-toggle";
+      const setToggleLabel=()=>{ toggle.textContent=(prev.classList.contains("collapsed")?"▸":"▾")+" 이전 버전 · "+p.label; };
+      toggle.onclick=()=>{ prev.classList.toggle("collapsed"); setToggleLabel(); };
+      const prevText=document.createElement("div"); prevText.className="version-prev-text";
+      setToggleLabel();
+      prev.append(toggle, prevText);
+
+      const cur=document.createElement("div"); cur.className="ta-wrap version-current";
+      const lbl=document.createElement("label"); lbl.textContent=p.label+(editable?" — 첨삭":" — 교수님 첨삭");
+      cur.appendChild(lbl);
+      let getAfter;
+      if(editable){
+        const ta=document.createElement("textarea"); ta.className="plan-ta-lg"; ta.value=p.after;
+        ta.oninput=()=>{ prevText.innerHTML=diffPrevHtml(p.before, ta.value); };
+        cur.appendChild(ta);
+        getAfter=()=>ta.value;
+      }else{
+        const txt=document.createElement("div"); txt.className="review-before-text";
+        if(p.after && p.after.trim()) txt.textContent=p.after; else txt.innerHTML='<span class="muted">(내용 없음)</span>';
+        cur.appendChild(txt);
+        getAfter=()=>p.after;
+      }
+      prevText.innerHTML=diffPrevHtml(p.before, getAfter());
+      wrap.append(prev, cur);
+      if(editable) wrap.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openReviewBlockCtxMenu(e.clientX, e.clientY, p, wrap, container, pairs, splitIds, editable); });
+    }
+    container.appendChild(wrap);
+  });
+}
+/* 첨삭 화면(교수) 블록 우클릭 메뉴 — 원본 블록이면 [첨삭](위/아래로 분리),
+   이미 분리된 블록이면 [원본 보기로 되돌리기](입력 중이던 첨삭 내용은 유지한 채 다시 원본 한 줄 보기로) */
+function openReviewBlockCtxMenu(x, y, p, wrap, container, pairs, splitIds, editable){
+  if(!editable) return;
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  const split=splitIds.has(p.id);
+  const items = split
+    ? [["원본 보기로 되돌리기",ICONS.eraser,()=>{
+        const ta=wrap.querySelector("textarea"); if(ta) p.after=ta.value;
+        splitIds.delete(p.id); renderReviewPairs(container, pairs, editable, splitIds);
+      }]]
+    : [["첨삭",ICONS.edit,()=>{ splitIds.add(p.id); renderReviewPairs(container, pairs, editable, splitIds); }]];
+  m.innerHTML="";
+  items.forEach(([label,icon,fn])=>{
+    const b=document.createElement("button");
+    b.innerHTML=icon+" "+label;
+    b.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(b);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
 }
 /* 화면에서 편집한 첨삭 텍스트 배열 → 저장용 feedback 구조로 재조립 (buildReviewPairs와 순서가 항상 같음) */
 function buildFeedbackFromPairs(type, data, afterList){

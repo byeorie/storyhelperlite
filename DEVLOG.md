@@ -2,6 +2,77 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-19 (2) — 과제 관리: 과제 폴더·첨삭 화면을 팝업 → 페이지로 전환 + 첨삭 블록 우클릭 분리 + 피드백 버튼
+
+**요청**: (1) 과제 폴더를 클릭하면 팝업 대신 페이지로 보이게 할 것. (2) 학생 제출물을 클릭했을 때(첨삭
+화면)도 팝업이 아닌 페이지로 뜨게 할 것. (3) 첨삭 화면에서 모든 블록을 미리 첨삭용으로 만들지 말고,
+원본 블록을 우클릭해 "첨삭"을 선택해야 그 블록만 위(이전 버전)/아래(첨삭 입력란)로 분리되게 할 것.
+(4) 분리 디자인은 사용자가 준 CSS(`.version-prev`/`.version-prev-toggle`/`.version-prev-text`/
+`.diff-bg`/`.ta-wrap.version-current`)를 참고. (5) 교수가 첨삭을 학생에게 돌려주는 [피드백] 버튼을
+만들고, 그 결과도 원본/첨삭이 위아래로 보이는 같은 디자인으로 보여줄 것.
+
+- **app.js** 수정
+  - `openAssignmentFolder`(팝업)를 `rProfAssignmentFolder(id)`(페이지)로, `openSubmissionReview`
+    (팝업)를 `rProfSubmissionReview(id)`(페이지)로 교체. 둘 다 `app`에 카드로 붙고 "← 목록으로/←
+    제출함으로" 버튼으로 뒤로 갈 수 있음(팝업 오버레이 방식 폐기, `.plot-modal-overlay` 미사용)
+  - "과제 관리" 탭 안에서 화면 전환을 위한 상태값 `profAssignFolderId`/`profReviewId` 신설.
+    `rProfAssignments()`가 이 값들을 보고 목록/폴더(제출함)/첨삭 중 어느 화면을 그릴지 분기.
+    `renderProfAssignList()`의 폴더 클릭, `rProfAssignmentFolder()`의 제출물 클릭 핸들러가 팝업
+    호출 대신 이 상태값을 세팅하고 `render()`만 호출하도록 변경
+  - `buildReviewPairs()` — 각 항목(plan 필드/plot 섹션/write 블록)에 안정적인 `id`를 추가(기존엔
+    배열 인덱스만 있어서 개별 블록을 식별할 수 없었음)
+  - `renderReviewPairs(container, pairs, editable, splitIds)` 신설 — 기본은 원본 텍스트 한 줄
+    (`.plan-block.review-before`)만 보여주고, "분리된" 블록만 `.version-prev`(위, 접기 가능, 원본에서
+    지금 첨삭 내용과 달라진 단어만 `.diff-bg`로 강조)와 `.ta-wrap.version-current`(아래, 교수 화면은
+    `<textarea>`로 편집, 학생 화면은 읽기전용 텍스트)로 분리해서 그림. `editable=true`(교수)는 우클릭
+    가능·textarea 입력 시 diff 실시간 갱신, `editable=false`(학생)는 원본과 실제로 달라진 블록만
+    자동으로 분리해서 보여주고 나머지는 한 줄만 표시
+  - `diffPrevHtml(before, after)` 신설 — 단어 단위 LCS 기반 diff로 이전 텍스트에서 지금과 달라진
+    부분만 `<span class="diff-bg">`로 감싼 HTML 생성
+  - `openReviewBlockCtxMenu(...)` 신설 — 기존 `#ctxMenu` 공용 우클릭 메뉴 재사용. 원본(미분리)
+    블록이면 [첨삭](→ 위/아래로 분리), 이미 분리된 블록이면 [원본 보기로 되돌리기](입력 중이던 첨삭
+    내용은 유지한 채 다시 한 줄 보기로 되돌림)
+  - `rProfSubmissionReview()` — 불러오자마자 원본과 첨삭 내용이 이미 다른 블록(= 이전에 저장된 첨삭이
+    있는 블록)은 자동으로 분리된 채 보여줌. 저장 버튼 라벨을 "첨삭 저장" → "피드백 전달"로 변경(교수가
+    학생에게 첨삭을 돌려준다는 의미를 명확히 함)
+  - `openMySubmissionView()`(학생이 자기 제출물+첨삭 결과 보는 팝업, 그대로 유지)도 새
+    `renderReviewPairs(..., false, null)`를 사용하도록 교체 — 첨삭 완료된 항목은 원본/첨삭이 같은
+    위/아래 분리 디자인으로 보이고, 변경 없는 항목은 한 줄만 보임
+- **style.css** 수정 — `.review-pair.split{gap:0}` 추가(분리된 블록은 위아래가 여백 없이 붙도록),
+  사용자가 준 CSS 그대로 `.version-prev`/`.version-prev-toggle`/`.version-prev-text`/
+  `.version-prev.collapsed`/`.diff-bg`/`.ta-wrap.version-current` 추가 + `.ta-wrap` 기본 스타일(테두리·
+  배경·패딩)은 기존 `.plan-block`과 동일하게 신설. `.block-add-row`/`.write-add-block`/
+  `.block-add-small`은 이번 기능(블록 추가가 아니라 "우클릭 → 첨삭"만 필요)과 무관하고, 특히
+  `.write-add-block`은 글쓰기 탭에 이미 다른 값으로 정의돼 있어 그대로 추가하면 그 탭 스타일이
+  깨지므로 의도적으로 가져오지 않음
+- 검증: `node --check app.js` 통과. jsdom 미설치 상태라(이 세션의 /tmp 클론엔 node_modules 없음) 실제
+  브라우저 렌더링 확인은 못 했고, 로직을 코드 리뷰로 재검토함 — 사용자가 실제 화면에서 한 번 확인해줄
+  것을 권장
+
+**요청**: 플롯 생성 페이지의 [+아이디어 추가] 버튼을 누르면 아이디어 수집에서 먼저 아이디어를
+만들라는 메시지가 뜨는 문제. [+아이디어 가져오기](아이디어 수집에서 골라오기)와 [+아이디어 생성]
+(플롯 생성에서 바로 새 블록 작성)으로 버튼을 분리하고, 새로 만든 블록을 우클릭하면 아이디어 수집
+페이지로 보내는 메뉴도 추가해달라는 요청.
+
+- **app.js** 수정
+  - `plotSectionCard()` — 섹션 헤더의 아이디어 추가 아이콘 버튼 1개(`addBtn`)를 `importBtn`(＋아이디어
+    가져오기, 기존 `togglePicker` 피커 그대로 연결)과 `createBtn`(＋아이디어 생성, 신설
+    `createIdeaInSection` 연결) 2개로 분리. 섹션 바닥의 점선 박스도 `addBox` 1개 → `importBox`/
+    `createBox` 2개(`.plot-add-row`로 가로 배치)로 동일하게 분리, 드래그 드롭 수신은 두 박스 모두 유지
+  - `createIdeaInSection(sec)` 신설 — `prompt()`로 텍스트를 입력받아 `P.ideaBlocks`(아이디어 수집과
+    동일한 저장소)에 새 블록을 만들고 바로 해당 섹션의 `ideaIds`에 배치. 같은 저장소를 쓰므로 아이디어
+    수집 목록에도 자동으로 나타남
+  - `plotIdeaCard()` — 아이디어 카드에 `contextmenu` 리스너 추가, 우클릭 시 `openPlotIdeaCtxMenu`로
+    기존 `#ctxMenu` 재사용 메뉴(다른 우클릭 메뉴들과 동일 패턴)를 띄움. 메뉴 항목 "아이디어 수집으로
+    보내기" 클릭 시 `goToIdeaCollection(id)` 호출 — 아이디어 수집 탭으로 전환하고 해당 블록으로
+    스크롤 + 잠깐 배경 강조(`idea-flash`, 1.6초). 새로 생성한 블록뿐 아니라 가져온 블록에도 동일하게
+    적용(모든 아이디어가 같은 저장소를 쓰므로 구분할 이유가 없어 일관되게 적용)
+  - `ideaBlockCard()` — `ideaHighlightId`가 자신의 id와 같으면 렌더 직후 스크롤·`idea-flash` 클래스
+    부여(한 번 쓰고 바로 null로 리셋, `write` 탭의 `writeFocusTitle` 포커스 패턴과 동일한 방식)
+- **style.css** 수정 — `.plot-add-box`를 `.plot-add-row`(flex) 안에 2개 배치하도록 `flex:1` 추가,
+  `.idea-block`에 `background` 트랜지션과 `.idea-flash`(강조 배경색) 클래스 추가
+- 검증: `node --check app.js` 통과
+
 ## 2026-08-18 (15) — 기획서 뷰어 폭 40%로 조정 + 앱 이름을 "스토리텔링 가이드"로 변경
 
 **요청**: (1) 기획서 미리보기 영역이 너무 넓어 60:40 비율로 줄여달라는 요청. (2) 앱 이름을
