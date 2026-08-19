@@ -2,7 +2,30 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
-## 2026-08-19 (5) — 학생: [제출] 버튼 옆에 [첨삭 보기] 버튼 신설
+## 2026-08-19 (6) — 학생 [첨삭 보기]도 팝업 → 페이지로 전환
+
+**요청**: "학생계정의 첨삭보기도 페이지 형태로 해줘." — (5)에서 만든 [첨삭 보기] 버튼이 아직 팝업
+(`.plot-modal-overlay`)이었는데, 교수 쪽 과제 관리처럼 페이지 전환으로 바꿔달라는 요청.
+
+- **app.js** 수정
+  - 상태값 `feedbackPage` 신설: `null`(평소 탭 화면) / `{type, mode:'list'}`(제출 목록) /
+    `{type, mode:'detail', id}`(상세: 원본+첨삭+내 작업물에 반영). 교수 쪽 `profAssignFolderId`/
+    `profReviewId` 패턴과 동일하게, 라우터 없이 그 탭 렌더 함수 맨 앞에서 상태값을 체크해 분기함
+    ([[project-storyhelperlite-popup-to-page-pattern]] 참고)
+  - `rPlan()`/`rPlot()`/`rWrite()` 맨 앞에 `if(feedbackPage && feedbackPage.type==="해당타입"){
+    rFeedbackPage(); return; }` 추가 — 즉 [첨삭 보기]는 그 버튼을 누른 탭(기획서/플롯/글쓰기) *안에서*
+    페이지로 전환되고, 다른 탭으로 이동하면 그 탭은 원래 화면 그대로 보임
+  - `openMyFeedbackListModal(type)`(팝업) → `rFeedbackList(type)`(페이지)로, `openMySubmissionView(id)`
+    (팝업) → `rFeedbackDetail(type, id)`(페이지)로 교체. 둘 다 `app`에 카드로 붙고 "← 돌아가기/←
+    목록으로" 버튼으로 이동. 상세 페이지의 [내 작업물에 반영] 버튼을 누르면 반영 후 페이지를 완전히
+    벗어나(`feedbackPage=null`) 바로 탭의 평소 화면(반영된 결과)이 보이도록 함
+  - `showFeedbackPage(type)` 신설 — 탭 헤더의 [첨삭 보기] 버튼, 글쓰기 탭 툴바의 [첨삭 보기] 버튼이
+    이제 이 함수(상태값 세팅 + `render()`)를 호출
+  - [제출] 모달 안의 "이미 N회 제출함 · 첨삭 완료(보기)" 링크도 팝업(`openMySubmissionView`) 대신
+    같은 페이지 전환(`feedbackPage={type, mode:'detail', id}`)을 쓰도록 변경 — 첨삭 보기로 들어가는
+    두 경로(전용 버튼 / 제출 모달 안 링크)가 이제 완전히 같은 화면을 씀
+- 검증: `node --check app.js` 통과, `openMyFeedbackListModal`/`openMySubmissionView` 남은 참조 없음
+  확인
 
 **요청**: "첨삭 과제 보는 버튼을 제출 버튼 옆에 따로 만들어줘." — 지금까지는 [제출]을 눌러 모달을 열고
 그 안에서 "이미 제출함 · 첨삭 완료(보기)" 링크를 찾아야만 첨삭 결과를 볼 수 있었는데, 이 경로가

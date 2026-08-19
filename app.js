@@ -1552,6 +1552,7 @@ const PLAN_FIELDS=[
   {k:"synopsis", label:"시놉시스", guide:"기승전결에 따라 전체 줄거리를 상세하게 서술하세요.", type:"textarea-xl"},
 ];
 function rPlan(){
+  if(feedbackPage && feedbackPage.type==="plan"){ rFeedbackPage(); return; }
   if(!P.planDoc) P.planDoc=blankPlanDoc();
   const pd=P.planDoc;
   const c=document.createElement("div");
@@ -1607,6 +1608,7 @@ function cleanPlotRefs(){
 }
 
 function rPlot(){
+  if(feedbackPage && feedbackPage.type==="plot"){ rFeedbackPage(); return; }
   if(!P.plotDoc) P.plotDoc={structure:"", sections:[]};
   cleanPlotRefs();
 
@@ -2009,6 +2011,7 @@ function sectionCharCounts(){
 }
 
 function rWrite(){
+  if(feedbackPage && feedbackPage.type==="write"){ rFeedbackPage(); return; }
   if(!P.writeDoc) P.writeDoc={blocks:[]};
   if(!Array.isArray(P.writeDoc.groups)) P.writeDoc.groups=[];
   const pd=P.plotDoc;
@@ -2071,7 +2074,7 @@ function rWrite(){
     barRight.appendChild(submitBtn);
     const feedbackBtn=document.createElement("button"); feedbackBtn.className="btn ghost sm icon-btn";
     feedbackBtn.innerHTML=ICONS.chat+" 첨삭 보기";
-    feedbackBtn.onclick=()=>openMyFeedbackListModal("write");
+    feedbackBtn.onclick=()=>showFeedbackPage("write");
     barRight.appendChild(feedbackBtn);
   }
   bar.appendChild(barRight);
@@ -3367,6 +3370,9 @@ const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기"};
 let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
 let reviewSplitIds=new Set();// 첨삭 화면에서 "이전 버전 / 첨삭"으로 위아래 분리된 블록 id 모음
+/* 학생 계정의 [첨삭 보기] — 팝업 대신 그 탭(기획서/플롯/글쓰기) 안에서 페이지로 전환.
+   null이면 평소 탭 화면, {type, mode:'list'}면 그 타입의 제출 목록, {type, mode:'detail', id}면 상세 */
+let feedbackPage=null;
 
 /* 두 텍스트를 단어 단위로 비교해, 이전 텍스트(before)에서 지금(after)과 달라진 부분만
    <span class="diff-bg">로 감싼 HTML을 만든다 (LCS 기반의 간단한 단어 단위 diff) */
@@ -3423,8 +3429,10 @@ function wireSubmitBtn(container, type){
   const btn=container.querySelector(".submit-tab-btn");
   if(btn) btn.onclick=()=>openSubmitModal(type);
   const fbBtn=container.querySelector(".feedback-tab-btn");
-  if(fbBtn) fbBtn.onclick=()=>openMyFeedbackListModal(type);
+  if(fbBtn) fbBtn.onclick=()=>showFeedbackPage(type);
 }
+/* [첨삭 보기] 버튼 클릭 — 그 탭 안에서 제출 목록 페이지로 전환 */
+function showFeedbackPage(type){ feedbackPage={type, mode:"list"}; render(); }
 
 /* 제출 대상 과제 선택 모달 (학생) */
 async function openSubmitModal(type){
@@ -3465,7 +3473,11 @@ async function openSubmitModal(type){
       </button>`;
     }).join("")}</div>`;
   body.querySelectorAll(".submit-already[data-view-id]").forEach(el=>{
-    el.onclick=(e)=>{ e.stopPropagation(); openMySubmissionView(Number(el.dataset.viewId)); };
+    el.onclick=(e)=>{
+      e.stopPropagation();
+      if(overlay.isConnected) document.body.removeChild(overlay);
+      feedbackPage={type, mode:"detail", id:Number(el.dataset.viewId)}; render();
+    };
   });
   body.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=async ()=>{
@@ -3480,65 +3492,65 @@ async function openSubmitModal(type){
   });
 }
 
-/* 제출 버튼 옆 [첨삭 보기] — 이 탭(기획서/플롯/글쓰기) 종류로 내가 제출한 것들을 한 번에 모아 보여줌
+/* [첨삭 보기] 페이지 — feedbackPage.mode에 따라 목록/상세 중 하나를 그 탭 안에 그림(팝업 아님) */
+function rFeedbackPage(){
+  if(feedbackPage.mode==="detail") return rFeedbackDetail(feedbackPage.type, feedbackPage.id);
+  return rFeedbackList(feedbackPage.type);
+}
+/* 이 탭(기획서/플롯/글쓰기) 종류로 내가 제출한 것들을 한 번에 모아 보여주는 목록 페이지
    (기존엔 [제출] 모달을 열어야만 "이미 제출함 · 첨삭 완료(보기)" 링크를 찾을 수 있었음) */
-async function openMyFeedbackListModal(type){
-  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
-  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  const box=document.createElement("div"); box.className="plot-modal";
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`${TYPE_LABEL[type]} 첨삭 보기`;
-  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
-  box.appendChild(top);
-  const body=document.createElement("div"); body.innerHTML=`<p class="hint">불러오는 중…</p>`;
-  box.appendChild(body);
-  overlay.appendChild(box); document.body.appendChild(overlay);
+async function rFeedbackList(type){
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<button class="btn ghost sm" id="feedbackListBackBtn" style="margin-bottom:10px">${ICONS.close} 돌아가기</button>
+    <h2>${ICONS.chat} ${esc(TYPE_LABEL[type])} 첨삭 보기</h2>
+    <div id="feedbackListWrap"><p class="hint">불러오는 중…</p></div>`;
+  app.appendChild(c);
+  c.querySelector("#feedbackListBackBtn").onclick=()=>{ feedbackPage=null; render(); };
 
   const res=await apiFetch("student-assignments");
-  if(!overlay.isConnected) return;
-  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  if(!c.isConnected) return;
+  const wrap=document.getElementById("feedbackListWrap");
+  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const assignments=res.body.assignments||[];
   const list=[];
   assignments.forEach(a=>{
     (a.mySubmissions||[]).filter(s=>s.type===type).forEach(s=>list.push({...s, assignmentTitle:a.title}));
   });
   list.sort((x,y)=>(y.submitted_at||0)-(x.submitted_at||0));
-  if(!list.length){ body.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
-  body.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
+  if(!list.length){ wrap.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
+  wrap.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
     <button type="button" class="submit-assign-item" data-id="${s.id}">
       <b>${esc(s.assignmentTitle)}</b>
       <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
     </button>`).join("")}</div>`;
-  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
-    btn.onclick=()=>openMySubmissionView(Number(btn.dataset.id));
+  wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=()=>{ feedbackPage={type, mode:"detail", id:Number(btn.dataset.id)}; render(); };
   });
 }
-
-/* 내가 제출한 것 + 교수 첨삭 결과 읽기 전용 보기 (학생) */
-async function openMySubmissionView(id){
-  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
-  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  const box=document.createElement("div"); box.className="plot-modal wide";
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="불러오는 중…";
-  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
-  box.appendChild(top);
-  const body=document.createElement("div"); box.appendChild(body);
-  overlay.appendChild(box); document.body.appendChild(overlay);
+/* 내가 제출한 것 + 교수 첨삭 결과 보기(+ 내 작업물에 반영) 상세 페이지 */
+async function rFeedbackDetail(type, id){
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<button class="btn ghost sm" id="feedbackDetailBackBtn" style="margin-bottom:10px">${ICONS.close} 목록으로</button>
+    <h2 id="feedbackDetailTitle">${ICONS.chat} 불러오는 중…</h2>
+    <div id="feedbackDetailWrap"><p class="hint">불러오는 중…</p></div>`;
+  app.appendChild(c);
+  c.querySelector("#feedbackDetailBackBtn").onclick=()=>{ feedbackPage={type, mode:"list"}; render(); };
 
   const res=await apiFetch("student-submission?id="+id);
-  if(!overlay.isConnected) return;
-  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  if(!c.isConnected) return;
+  const titleEl=document.getElementById("feedbackDetailTitle");
+  const wrap=document.getElementById("feedbackDetailWrap");
+  if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const sub=res.body.submission;
-  ttl.textContent=`${TYPE_LABEL[sub.type]} — ${sub.assignmentTitle}`;
-  if(!sub.feedback){ body.innerHTML=`<p class="hint">아직 첨삭 전입니다.</p>`; return; }
+  if(titleEl) titleEl.innerHTML=`${ICONS.chat} ${esc(TYPE_LABEL[sub.type])} — ${esc(sub.assignmentTitle)}`;
+  if(!sub.feedback){ wrap.innerHTML=`<p class="hint">아직 첨삭 전입니다.</p>`; return; }
   const caveat={
     plan:"",
     plot:" 섹션 설명(예시 설명)에 첨삭 내용 전체가 반영되고, 배치된 아이디어 카드는 그대로 유지됩니다.",
     write:" \"이름: 대사\" 형식의 줄만 대사로 인식해서 되돌리며, 분기 블록은 복원되지 않습니다.",
   }[sub.type]||"";
   const mismatch = sub.projectName && P.name && sub.projectName!==P.name;
-  body.innerHTML=`<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
+  wrap.innerHTML=`<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
     ${mismatch?`<br><b style="color:#b3503a">※ 이 과제는 "${esc(sub.projectName)}" 작품에서 제출했는데, 지금 열려있는 작품은 "${esc(P.name)}"입니다. 다른 작품에 반영될 수 있으니 확인해주세요.</b>`:""}</p>
     <button class="btn" id="applyFeedbackBtn" style="margin-bottom:14px;width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>
     <div id="feedbackPairs"></div>`;
@@ -3548,7 +3560,7 @@ async function openMySubmissionView(id){
     if(!confirm(`이 첨삭 내용을 지금 작업 중인 "${P.name||""}"의 ${TYPE_LABEL[sub.type]}에 덮어씁니다.\n제출 이후 더 수정한 내용이 있다면 사라질 수 있습니다. 계속할까요?`)) return;
     applyFeedbackToProject(sub.type, sub.feedback);
     alert("내 작업물에 반영했습니다.");
-    if(overlay.isConnected) document.body.removeChild(overlay);
+    feedbackPage=null; render();
   };
 }
 
