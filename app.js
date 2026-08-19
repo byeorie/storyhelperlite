@@ -3740,7 +3740,7 @@ async function rProfAssignmentFolder(id){
     pdfBtn.onclick=()=>bulkDownloadAssignmentPdfs(assignment.title, submissions, pdfBtn);
   }
   if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
-  wrap.innerHTML=`<div class="submit-assign-list">${submissions.map(s=>`
+  wrap.innerHTML=`<div class="submit-assign-list submit-assign-list--compact">${submissions.map(s=>`
     <button type="button" class="submit-assign-item" data-id="${s.id}">
       <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
       <span class="assign-type-badge">${esc(s.type_label)}</span>
