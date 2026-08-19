@@ -527,6 +527,11 @@ body.logged-in .login-overlay { display: none; }
 .assign-folder:hover { border-color: var(--accent); background: var(--accent2); }
 .assign-folder-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .assign-folder-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 5px; }
+.assign-folder-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.assign-folder-del { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; }
+.assign-folder-del:hover { color: #b3503a; background: var(--accent2); }
+.assign-folder-del .icon { width: 14px; height: 14px; vertical-align: middle; }
+.assign-folder-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 
 /* 제출 마감 스위치 */
 .assign-switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }

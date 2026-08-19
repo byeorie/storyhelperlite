@@ -27,6 +27,26 @@ export async function onRequestGet({ request, env }) {
   return jsonResponse({ assignment, submissions });
 }
 
+/* DELETE /api/professor-assignment?id=123 — 과제 폴더 삭제 (본인 과제만, 제출물도 함께 영구 삭제) */
+export async function onRequestDelete({ request, env }) {
+  const auth = await requireProfessor(request, env);
+  if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
+
+  const url = new URL(request.url);
+  const id = Number(url.searchParams.get("id"));
+  if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+
+  const assignment = await env.DB.prepare(
+    "SELECT id FROM assignments WHERE id = ? AND prof_id = ?"
+  ).bind(id, auth.user.id).first();
+  if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
+
+  await env.DB.prepare("DELETE FROM submissions WHERE assignment_id = ?").bind(id).run();
+  await env.DB.prepare("DELETE FROM assignments WHERE id = ? AND prof_id = ?").bind(id, auth.user.id).run();
+
+  return jsonResponse({ ok: true });
+}
+
 /* POST /api/professor-assignment — 과제 마감 스위치 토글  body: { id, open: 0|1 } */
 export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);

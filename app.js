@@ -3656,10 +3656,13 @@ async function renderProfAssignList(){
   wrap.innerHTML=list.map(a=>`<div class="assign-folder" data-id="${a.id}">
     <div class="assign-folder-top">
       <span class="assign-folder-title">${ICONS.book} ${esc(a.title)}</span>
-      <label class="assign-switch" title="제출 마감 스위치" onclick="event.stopPropagation()">
-        <input type="checkbox" ${a.open?"checked":""} data-id="${a.id}">
-        <span class="assign-switch-slider"></span>
-      </label>
+      <div class="assign-folder-controls">
+        <label class="assign-switch" title="제출 마감 스위치" onclick="event.stopPropagation()">
+          <input type="checkbox" ${a.open?"checked":""} data-id="${a.id}">
+          <span class="assign-switch-slider"></span>
+        </label>
+        <button type="button" class="assign-folder-del" data-id="${a.id}" title="과제 삭제">${ICONS.trash}</button>
+      </div>
     </div>
     <div class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
   </div>`).join("");
@@ -3667,6 +3670,20 @@ async function renderProfAssignList(){
     inp.onchange=async ()=>{
       const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:Number(inp.dataset.id), open:inp.checked})});
       if(!r.ok){ alert((r.body&&r.body.error)||"변경에 실패했습니다."); inp.checked=!inp.checked; return; }
+      renderProfAssignList();
+    };
+  });
+  wrap.querySelectorAll(".assign-folder-del").forEach(btn=>{
+    btn.onclick=async (e)=>{
+      e.stopPropagation();
+      const id=Number(btn.dataset.id);
+      const item=list.find(a=>a.id===id);
+      const submCount=item?item.submission_count:0;
+      const warn=submCount?`\n\n제출된 과제 ${submCount}건도 함께 영구 삭제됩니다.`:"";
+      if(!confirm(`'${(item&&item.title)||"이 과제"}'를 삭제할까요?${warn}`)) return;
+      btn.disabled=true;
+      const r=await apiFetch("professor-assignment?id="+id, {method:"DELETE"});
+      if(!r.ok){ alert((r.body&&r.body.error)||"삭제에 실패했습니다."); btn.disabled=false; return; }
       renderProfAssignList();
     };
   });
@@ -3701,7 +3718,10 @@ function openNewAssignmentModal(){
 /* 과제 폴더 — 제출한 학생 목록 (교수). "과제 관리" 탭 안에서 페이지처럼 전환(팝업 아님) */
 async function rProfAssignmentFolder(id){
   const c=document.createElement("div"); c.className="card";
-  c.innerHTML=`<button class="btn ghost sm" id="assignBackBtn" style="margin-bottom:10px">${ICONS.close} 과제 목록으로</button>
+  c.innerHTML=`<div class="assign-folder-actions">
+      <button class="btn ghost sm" id="assignBackBtn">${ICONS.close} 과제 목록으로</button>
+      <button class="btn ghost sm" id="assignPdfBtn" disabled>${ICONS.download} PDF 일괄 다운로드</button>
+    </div>
     <h2 id="assignFolderTitle">${ICONS.book} 불러오는 중…</h2>
     <div id="assignFolderWrap"><p class="hint">불러오는 중…</p></div>`;
   app.appendChild(c);
@@ -3711,9 +3731,14 @@ async function rProfAssignmentFolder(id){
   if(!c.isConnected) return;
   const titleEl=document.getElementById("assignFolderTitle");
   const wrap=document.getElementById("assignFolderWrap");
+  const pdfBtn=c.querySelector("#assignPdfBtn");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const assignment=res.body.assignment, submissions=res.body.submissions||[];
   if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(assignment.title)} — 제출함`;
+  if(pdfBtn){
+    pdfBtn.disabled=!submissions.length;
+    pdfBtn.onclick=()=>bulkDownloadAssignmentPdfs(assignment.title, submissions, pdfBtn);
+  }
   if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
   wrap.innerHTML=`<div class="submit-assign-list">${submissions.map(s=>`
     <button type="button" class="submit-assign-item" data-id="${s.id}">
@@ -3724,6 +3749,99 @@ async function rProfAssignmentFolder(id){
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); render(); };
   });
+}
+
+/* ===== 과제 폴더 — 제출물 PDF 일괄 다운로드 (교수) =====
+   각 제출물을 화면 밖에 잠깐 그려 html2canvas로 캡처한 뒤 jsPDF로 여러 페이지 PDF를 만들고,
+   학생별 PDF를 JSZip으로 묶어 zip 파일 하나로 내려받는다. 세 라이브러리는 이 버튼을 처음 눌렀을
+   때만 CDN에서 불러온다(다른 사용자는 로드 비용을 치르지 않도록). */
+function loadScriptOnce(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
+    const s=document.createElement("script"); s.src=src;
+    s.onload=()=>resolve(); s.onerror=()=>reject(new Error("스크립트를 불러오지 못했습니다."));
+    document.head.appendChild(s);
+  });
+}
+async function ensureBulkPdfLibs(){
+  if(!window.jspdf) await loadScriptOnce("https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js");
+  if(!window.html2canvas) await loadScriptOnce("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
+  if(!window.JSZip) await loadScriptOnce("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js");
+}
+/* 제출물 한 건(원본+첨삭)을 인쇄용 HTML로 그려서 html2canvas로 캡처 → jsPDF에 여러 페이지로 나눠 담아 Blob 반환 */
+async function submissionToPdfBlob(sub){
+  const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
+  const wrap=document.createElement("div");
+  wrap.style.cssText="position:fixed;left:-99999px;top:0;width:760px;padding:32px;background:#fff;color:#222;"
+    +"font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:14px;line-height:1.6;box-sizing:border-box";
+  wrap.innerHTML=`<h2 style="margin:0 0 4px;font-size:20px">${esc(sub.studentName)} (${esc(sub.studentUsername)})</h2>
+    <p style="margin:0 0 18px;color:#666">${esc(sub.assignmentTitle)} · ${esc(TYPE_LABEL[sub.type]||sub.type)} · 제출 ${esc(fmtDate(sub.submittedAt))}</p>
+    ${pairs.length ? pairs.map(p=>`<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #ddd">
+        <div style="font-weight:700;margin-bottom:6px">${esc(p.label)}</div>
+        <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
+        ${(p.after && p.after!==p.before) ? `<div style="margin-top:8px;padding:8px 10px;background:#f3f7f4;border-left:3px solid #5a8f6b;white-space:pre-wrap"><b>첨삭:</b> ${esc(p.after)}</div>` : ""}
+      </div>`).join("") : '<p style="color:#999">제출된 내용이 없습니다.</p>'}`;
+  document.body.appendChild(wrap);
+  await new Promise(r=>setTimeout(r,30)); // 레이아웃 반영 대기
+  let canvas;
+  try{
+    canvas=await window.html2canvas(wrap, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+  } finally {
+    document.body.removeChild(wrap);
+  }
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:"pt", format:"a4"});
+  const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
+  const imgW=pageW, imgH=canvas.height*(imgW/canvas.width);
+  const imgData=canvas.toDataURL("image/jpeg", 0.92);
+  let heightLeft=imgH, position=0, first=true;
+  while(heightLeft>0){
+    if(!first) doc.addPage();
+    doc.addImage(imgData, "JPEG", 0, position, imgW, imgH);
+    heightLeft-=pageH; position-=pageH; first=false;
+  }
+  return doc.output("blob");
+}
+/* 과제 폴더의 제출물 전체를 학생별 PDF로 만들어 zip 하나로 내려받는다 */
+async function bulkDownloadAssignmentPdfs(assignmentTitle, submissionList, btn){
+  if(!submissionList||!submissionList.length){ alert("제출된 과제가 없습니다."); return; }
+  const origText=btn.textContent;
+  btn.disabled=true;
+  try{
+    btn.textContent="라이브러리를 불러오는 중…";
+    await ensureBulkPdfLibs();
+    const zip=new window.JSZip();
+    const usedNames=new Set();
+    let ok=0, fail=0;
+    for(let i=0;i<submissionList.length;i++){
+      const s=submissionList[i];
+      btn.textContent=`PDF 생성 중… (${i+1}/${submissionList.length})`;
+      try{
+        const res=await apiFetch("professor-submission?id="+s.id);
+        if(!res.ok || !res.body){ fail++; continue; }
+        const sub=res.body.submission;
+        const blob=await submissionToPdfBlob(sub);
+        const base=`${sub.studentName||"학생"}_${TYPE_LABEL[sub.type]||sub.type}`.replace(/[\\/:*?"<>|]/g,"_");
+        let finalName=base+".pdf", n=2;
+        while(usedNames.has(finalName)){ finalName=`${base}_${n}.pdf`; n++; }
+        usedNames.add(finalName);
+        zip.file(finalName, blob);
+        ok++;
+      }catch(e){ fail++; }
+    }
+    if(!ok){ alert("PDF 생성에 실패했습니다."); return; }
+    btn.textContent="압축 중…";
+    const zipBlob=await zip.generateAsync({type:"blob"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(zipBlob);
+    a.download=`${assignmentTitle||"과제"}_제출물.zip`.replace(/[\\/:*?"<>|]/g,"_");
+    a.click();
+    if(fail) alert(`${ok}건 다운로드 완료, ${fail}건은 실패해 제외했습니다.`);
+  }catch(e){
+    alert("PDF 일괄 다운로드 중 오류가 발생했습니다: "+((e&&e.message)||e));
+  }finally{
+    btn.disabled=false; btn.textContent=origText;
+  }
 }
 
 /* 제출물 상세 — 첨삭 화면 (교수, 페이지). 기본은 원본 블록만 한 줄로 보여주고,

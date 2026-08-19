@@ -2,6 +2,34 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-19 (15) — 과제 관리: 과제 폴더 삭제 + 제출물 PDF 일괄 다운로드 추가
+
+**요청**: "1. 과제 관리에서 등록한 과제 폴더 삭제 할 수 있도록 해줘. 2. 과제폴더에 제출된 과제들을
+PDF로 일괄 다운 받을 수 있도록 해줘."
+
+- **과제 폴더 삭제**:
+  - `functions/api/professor-assignment.js`: `onRequestDelete` 신규 — `DELETE /api/professor-assignment?id=`
+    로 본인 과제인지 확인 후 `submissions`(해당 과제의 제출물 전부) → `assignments` 순서로 삭제.
+    (schema.sql에 FK CASCADE가 없어 제출물을 먼저 수동 삭제해야 함.)
+  - `app.js`의 `renderProfAssignList()`: 과제 폴더 카드마다 삭제(휴지통) 버튼 추가(체크박스 스위치
+    옆, `event.stopPropagation()`으로 폴더 열기와 분리). 제출물이 있으면 "N건도 함께 영구 삭제됩니다"
+    경고를 confirm에 포함.
+  - `style.css`: `.assign-folder-controls`/`.assign-folder-del` 추가(캐릭터 카드 삭제 버튼과 같은 톤).
+- **제출물 PDF 일괄 다운로드**:
+  - `app.js`에 `loadScriptOnce`/`ensureBulkPdfLibs`(jsPDF·html2canvas·JSZip을 "PDF 일괄 다운로드"
+    버튼을 처음 누를 때만 CDN에서 불러옴 — 다른 사용자는 로드 비용 없음), `submissionToPdfBlob`
+    (제출물 하나를 화면 밖에 그려 html2canvas로 캡처 → jsPDF로 A4 여러 페이지에 나눠 담음, 첨삭 완료된
+    블록은 초록 박스로 함께 표시 — 기존 `buildReviewPairs`를 그대로 재사용), `bulkDownloadAssignmentPdfs`
+    (학생별 PDF를 만들어 JSZip으로 묶어 zip 파일 하나로 다운로드, 진행 중 버튼 텍스트에 "(i/N)" 표시,
+    실패한 건은 건너뛰고 마지막에 안내) 신규 추가.
+  - `rProfAssignmentFolder`(과제 폴더 상세)에 "PDF 일괄 다운로드" 버튼 추가(제출물 없으면 비활성).
+- **검증**: 실제 로그인/D1은 이 환경에서 재현 불가해, `apiFetch`를 목(mock)으로 바꿔치기해 Playwright로
+  검증. (1) 삭제: 목록 2건 → 삭제 버튼 클릭 → confirm 경고 문구("제출된 과제 2건도 함께 영구 삭제됩니다")
+  확인 → 목록 1건으로 감소. (2) PDF: jsdelivr가 이 샌드박스에서 막혀 있어 동일 버전 라이브러리를
+  로컬에 받아 해당 CDN 요청만 가로채 응답(운영 코드는 무관) → 실제로 zip 다운로드 발생 → 압축 해제해
+  PDF 2개(기획서 2쪽·글쓰기 1쪽, 긴 시놉시스가 자동으로 다음 페이지로 넘어감) 확인 → `pdftoppm`으로
+  PNG 렌더링해 한글 텍스트와 첨삭 박스가 정상적으로 보이는 것까지 육안 확인함.
+
 ## 2026-08-19 (14) — 앱 전체 점검 중 발견: 실행취소 직후 "다시실행" 버튼이 클릭 안 되는 버그 수정
 
 **요청**: "학습" 메뉴 추가 작업 이후 앱 전체 점검 요청. Playwright로 모든 탭(아이디어~콘티)을 실제
