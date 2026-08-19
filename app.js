@@ -479,6 +479,7 @@ let dndDropHandled=false;
 let ideaFilterTags=[];
 let ideaPendingTags=[];
 let ideaTagPickerFor=null;
+let ideaHighlightId=null; // 플롯 생성에서 "아이디어 수집으로 보내기"로 넘어온 뒤 한 번 스크롤·강조할 아이디어 id
 
 /* 태그 색상 팔레트 & 유틸 */
 const TAG_PALETTE=["#c4654a","#5a8f6b","#4a7fc4","#c4a34a","#8a4ac4","#c44a91","#3fada0","#c47a4a","#6a6ac4","#a0a842"];
@@ -754,6 +755,16 @@ function ideaBlockCard(b, allTags, list){
     };
     picker.appendChild(newInput);
     d.appendChild(picker);
+  }
+  /* 플롯 생성에서 "아이디어 수집으로 보내기"로 방금 넘어온 블록이면 스크롤 후 한 번 강조 */
+  if(ideaHighlightId===b.id){
+    ideaHighlightId=null;
+    setTimeout(()=>{
+      if(!d.isConnected) return;
+      d.scrollIntoView({behavior:"smooth", block:"center"});
+      d.classList.add("idea-flash");
+      setTimeout(()=>d.classList.remove("idea-flash"),1600);
+    },0);
   }
   return d;
 }
@@ -1625,7 +1636,7 @@ function rPlot(){
   const struct=PLOT_STRUCTURES[P.plotDoc.structure];
   const head=document.createElement("div"); head.className="card";
   head.innerHTML=`<div class="card-h2-row"><h2>${ICONS.book} 플롯 생성</h2>${submitBtnHtml()}</div>
-    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 추가</b>로 아이디어를 담고, 드래그 핸들로 순서를 바꿀 수 있습니다. 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
+    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 가져오기</b>로 아이디어 수집에서 아이디어를 담거나, <b>＋ 아이디어 생성</b>으로 여기서 바로 새 아이디어를 만들 수 있습니다. 아이디어 카드를 우클릭하면 아이디어 수집 페이지로 보낼 수 있어요. 드래그 핸들로 순서를 바꿀 수 있고, 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
     <div class="plot-toolbar">
       <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
@@ -1696,8 +1707,10 @@ function plotSectionCard(sec, idx, secWrap){
     const nm=prompt("섹션 이름:",sec.name); if(nm===null)return;
     sec.name=nm||sec.name; save(); render();
   });
-  // 아이디어 추가
-  const addBtn=iconBtn(ICONS.plus,"아이디어 추가",()=>togglePicker(sec));
+  // 아이디어 가져오기 (아이디어 수집에서 골라오기)
+  const importBtn=iconBtn(ICONS.download,"아이디어 가져오기",()=>togglePicker(sec));
+  // 아이디어 생성 (플롯 생성에서 바로 새 블록 작성)
+  const createBtn=iconBtn(ICONS.plus,"아이디어 생성",()=>createIdeaInSection(sec));
   // 섹션 이동 핸들
   const moveBtn=iconBtn(ICONS.grip,"드래그해서 섹션 순서 변경",null);
   moveBtn.classList.add("plot-sec-move");
@@ -1724,7 +1737,7 @@ function plotSectionCard(sec, idx, secWrap){
     P.plotDoc.sections=P.plotDoc.sections.filter(x=>x.id!==sec.id); save(); render();
   });
   delBtn.classList.add("plot-sec-del");
-  h.append(num, nameEl, spacer, cnt, editBtn, addBtn, moveBtn, collBtn, delBtn);
+  h.append(num, nameEl, spacer, cnt, editBtn, importBtn, createBtn, moveBtn, collBtn, delBtn);
   card.appendChild(h);
 
   if(collapsed) return card;
@@ -1752,23 +1765,30 @@ function plotSectionCard(sec, idx, secWrap){
     commitPlotIdeaOrder(secWrap);
   });
 
-  /* ＋ 아이디어 추가 박스 (드래그로 이 섹션에 떨어뜨리는 것도 가능) */
-  const addBox=document.createElement("div"); addBox.className="plot-add-box";
-  addBox.innerHTML=`<span class="plot-add-plus">＋</span><span class="plot-add-label">아이디어 추가</span>`;
-  addBox.onclick=()=>togglePicker(sec);
-  addBox.addEventListener("dragover", e=>{
-    const dragging=document.querySelector(".plot-idea.dragging");
-    if(!dragging) return;
-    e.preventDefault();
-    body.appendChild(dragging); addBox.classList.add("drop-hover");
+  /* ＋ 아이디어 가져오기 / ＋ 아이디어 생성 박스 (드래그로 이 섹션에 떨어뜨리는 것도 가능) */
+  const addRow=document.createElement("div"); addRow.className="plot-add-row";
+  const importBox=document.createElement("div"); importBox.className="plot-add-box";
+  importBox.innerHTML=`<span class="plot-add-plus">${ICONS.download}</span><span class="plot-add-label">아이디어 가져오기</span>`;
+  importBox.onclick=()=>togglePicker(sec);
+  const createBox=document.createElement("div"); createBox.className="plot-add-box";
+  createBox.innerHTML=`<span class="plot-add-plus">＋</span><span class="plot-add-label">아이디어 생성</span>`;
+  createBox.onclick=()=>createIdeaInSection(sec);
+  [importBox, createBox].forEach(box=>{
+    box.addEventListener("dragover", e=>{
+      const dragging=document.querySelector(".plot-idea.dragging");
+      if(!dragging) return;
+      e.preventDefault();
+      body.appendChild(dragging); box.classList.add("drop-hover");
+    });
+    box.addEventListener("dragleave", ()=>box.classList.remove("drop-hover"));
+    box.addEventListener("drop", e=>{
+      if(!document.querySelector(".plot-idea.dragging")) return;
+      e.preventDefault();
+      commitPlotIdeaOrder(secWrap);
+    });
   });
-  addBox.addEventListener("dragleave", ()=>addBox.classList.remove("drop-hover"));
-  addBox.addEventListener("drop", e=>{
-    if(!document.querySelector(".plot-idea.dragging")) return;
-    e.preventDefault();
-    commitPlotIdeaOrder(secWrap);
-  });
-  card.appendChild(addBox);
+  addRow.append(importBox, createBox);
+  card.appendChild(addRow);
 
   return card;
 }
@@ -1784,6 +1804,48 @@ function togglePicker(sec){
   if(plotPickerFor===sec.id){ plotPickerFor=null; }
   else { plotPickerFor=sec.id; plotPickerFilter=[]; }
   render();
+}
+/* 플롯 생성 페이지에서 바로 새 아이디어 블록을 만들어 이 섹션에 배치
+   (아이디어 수집과 같은 저장소(P.ideaBlocks)를 쓰므로 아이디어 수집 목록에도 자동으로 나타난다) */
+function createIdeaInSection(sec){
+  const text=prompt("새 아이디어 내용을 입력하세요:", "");
+  if(text===null) return;
+  const trimmed=text.trim();
+  if(!trimmed) return;
+  if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
+  const id=uid();
+  P.ideaBlocks.push({id, text:trimmed, tags:[]});
+  sec.ideaIds=sec.ideaIds||[];
+  sec.ideaIds.push(id);
+  save(); render();
+}
+/* 플롯 생성의 아이디어 블록 우클릭 메뉴 — 아이디어 수집 페이지로 이동해서 보여주기 */
+function openPlotIdeaCtxMenu(x, y, b){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  const items=[
+    ["아이디어 수집으로 보내기",ICONS.upload,()=>goToIdeaCollection(b.id)]
+  ];
+  m.innerHTML="";
+  items.forEach(([label,icon,fn])=>{
+    const btn=document.createElement("button");
+    btn.innerHTML=icon+" "+label;
+    btn.onclick=()=>{ hideCtxMenu(); fn(); };
+    m.appendChild(btn);
+  });
+  m.hidden=false;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  m.style.left=Math.min(x, vw-190)+"px";
+  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+}
+/* 아이디어 수집 탭으로 전환하고 해당 아이디어 블록으로 스크롤·강조 */
+function goToIdeaCollection(id){
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  const btn=document.querySelector('.tab[data-tab="idea"]');
+  if(btn) btn.classList.add("active");
+  activeTab="idea"; localStorage.setItem(TAB_KEY, activeTab);
+  ideaHighlightId=id;
+  render();
+  window.scrollTo(0,0);
 }
 /* 아이디어 선택 팝업 (미배치 아이디어 + 태그 필터) */
 function plotPickerModal(sec){
@@ -1874,6 +1936,7 @@ function plotIdeaCard(b, secWrap){
   const d=document.createElement("div"); d.className="plot-idea"; d.dataset.id=b.id; d.draggable=false;
   const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
   d.style.borderLeftColor=color;
+  d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openPlotIdeaCtxMenu(e.clientX, e.clientY, b); });
   const handle=document.createElement("span"); handle.className="plot-idea-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 이동";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
   handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});

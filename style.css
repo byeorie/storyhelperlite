@@ -148,8 +148,10 @@ textarea{resize:vertical;min-height:70px}
 .idea-filter-bar{display:flex;flex-wrap:wrap;gap:6px}
 .idea-block-list{display:flex;flex-direction:column;gap:8px}
 .idea-block{position:relative;background:var(--card);border:1px solid var(--line);
-  border-left:7px solid var(--ok);border-radius:8px;padding:9px 30px 8px 30px;transition:opacity .15s}
+  border-left:7px solid var(--ok);border-radius:8px;padding:9px 30px 8px 30px;transition:opacity .15s,background .4s}
 .idea-block.dragging{opacity:.4}
+/* 플롯 생성에서 "아이디어 수집으로 보내기"로 넘어왔을 때 잠깐 강조 */
+.idea-block.idea-flash{background:var(--accent2)}
 .idea-handle{position:absolute;left:7px;top:50%;transform:translateY(-50%);
   cursor:grab;color:var(--muted);font-size:12px;line-height:1;user-select:none;padding:5px 3px;border-radius:4px}
 .idea-handle:hover{color:var(--ink);background:var(--bg)}
@@ -227,12 +229,14 @@ textarea{resize:vertical;min-height:70px}
   font-size:12px;line-height:1;padding:2px 4px;flex-shrink:0}
 .plot-idea-rm:hover{color:#b3503a}
 .plot-idea-rm .icon{width:11px;height:11px;vertical-align:middle}
-/* ＋ 아이디어 추가 박스 */
-.plot-add-box{display:flex;align-items:center;justify-content:center;gap:6px;
+/* ＋ 아이디어 가져오기 / ＋ 아이디어 생성 박스 */
+.plot-add-row{display:flex;gap:8px}
+.plot-add-box{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
   border:1px dashed var(--line);border-radius:8px;padding:11px;cursor:pointer;
   background:#faf8f4;color:var(--muted);font-size:13px;font-weight:600;transition:border-color .12s,color .12s}
 .plot-add-box:hover,.plot-add-box.drop-hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
 .plot-add-plus{font-size:16px;line-height:1}
+.plot-add-plus .icon{width:14px;height:14px;vertical-align:middle}
 /* 아이디어 선택 팝업 */
 .plot-modal-overlay{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.4);
   display:flex;align-items:center;justify-content:center;padding:20px}
