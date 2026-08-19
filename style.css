@@ -485,10 +485,6 @@ body.logged-in .login-overlay { display: none; }
 .auth-link { display: block; text-align: center; font-size: .82em; color: #80868b; margin-top: 2px; }
 .auth-link:hover { color: #2b3a67; }
 
-/* 회원가입 — 교수/학생 등급 선택 */
-.signup-role { display: flex; gap: 16px; justify-content: center; margin-top: 2px; }
-.signup-role-opt { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: .9em; color: #3c3c3c; cursor: pointer; flex: 1 1 0; min-width: 0; white-space: nowrap; }
-.signup-role-hint { font-size: 8pt; color: #9aa0a6; text-align: center; margin: 0; line-height: 1.4; }
 
 /* 관리자 — 회원 관리 표 / 서버 초기화 */
 .admin-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }

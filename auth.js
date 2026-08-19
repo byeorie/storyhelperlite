@@ -278,8 +278,7 @@ function bindAuthForms() {
     const password = document.getElementById("signupPassword").value;
     const passwordConfirm = document.getElementById("signupPasswordConfirm").value;
     const email = document.getElementById("signupEmail").value.trim();
-    const roleEl = document.querySelector('input[name="signupRole"]:checked');
-    const role = roleEl ? roleEl.value : "student";
+    const role = "student"; // 가입은 항상 학생 — 교수 등급은 관리자가 회원 관리에서만 부여
     const errEl = document.getElementById("signupError");
     errEl.textContent = "";
     if (!school || !name || !username || !password || !passwordConfirm || !email) {
