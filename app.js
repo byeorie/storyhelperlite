@@ -1810,16 +1810,34 @@ function togglePicker(sec){
 /* 플롯 생성 페이지에서 바로 새 아이디어 블록을 만들어 이 섹션에 배치
    (아이디어 수집과 같은 저장소(P.ideaBlocks)를 쓰므로 아이디어 수집 목록에도 자동으로 나타난다) */
 function createIdeaInSection(sec){
-  const text=prompt("새 아이디어 내용을 입력하세요:", "");
-  if(text===null) return;
-  const trimmed=text.trim();
-  if(!trimmed) return;
-  if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
-  const id=uid();
-  P.ideaBlocks.push({id, text:trimmed, tags:[]});
-  sec.ideaIds=sec.ideaIds||[];
-  sec.ideaIds.push(id);
-  save(); render();
+  /* 브라우저 기본 prompt() 창은 화면 상단에 고정으로 뜨고 CSS로 위치를 바꿀 수 없어서,
+     다른 팝업들과 같은 모양(.plot-modal-overlay/.plot-modal, 작업 영역 가운데 정렬)으로 대체 */
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay center-content";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`아이디어 생성 · ${sec.name}`;
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  box.insertAdjacentHTML("beforeend",
+    `<textarea id="newIdeaText" placeholder="새 아이디어 내용을 입력하세요" style="min-height:90px"></textarea>
+     <button class="btn" id="newIdeaSaveBtn" style="margin-top:14px;width:100%">${ICONS.plus} 추가</button>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const ta=box.querySelector("#newIdeaText"); ta.focus();
+  const doSave=()=>{
+    const trimmed=ta.value.trim();
+    if(!trimmed) return;
+    if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
+    const id=uid();
+    P.ideaBlocks.push({id, text:trimmed, tags:[]});
+    sec.ideaIds=sec.ideaIds||[];
+    sec.ideaIds.push(id);
+    save();
+    if(overlay.isConnected) document.body.removeChild(overlay);
+    render();
+  };
+  box.querySelector("#newIdeaSaveBtn").onclick=doSave;
+  ta.addEventListener("keydown", e=>{ if(e.key==="Enter" && (e.metaKey||e.ctrlKey)) doSave(); });
 }
 /* 플롯 생성의 아이디어 블록 우클릭 메뉴 — 아이디어 수집 페이지로 이동해서 보여주기 */
 function openPlotIdeaCtxMenu(x, y, b){
