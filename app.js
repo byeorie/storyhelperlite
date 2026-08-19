@@ -2069,6 +2069,10 @@ function rWrite(){
     submitBtn.innerHTML=ICONS.upload+" 제출";
     submitBtn.onclick=()=>openSubmitModal("write");
     barRight.appendChild(submitBtn);
+    const feedbackBtn=document.createElement("button"); feedbackBtn.className="btn ghost sm icon-btn";
+    feedbackBtn.innerHTML=ICONS.chat+" 첨삭 보기";
+    feedbackBtn.onclick=()=>openMyFeedbackListModal("write");
+    barRight.appendChild(feedbackBtn);
   }
   bar.appendChild(barRight);
   main.appendChild(bar);
@@ -3410,11 +3414,16 @@ function buildSubmissionData(type){
 /* 제출 버튼(학생 계정에서만 노출) — innerHTML 템플릿 안에서 쓰는 버전 */
 function submitBtnHtml(){
   return (typeof currentUser!=="undefined" && currentUser && currentUser.role!=="professor")
-    ? `<button type="button" class="btn ghost sm icon-btn submit-tab-btn">${ICONS.upload} 제출</button>` : "";
+    ? `<div class="submit-btn-group">
+        <button type="button" class="btn ghost sm icon-btn submit-tab-btn">${ICONS.upload} 제출</button>
+        <button type="button" class="btn ghost sm icon-btn feedback-tab-btn">${ICONS.chat} 첨삭 보기</button>
+      </div>` : "";
 }
 function wireSubmitBtn(container, type){
   const btn=container.querySelector(".submit-tab-btn");
   if(btn) btn.onclick=()=>openSubmitModal(type);
+  const fbBtn=container.querySelector(".feedback-tab-btn");
+  if(fbBtn) fbBtn.onclick=()=>openMyFeedbackListModal(type);
 }
 
 /* 제출 대상 과제 선택 모달 (학생) */
@@ -3468,6 +3477,40 @@ async function openSubmitModal(type){
       if(r.ok){ alert("제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
       else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
     };
+  });
+}
+
+/* 제출 버튼 옆 [첨삭 보기] — 이 탭(기획서/플롯/글쓰기) 종류로 내가 제출한 것들을 한 번에 모아 보여줌
+   (기존엔 [제출] 모달을 열어야만 "이미 제출함 · 첨삭 완료(보기)" 링크를 찾을 수 있었음) */
+async function openMyFeedbackListModal(type){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`${TYPE_LABEL[type]} 첨삭 보기`;
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div"); body.innerHTML=`<p class="hint">불러오는 중…</p>`;
+  box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  const res=await apiFetch("student-assignments");
+  if(!overlay.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const assignments=res.body.assignments||[];
+  const list=[];
+  assignments.forEach(a=>{
+    (a.mySubmissions||[]).filter(s=>s.type===type).forEach(s=>list.push({...s, assignmentTitle:a.title}));
+  });
+  list.sort((x,y)=>(y.submitted_at||0)-(x.submitted_at||0));
+  if(!list.length){ body.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
+  body.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
+    <button type="button" class="submit-assign-item" data-id="${s.id}">
+      <b>${esc(s.assignmentTitle)}</b>
+      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
+    </button>`).join("")}</div>`;
+  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=()=>openMySubmissionView(Number(btn.dataset.id));
   });
 }
 
