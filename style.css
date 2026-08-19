@@ -637,6 +637,9 @@ body.logged-in .login-overlay { display: none; }
 .arc-box.arc-after{border-left:4px solid var(--ok)}
 .arc-box-label{font-size:10px;font-weight:800;color:var(--muted);margin-bottom:4px}
 .arc-empty{color:var(--muted);font-style:italic}
+.type-desc-box{margin-top:6px;padding:8px 10px;background:#fbf8f3;border:1px solid var(--line);
+  border-radius:8px;font-size:11px;line-height:1.5;color:var(--muted)}
+.type-desc-box:empty{display:none}
 .arc-arrow{display:flex;align-items:center;justify-content:center;color:var(--accent);
   font-size:16px;font-weight:700;flex-shrink:0}
 .char-rel-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}

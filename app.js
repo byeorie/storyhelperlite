@@ -284,9 +284,9 @@ function fillPlotDoc(pd){
   };
 }
 function blankChar(){
-  return {id:uid(), name:"",role:"영웅",age:"",gender:"",mbti:"",enneagram:"",goal:"",flaw:"",arc:"",desc:"", relationships:[], image:"",
-    parentsInfo:"", familyRelations:"", arcBefore:"", arcAfter:"",
-    appearance:"", speechHabit:"", backstory:"", likes:"", dislikes:"", dialogueSample:""};
+  return {id:uid(), name:"",role:"영웅",age:"",gender:"",job:"",mbti:"",enneagram:"",goal:"",flaw:"",strength:"",arc:"",arcType:"",desc:"", relationships:[], image:"",
+    parentsInfo:"", familyRelations:"", affiliation:"", arcBefore:"", arcAfter:"",
+    appearance:"", speechHabit:"", charmPoint:"", secret:"", backstory:"", likes:"", dislikes:"", dialogueSample:""};
 }
 function currentProject(){
   return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
@@ -961,6 +961,23 @@ function charGalleryCard(ch){
   return d;
 }
 /* 캐릭터 편집 팝업 — 기본 정보 + 다른 캐릭터와의 관계 */
+/* MBTI/에니어그램 select 아래에 해당 유형의 상세 설명을 보여준다(선택 즉시 갱신) */
+function wireTypeDesc(body){
+  const mbtiSel=body.querySelector('[data-k="mbti"]');
+  const enneaSel=body.querySelector('[data-k="enneagram"]');
+  const mbtiBox=body.querySelector("#mbtiDescBox");
+  const enneaBox=body.querySelector("#enneaDescBox");
+  if(mbtiSel&&mbtiBox){
+    const refresh=()=>{ mbtiBox.textContent=mbtiSel.value?(MBTI_DESC[mbtiSel.value]||""):""; };
+    mbtiSel.addEventListener("change", refresh);
+    refresh();
+  }
+  if(enneaSel&&enneaBox){
+    const refresh=()=>{ const f=ENNEAGRAM.find(e=>e.n===enneaSel.value); enneaBox.textContent=f?(f.long||f.d):""; };
+    enneaSel.addEventListener("change", refresh);
+    refresh();
+  }
+}
 function charModal(ch){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay){ charModalFor=null; render(); } };
@@ -986,10 +1003,14 @@ function charModal(ch){
     </div>
     <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
     <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
-    <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
-    <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
+    <div class="row"><div><label>직업/신분</label><input type="text" data-k="job" placeholder="예: 고등학생, 헌터 길드 마스터"></div>
+    <div><label>소속/세력</label><input type="text" data-k="affiliation" placeholder="예: OO가문, 무소속"></div></div>
+    <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select><div class="type-desc-box" id="mbtiDescBox"></div></div>
+    <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select><div class="type-desc-box" id="enneaDescBox"></div></div></div>
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
+    <div class="row"><div><label>강점 (장점)</label><input type="text" data-k="strength"></div>
+    <div><label>비밀</label><input type="text" data-k="secret" placeholder="아직 밝혀지지 않은 것"></div></div>
     <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도"></textarea></div>
     <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 모습"></textarea></div></div>
     <label>기타 설명</label><textarea data-k="desc" placeholder="외모, 말투 등"></textarea>
@@ -997,6 +1018,7 @@ function charModal(ch){
     <div class="char-rel-list" id="charRelList"></div>
     <div class="char-rel-add" id="charRelAdd"></div>`;
   body.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
+  wireTypeDesc(body);
   const nameInput=body.querySelector('[data-k="name"]');
   nameInput.addEventListener("input", ()=>{ ttl.innerHTML=ICONS.edit+" "+esc(nameInput.value||"새 캐릭터"); });
 
@@ -1068,6 +1090,8 @@ function charDetailPage(ch){
   const enOpts=ENNEAGRAM.map(e=>`<option value="${e.n}">${e.n} — ${e.d}</option>`).join("");
   const mbtiOpts=MBTI_TYPES.map(m=>`<option value="${m}">${m}</option>`).join("");
   const roleOpts=VOGLER_ROLES.map(r=>`<option value="${r.n}">${r.n} — ${r.d}</option>`).join("");
+  const arcTypeList=(STORY_GUIDE_SLOTS.find(s=>s.key==="change")||{options:[]}).options.map(o=>o.v);
+  const arcTypeOpts=arcTypeList.map(v=>`<option value="${v}">${v}</option>`).join("");
   body.innerHTML=`
     <div class="char-img-row">
       <div class="char-avatar char-avatar-lg" id="charImgPreview"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
@@ -1082,12 +1106,16 @@ function charDetailPage(ch){
     <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
     <div class="row"><div><label>나이</label><input type="text" data-k="age" placeholder="예: 17세, 20대 초반"></div>
     <div><label>성별</label><input type="text" data-k="gender" placeholder="예: 여성, 남성, 논바이너리 등"></div></div>
+    <div class="row"><div><label>직업/신분</label><input type="text" data-k="job" placeholder="예: 고등학생, 헌터 길드 마스터"></div>
+    <div><label>소속/세력</label><input type="text" data-k="affiliation" placeholder="예: OO가문, OO길드, 무소속"></div></div>
 
     <h3 class="char-detail-sub">${ICONS.bolt} 인물 성격</h3>
-    <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select></div>
-    <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select></div></div>
+    <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select><div class="type-desc-box" id="mbtiDescBox"></div></div>
+    <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select><div class="type-desc-box" id="enneaDescBox"></div></div></div>
     <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
     <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
+    <div class="row"><div><label>강점 (장점)</label><input type="text" data-k="strength"></div>
+    <div><label>비밀</label><input type="text" data-k="secret" placeholder="아직 밝혀지지 않은 것"></div></div>
 
     <h3 class="char-detail-sub">${ICONS.building} 가족사</h3>
     <label>부모의 정보 및 관계</label><textarea data-k="parentsInfo" placeholder="부모님의 성격, 직업, 캐릭터와의 관계 등"></textarea>
@@ -1095,6 +1123,7 @@ function charDetailPage(ch){
     <label>성장배경 / 과거사</label><textarea data-k="backstory" placeholder="자라온 환경, 이야기 이전에 겪은 사건 등"></textarea>
 
     <h3 class="char-detail-sub">${ICONS.network} 인물의 변화</h3>
+    <label>인물호 유형</label><select data-k="arcType"><option value="">선택 안 함</option>${arcTypeOpts}</select>
     <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도·상태"></textarea></div>
     <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 성격·태도·상태"></textarea></div></div>
     <div class="char-arc-preview" id="charArcPreview"></div>
@@ -1102,6 +1131,7 @@ function charDetailPage(ch){
     <h3 class="char-detail-sub">${ICONS.book} 외모 및 특징</h3>
     <label>외모 상세</label><textarea data-k="appearance" placeholder="키, 체형, 헤어스타일, 옷차림, 특징적 외형 등"></textarea>
     <label>말투 / 버릇</label><textarea data-k="speechHabit" placeholder="자주 쓰는 말, 어투, 습관적 행동 등"></textarea>
+    <label>매력 포인트 / 시그니처 소품</label><input type="text" data-k="charmPoint" placeholder="예: 왼쪽 눈 아래 흉터, 항상 들고 다니는 낡은 만년필">
     <div class="row"><div><label>좋아하는 것</label><input type="text" data-k="likes"></div>
     <div><label>싫어하는 것</label><input type="text" data-k="dislikes"></div></div>
     <label>대사 샘플</label><textarea data-k="dialogueSample" placeholder="이 캐릭터라면 할 법한 대사 예시"></textarea>
@@ -1113,6 +1143,7 @@ function charDetailPage(ch){
     <div class="char-rel-list" id="charRelList"></div>
     <div class="char-rel-add" id="charRelAdd"></div>`;
   body.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
+  wireTypeDesc(body);
   const nameInput=body.querySelector('[data-k="name"]');
   nameInput.addEventListener("input", ()=>{ ttl.innerHTML=ICONS.edit+" "+esc(nameInput.value||"새 캐릭터"); });
 
