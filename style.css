@@ -190,12 +190,14 @@ textarea{resize:vertical;min-height:70px}
 .idea-del .icon{width:11px;height:11px;vertical-align:middle}
 
 /* 플롯 생성 */
-.plot-structure-choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.plot-structure-choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .plot-struct-btn{text-align:left;border:1px solid var(--line);background:#fcfbf9;border-radius:10px;
   padding:16px;cursor:pointer;transition:border-color .12s,background .12s}
 .plot-struct-btn:hover{border-color:var(--accent);background:var(--accent2)}
 .plot-struct-btn .ps-title{font-weight:700;font-size:15px;color:var(--ink);margin-bottom:4px}
 .plot-struct-btn .ps-sub{font-size:12px;color:var(--muted);line-height:1.5}
+.plot-struct-btn .ps-guide{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:8px;
+  padding-top:8px;border-top:1px dashed var(--line)}
 .plot-toolbar{display:flex;gap:8px;flex-wrap:wrap}
 .plot-empty{margin:0;padding:6px 4px;font-size:12px;text-align:center;color:var(--muted)}
 .plot-sections{display:flex;flex-direction:column;gap:14px}

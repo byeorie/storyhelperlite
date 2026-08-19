@@ -1653,7 +1653,8 @@ function rPlot(){
       const st=PLOT_STRUCTURES[key];
       const b=document.createElement("button"); b.className="plot-struct-btn";
       b.innerHTML=`<div class="ps-title">${st.label}</div>
-        <div class="ps-sub">${st.sections.map(s=>esc(s.name)).join(" · ")}</div>`;
+        <div class="ps-sub">${st.sections.map(s=>esc(s.name)).join(" · ")}</div>
+        ${st.guide?`<div class="ps-guide">${esc(st.guide)}</div>`:""}`;
       b.onclick=()=>{
         P.plotDoc={structure:key, sections:st.sections.map(s=>({id:uid(), name:s.name, desc:s.desc||"", ideaIds:[]}))};
         save(); render();
@@ -1667,7 +1668,8 @@ function rPlot(){
   const struct=PLOT_STRUCTURES[P.plotDoc.structure];
   const head=document.createElement("div"); head.className="card";
   head.innerHTML=`<div class="card-h2-row"><h2>${ICONS.book} 플롯 생성</h2>${submitBtnHtml()}</div>
-    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b> · 각 섹션의 <b>＋ 아이디어 가져오기</b>로 아이디어 수집에서 아이디어를 담거나, <b>＋ 아이디어 생성</b>으로 여기서 바로 새 아이디어를 만들 수 있습니다. 아이디어 카드를 우클릭하면 아이디어 수집 페이지로 보낼 수 있어요. 드래그 핸들로 순서를 바꿀 수 있고, 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
+    <p class="hint">현재 구조: <b>${struct?struct.label:"사용자 구조"}</b>${struct&&struct.guide?` — ${esc(struct.guide)}`:""}</p>
+    <p class="hint">각 섹션의 <b>＋ 아이디어 가져오기</b>로 아이디어 수집에서 아이디어를 담거나, <b>＋ 아이디어 생성</b>으로 여기서 바로 새 아이디어를 만들 수 있습니다. 아이디어 카드를 우클릭하면 아이디어 수집 페이지로 보낼 수 있어요. 드래그 핸들로 순서를 바꿀 수 있고, 아이디어 텍스트를 클릭하거나 수정 아이콘을 누르면 바로 수정할 수 있어요(아이디어 수집 원본과 별개).</p>
     <div class="plot-toolbar">
       <button class="btn ghost sm" id="addSection">＋ 섹션 추가</button>
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
