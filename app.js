@@ -1171,6 +1171,8 @@ function charDetailPage(ch){
     <div class="char-rel-list" id="charRelList"></div>
     <div class="char-rel-add" id="charRelAdd"></div>`;
   body.querySelectorAll("[data-k]").forEach(el=>bind(el,ch,el.dataset.k));
+  const descEl=body.querySelector('[data-k="desc"]');
+  if(descEl) renderAppliedMemoBlockAfter(descEl,"character",ch.id);
   wireTypeDesc(body);
   const nameInput=body.querySelector('[data-k="name"]');
   nameInput.addEventListener("input", ()=>{ ttl.innerHTML=ICONS.edit+" "+esc(nameInput.value||"새 캐릭터"); });
@@ -1432,6 +1434,11 @@ function rBg(){
   bind(c.querySelector("#b_social"),P.background,"social");
   bind(c.querySelector("#b_mood"),P.background,"mood");
   bind(c.querySelector("#b_detail"),P.background,"detail");
+  BG_FIELDS.forEach(f=>{
+    const idPrefix=f.src==="world"?"w_":"b_";
+    const el=c.querySelector("#"+idPrefix+f.k);
+    if(el) renderAppliedMemoBlockAfter(el,"background",f.k);
+  });
 
   /* 설정 관리(용어사전) — 반복 카드 리스트 */
   function renderGlossary(){
@@ -1544,6 +1551,7 @@ function rEvent(){
   bind(c.querySelector("#e_transform"),P.event,"transform");
   bind(c.querySelector("#e_nextLink"),P.event,"nextLink");
   bind(c.querySelector("#e_ending"),P.event,"ending");
+  EVENT_FIELDS.forEach(f=>{ const el=c.querySelector("#e_"+f.k); if(el) renderAppliedMemoBlockAfter(el,"event",f.k); });
 
   /* 사건 관리(회차 일지) — 반복 카드 리스트 */
   function renderLog(){
@@ -1636,7 +1644,7 @@ function rPlan(){
   app.appendChild(c);
   bind(c.querySelector("#pd_date"),pd,"date");
   bind(c.querySelector("#pd_author"),pd,"author");
-  PLAN_FIELDS.forEach(f=> bind(c.querySelector("#pd_"+f.k),pd,f.k));
+  PLAN_FIELDS.forEach(f=>{ bind(c.querySelector("#pd_"+f.k),pd,f.k); renderAppliedMemoBlock(c.querySelector("#pd_"+f.k).closest(".plan-block"),"plan",f.k); });
   wireSubmitBtn(c,"plan");
 }
 
@@ -1807,6 +1815,7 @@ function plotSectionCard(sec, idx, secWrap){
 
   /* 예시 설명 */
   if(sec.desc){ const dsc=document.createElement("p"); dsc.className="plot-sec-desc"; dsc.textContent=sec.desc; card.appendChild(dsc); }
+  renderAppliedMemoBlock(card,"plot",sec.id);
 
   /* 배치된 아이디어 (드롭존) */
   const body=document.createElement("div"); body.className="plot-drop plot-section-body"; body.dataset.sec=sec.id;
@@ -2418,6 +2427,7 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh, main)));
   setupItemDnD(itemsEl, main);
   d.appendChild(itemsEl);
+  renderAppliedMemoBlock(d,"write",bl.id);
 
   /* 본문 블록 아래 점선 추가 버튼 — 본문/대사 추가를 한 행에 5:5로 배치 */
   const addRow=document.createElement("div"); addRow.className="scene-dashed-row";
@@ -4373,47 +4383,94 @@ function parseFeedbackTextToItems(text){
     })
     .filter(it=>it.text.trim().length);
 }
-/* pairId(review-pair 기준, buildReviewPairs의 id와 동일)에 달린 메모들을 "[교수님 메모]" 블록으로
-   합쳐서 돌려준다. 메모의 start/end는 제출 당시의 "원본" 텍스트 기준 글자 오프셋이라 첨삭을 반영한
-   뒤에는 그 위치가 더 이상 정확하지 않으므로, 인용 없이 메모 내용만 목록으로 붙인다. */
-function memoNoteBlock(memos, pairId){
-  const mine=(memos||[]).filter(m=>m.pairId===pairId && (m.text||"").trim());
-  if(!mine.length) return "";
-  return "\n\n[교수님 메모]\n"+mine.map(m=>"- "+m.text.trim()).join("\n");
+/* 첨삭 반영 시 함께 넘어온 메모는 텍스트에 합치지 않고 P.appliedMemos[type][key]에 별도 구조로
+   저장한다(2026-08-20: 단문 <input> 필드에서 줄바꿈이 안 보여 메모가 본문과 뒤섞이는 문제 수정) —
+   type/key별로 각 탭 렌더러가 renderAppliedMemoBlock()로 "메모 블럭" 카드를 그려주고, 학생이
+   삭제 버튼으로 지울 수 있다. key는 plan/background/event는 필드 key(f.k), plot/write/character는
+   항목 id(fb.id)다. */
+function setAppliedMemos(type, key, memos){
+  const mine=(memos||[]).filter(m=>m.pairId===key && (m.text||"").trim());
+  if(!P.appliedMemos) P.appliedMemos={};
+  if(!P.appliedMemos[type]) P.appliedMemos[type]={};
+  if(mine.length) P.appliedMemos[type][key]=mine.map(m=>({id:m.id||uid(), text:m.text.trim()}));
+  else delete P.appliedMemos[type][key];
+}
+function getAppliedMemos(type, key){
+  return (P.appliedMemos && P.appliedMemos[type] && P.appliedMemos[type][key]) || [];
+}
+function deleteAppliedMemo(type, key, memoId){
+  const arr=getAppliedMemos(type,key);
+  const idx=arr.findIndex(m=>m.id===memoId);
+  if(idx<0) return;
+  arr.splice(idx,1);
+  if(!arr.length) delete P.appliedMemos[type][key];
+  save();
+}
+/* type/key에 반영된 메모를 .memo-block 카드 목록(.memo-block-list) DOM으로 만들어 돌려준다(없으면 null).
+   .memo-block 스타일 재사용(첨삭 화면과 동일 룩), 각 카드에 삭제(✕) 버튼이 있어 학생이 지울 수 있다. */
+function buildAppliedMemoList(type, key, onChanged){
+  const mine=getAppliedMemos(type,key);
+  if(!mine.length) return null;
+  const list=document.createElement("div"); list.className="memo-block-list";
+  mine.forEach(m=>{
+    const box=document.createElement("div"); box.className="memo-block";
+    const marker=document.createElement("span"); marker.className="memo-block-marker"; marker.textContent="교수님 메모";
+    const txt=document.createElement("div"); txt.className="memo-block-text"; txt.textContent=m.text;
+    const del=document.createElement("button"); del.type="button"; del.className="memo-block-del"; del.textContent="✕"; del.title="메모 삭제";
+    del.onclick=()=>{ deleteAppliedMemo(type,key,m.id); onChanged(); };
+    box.append(marker, txt, del);
+    list.appendChild(box);
+  });
+  return list;
+}
+/* container(필드를 감싸는 .plan-block 등) 맨 아래에 메모 블럭을 붙인다 — 필드마다 별도 래퍼가 있는
+   경우(기획서 등)에 쓴다. */
+function renderAppliedMemoBlock(container, type, key){
+  const old=container.querySelector(":scope > .memo-block-list"); if(old) old.remove();
+  const list=buildAppliedMemoList(type, key, ()=>renderAppliedMemoBlock(container,type,key));
+  if(list) container.appendChild(list);
+}
+/* afterEl 바로 다음에 메모 블럭을 형제 요소로 끼워 넣는다 — 필드들이 개별 래퍼 없이 한 카드 안에
+   나란히 있는 경우(배경/사건 설정 등)에 쓴다. */
+function renderAppliedMemoBlockAfter(afterEl, type, key){
+  const next=afterEl.nextElementSibling;
+  if(next && next.classList.contains("memo-block-list")) next.remove();
+  const list=buildAppliedMemoList(type, key, ()=>renderAppliedMemoBlockAfter(afterEl,type,key));
+  if(list) afterEl.insertAdjacentElement("afterend", list);
 }
 /* 교수 첨삭(feedback)을 학생의 지금 작업 중인 작품(P)에 그대로 덮어쓴다 — 학생이 직접 버튼을 눌러야만 실행됨.
    plan(기획서): 항목별로 그대로 대입(손실 없음)
    plot(플롯): 섹션의 desc(설명)에 첨삭 텍스트 전체를 대입 — 아이디어 카드 배치(ideaIds)는 건드리지 않음
    write(글쓰기): 위 parseFeedbackTextToItems로 블록의 items를 다시 만듦(분기는 복원 안 됨)
-   memos(각 항목에 달린 메모)는 있으면 해당 항목의 반영된 텍스트 끝에 "[교수님 메모]" 목록으로 함께
-   붙는다(2026-08-20 추가) — character만 항목이 여러 필드로 나뉘어 있어 "기타 메모" 필드에 붙인다. */
+   memos(각 항목에 달린 메모)는 있으면 setAppliedMemos로 별도 저장되어 각 탭에서 메모 블럭으로 표시된다. */
 function applyFeedbackToProject(type, feedback, memos){
   if(!feedback) return;
   if(type==="plan"){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
-    PLAN_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.planDoc[f.k]=(feedback[f.k]||"")+memoNoteBlock(memos,f.k); });
+    PLAN_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)){ P.planDoc[f.k]=feedback[f.k]||""; setAppliedMemos("plan",f.k,memos); } });
   }else if(type==="plot"){
     if(!P.plotDoc || !Array.isArray(P.plotDoc.sections)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
       const sec=P.plotDoc.sections.find(s=>s.id===fb.id);
-      if(sec) sec.desc=(fb.text||"")+memoNoteBlock(memos,fb.id);
+      if(sec){ sec.desc=fb.text||""; setAppliedMemos("plot",fb.id,memos); }
     });
   }else if(type==="write"){
     if(!P.writeDoc || !Array.isArray(P.writeDoc.blocks)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
       const bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
-      if(bl) bl.items=parseFeedbackTextToItems((fb.text||"")+memoNoteBlock(memos,fb.id));
+      if(bl){ bl.items=parseFeedbackTextToItems(fb.text||""); setAppliedMemos("write",fb.id,memos); }
     });
   }else if(type==="background"){
     if(!P.world) P.world={}; if(!P.background) P.background={};
     BG_FIELDS.forEach(f=>{
       if(!Object.prototype.hasOwnProperty.call(feedback,f.k)) return;
-      const val=(feedback[f.k]||"")+memoNoteBlock(memos,f.k);
+      const val=feedback[f.k]||"";
       if(f.src==="world") P.world[f.k]=val; else P.background[f.k]=val;
+      setAppliedMemos("background",f.k,memos);
     });
   }else if(type==="event"){
     if(!P.event) P.event={};
-    EVENT_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.event[f.k]=(feedback[f.k]||"")+memoNoteBlock(memos,f.k); });
+    EVENT_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)){ P.event[f.k]=feedback[f.k]||""; setAppliedMemos("event",f.k,memos); } });
   }else if(type==="character"){
     if(!Array.isArray(P.characters)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
@@ -4421,8 +4478,7 @@ function applyFeedbackToProject(type, feedback, memos){
       if(!ch) return;
       const parsed=parseCharFeedbackText(fb.text||"");
       Object.keys(parsed).forEach(k=>{ ch[k]=parsed[k]; });
-      const note=memoNoteBlock(memos,fb.id);
-      if(note) ch.desc=(ch.desc||"")+note;
+      setAppliedMemos("character",fb.id,memos);
     });
   }
   save(); render();

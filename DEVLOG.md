@@ -2,6 +2,35 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-20 (9) — 반영된 교수님 메모를 "메모 블럭" 카드로 표시(삭제 가능) — (8)의 텍스트 방식 문제 수정
+
+**요청**: "학생이 덮어쓰기 하면 이렇게 나오는데(제목/장르 칸에 메모가 본문과 뒤섞여 보임), 첨삭때처럼
+메모 블럭으로 표시되도록 하고. 필요한경우 학생이 메모 블럭을 삭제 할 수 있도록 해줘."
+
+- **문제**: (8)에서 넣은 방식은 메모를 `"\n\n[교수님 메모]\n- ..."` 형태로 항목 텍스트 끝에 그냥
+  이어붙였는데, 제목/장르처럼 `<input type="text">`(한 줄 입력칸)로 렌더되는 항목은 줄바꿈이 화면에
+  표시되지 않아 "asdf[교수님 메모]- sdafasfd"처럼 본문과 메모가 뒤섞여 보이는 문제가 있었음.
+- **app.js**: 메모를 텍스트에 합치지 않고 `P.appliedMemos[type][key]`(구조화된 배열)에 별도 저장하는
+  방식으로 전면 수정.
+  - `memoNoteBlock()` 삭제, 대신 `setAppliedMemos(type,key,memos)`/`getAppliedMemos(type,key)`/
+    `deleteAppliedMemo(type,key,memoId)` 신규 — key는 plan/background/event는 필드 key, plot/write/
+    character는 항목(섹션/블록/캐릭터) id.
+  - `applyFeedbackToProject()`: 각 항목 텍스트는 첨삭 내용 그대로만 대입(순수 텍스트, 메모 안 섞임),
+    메모는 `setAppliedMemos()`로 별도 저장.
+  - `buildAppliedMemoList(type,key,onChanged)`(신규) — 첨삭 화면의 `.memo-block`/`.memo-block-marker`/
+    `.memo-block-text`/`.memo-block-del`과 동일한 스타일로 메모 카드 DOM을 만듦(삭제 버튼 포함).
+  - `renderAppliedMemoBlock(container,type,key)` — 필드마다 개별 래퍼(`.plan-block` 등)가 있는 경우
+    그 컨테이너 맨 아래에 메모 카드를 붙임(기획서 탭에 사용).
+  - `renderAppliedMemoBlockAfter(afterEl,type,key)` — 필드들이 개별 래퍼 없이 한 카드 안에 나란히
+    있는 경우(배경/사건 설정) 해당 입력칸 바로 다음에 형제 요소로 메모 카드를 끼워 넣음.
+  - `rPlan()`/`rBg()`/`rEvent()`/`plotSectionCard()`(플롯)/`sceneBlockCard()`(글쓰기)/
+    `charDetailPage()`(캐릭터, "기타 메모" 칸 아래) 각각에 위 렌더 호출을 추가해 6개 콘텐츠 타입
+    모두에서 반영된 메모가 카드로 보이고 삭제 버튼(✕)으로 지울 수 있게 됨. 삭제하면 즉시 저장(save())됨.
+- jsdom으로 구조화 저장(getAppliedMemos), `.plan-block` 컨테이너/형제 삽입 두 렌더 방식 모두에서 입력칸
+  값은 그대로 유지되고 메모가 별도 카드로 표시되는지, 삭제 버튼 클릭 시 카드가 사라지고 save()가
+  호출되는지, 메모가 없을 때는 아무 것도 렌더되지 않는지 확인함.
+
+
 ## 2026-08-20 (8) — 첨삭 반영 시 교수님 메모도 함께 넘어가도록 수정
 
 **요청**: "학생이 피드백 받아서 자신의 작업물에 반영할 때, 메모도 같이 넘어가도록 해줘."
