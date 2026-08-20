@@ -81,10 +81,10 @@ async function refreshProfBar(){
   wrap.hidden=false;
   if(profBarList.length<2){
     const p=profBarList[0];
-    wrap.innerHTML=`${ICONS.user}<span>${esc(p.school||"")} ${esc(p.name||"")}</span>`;
+    wrap.innerHTML=`${ICONS.user}<span>${esc(p.name||"")}</span>`;
   }else{
     wrap.innerHTML=`${ICONS.user}<select id="profBarSelect" title="과제를 제출/열람할 교수(수업)">
-      ${profBarList.map(p=>`<option value="${p.id}"${p.id===profBarId?" selected":""}>${esc(p.school||"")} · ${esc(p.name||"")}</option>`).join("")}
+      ${profBarList.map(p=>`<option value="${p.id}"${p.id===profBarId?" selected":""}>${esc(p.name||"")}</option>`).join("")}
     </select>`;
     wrap.querySelector("#profBarSelect").onchange=e=>{ profBarId=Number(e.target.value); rememberSelectedProf(profBarId); };
   }
@@ -4063,7 +4063,10 @@ async function rProfSubmissionReview(id, version){
     const afterList=pairs.map(p=>p.after);
     const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList);
     const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback, memos:reviewMemos})});
-    if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewVersion=null; rProfSubmissionReview(id); }
+    /* rProfSubmissionReview(id)를 직접 다시 부르면 app.innerHTML을 지우지 않고 카드를 또 appendChild해서
+       화면에 이전 카드+새 카드가 이중으로 쌓인다(2026-08-20 발견). render()를 거쳐야 app이 먼저 비워진 뒤
+       profReviewId 기준으로 이 함수가 다시 호출된다. */
+    if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewVersion=null; render(); }
     else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
   };
 }
