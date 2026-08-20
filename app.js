@@ -1384,11 +1384,9 @@ function rBg(){
 
     <div class="section-title">기본 정보</div>
     <label>한 줄 요약</label><textarea id="w_summary" placeholder="이 세계는 어떤 곳인가"></textarea>
-    <div class="row">
-      <div><label>세계관 유형</label><select id="w_type"><option value="">선택 안 함</option>${optionsToHtml(worldTypeOpts)}</select></div>
-      <div><label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…"></div>
-      <div><label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…"></div>
-    </div>
+    <label>세계관 유형</label><select id="w_type"><option value="">선택 안 함</option>${optionsToHtml(worldTypeOpts)}</select>
+    <label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…">
+    <label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…">
     <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
 
     <div class="section-title">지리 · 역사 (선택)</div>
