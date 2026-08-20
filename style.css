@@ -732,6 +732,14 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--accent);margin:0 1px}
 .char-graph-edge-label{font-size:10px;font-weight:600;fill:var(--ink);text-anchor:middle}
 .char-graph-node{cursor:pointer}
 .char-graph-node text{font-size:11px;font-weight:800;fill:#fff;text-anchor:middle}
+/* 관계 목록(그래프 아래 텍스트 정리) — 2026-08-20 추가, 그래프의 라벨이 겹쳐 보일 때도 항상 또렷하게 읽을 수 있도록 */
+.char-graph-legend{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.char-graph-legend-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px}
+.char-graph-legend-row{display:flex;align-items:baseline;gap:8px;padding:5px 0;font-size:13px;flex-wrap:wrap}
+.char-graph-legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.char-graph-legend-names{font-weight:700;color:var(--ink);white-space:nowrap}
+.char-graph-legend-text{color:var(--muted)}
+.char-graph-legend-empty{color:var(--muted);font-style:italic}
 
 /* ===== PDF 인쇄용 미리보기(평소엔 숨김, 인쇄 시에만 표시) ===== */
 .print-preview{display:none}

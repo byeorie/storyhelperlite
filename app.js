@@ -1252,8 +1252,11 @@ function charRelationshipGraph(){
     wrap.innerHTML='<p class="hint">이름이 입력된 캐릭터가 있어야 관계도를 볼 수 있습니다.</p>';
     return wrap;
   }
-  const size=Math.max(420, chars.length*70);
-  const cx=size/2, cy=size/2, r=size/2-70;
+  const totalRels=chars.reduce((n,ch)=>n+((ch.relationships||[]).length),0);
+  /* 2026-08-20: 캐릭터가 적어도(3명 등) 관계가 많으면 라벨이 중앙에 몰려 겹쳐 보이던 문제 —
+     관계 개수도 함께 반영해 캔버스를 넉넉하게 키운다 */
+  const size=Math.max(420, chars.length*90, totalRels*80);
+  const cx=size/2, cy=size/2, r=size/2-80;
   const pos={};
   chars.forEach((ch,i)=>{
     const angle=(i/chars.length)*Math.PI*2 - Math.PI/2;
@@ -1272,7 +1275,7 @@ function charRelationshipGraph(){
   const arrowPath=document.createElementNS(svgNS,"path");
   arrowPath.setAttribute("d","M0,0 L10,5 L0,10 Z"); arrowPath.setAttribute("class","char-graph-arrowhead");
   marker.appendChild(arrowPath); defs.appendChild(marker); svg.appendChild(defs);
-  const NODE_R=26, SPACING=18;
+  const NODE_R=26, SPACING=28;
   /* 관계(간선) 목록 수집 — 같은 두 캐릭터 사이에 관계가 여러 개면 평행하게 벌려서 겹치지 않도록 */
   const edges=[];
   chars.forEach(ch=>{
@@ -1300,8 +1303,10 @@ function charRelationshipGraph(){
       e._x1=Bx-ux*(NODE_R+4); e._y1=By-uy*(NODE_R+4);
       e._x2=Ax+ux*(NODE_R+10); e._y2=Ay+uy*(NODE_R+10);
     }
-    /* 라벨 박스는 평행 이동만으로는 폭이 넓어 서로 겹칠 수 있어, 같은 쌍 안에서 선을 따라 위치(t)도 함께 벌린다 */
-    const t=Math.max(0.26, Math.min(0.74, 0.5+(e._idx-(e._count-1)/2)*0.18));
+    /* 라벨 박스는 평행 이동만으로는 폭이 넓어 서로 겹칠 수 있어, 같은 쌍 안에서 선을 따라 위치(t)도 함께
+       벌린다. 2026-08-20: 예전엔 간격이 너무 좁아(±0.09) 두 라벨이 선 가운데 근처에 몰려 겹쳤음 —
+       그룹 안에서 0.22~0.78 구간에 고르게 펼쳐 각 노드 쪽으로 더 붙게 한다(count=1이면 그대로 중앙) */
+    const t=e._count<=1 ? 0.5 : 0.22+(e._idx/(e._count-1))*0.56;
     e._mx=Ax+(Bx-Ax)*t; e._my=Ay+(By-Ay)*t;
   });
   /* 1단계: 화살표 선을 모두 그린다 */
@@ -1313,15 +1318,46 @@ function charRelationshipGraph(){
     if(e.rel.mutual) line.setAttribute("marker-start","url(#charArrowHead)");
     svg.appendChild(line);
   });
-  /* 2단계: 관계 라벨 박스를 선 위에 전부 그린다(다른 화살표선에 가려지지 않도록 항상 나중에 그림) */
-  edges.forEach(e=>{
-    if(!e.rel.label) return;
-    const w=Math.max(28, e.rel.label.length*11+14), h=18;
+  /* 2026-08-20: 삼각형처럼 노드가 적은 그래프에서는, 서로 다른 쌍(pair)의 라벨이라도 같은 노드에서
+     뻗어나가는 두 선의 시작 지점 근처에서는 여전히 가까이 모여 겹칠 수 있다(쌍 안에서만 t를 벌리는
+     것으로는 부족함). 그래서 라벨 박스끼리 실제로 겹치는지 검사해, 겹치면 서로 반대 방향으로 조금씩
+     밀어내는 것을 겹침이 없어질 때까지(또는 최대 반복 횟수까지) 반복하는 방식으로 최종 보정한다. */
+  const labeled=edges.filter(e=>e.rel.label);
+  labeled.forEach(e=>{ e._labelW=Math.max(28, e.rel.label.length*11+14); e._labelH=18; });
+  for(let iter=0; iter<60; iter++){
+    let moved=false;
+    for(let i=0;i<labeled.length;i++){
+      for(let j=i+1;j<labeled.length;j++){
+        const a=labeled[i], b=labeled[j];
+        const pad=4;
+        const overlapX=Math.min(a._mx+a._labelW/2+pad,b._mx+b._labelW/2+pad)-Math.max(a._mx-a._labelW/2-pad,b._mx-b._labelW/2-pad);
+        const overlapY=Math.min(a._my+a._labelH/2+pad,b._my+b._labelH/2+pad)-Math.max(a._my-a._labelH/2-pad,b._my-b._labelH/2-pad);
+        if(overlapX>0 && overlapY>0){
+          let dx=b._mx-a._mx, dy=b._my-a._my;
+          if(Math.abs(dx)<0.01 && Math.abs(dy)<0.01){ dx=(i%2?1:-1); dy=0.5; }
+          const dist=Math.sqrt(dx*dx+dy*dy)||1;
+          const push=3;
+          a._mx-=dx/dist*push; a._my-=dy/dist*push;
+          b._mx+=dx/dist*push; b._my+=dy/dist*push;
+          moved=true;
+        }
+      }
+    }
+    if(!moved) break;
+  }
+  /* 3단계: 관계 라벨 박스를 선 위에 전부 그린다(다른 화살표선에 가려지지 않도록 항상 나중에 그림).
+     배경 박스와 글자를 같은 루프에서 번갈아 그리면, 뒤에 그려지는 라벨의 흰 배경 박스가 앞서 그려둔
+     다른 라벨의 글자를 덮어 가려버리는 문제가 있었음 — 배경 박스를 전부 먼저 그린 뒤 글자를 전부 그
+     위에 그려서, 어떤 라벨의 글자도 다른 라벨의 배경에 가려지지 않도록 함 */
+  labeled.forEach(e=>{
+    const w=e._labelW, h=e._labelH;
     const rect=document.createElementNS(svgNS,"rect");
     rect.setAttribute("x",e._mx-w/2); rect.setAttribute("y",e._my-h/2);
     rect.setAttribute("width",w); rect.setAttribute("height",h); rect.setAttribute("rx",5);
     rect.setAttribute("class","char-graph-edge-label-bg");
     svg.appendChild(rect);
+  });
+  labeled.forEach(e=>{
     const label=document.createElementNS(svgNS,"text");
     label.setAttribute("x",e._mx); label.setAttribute("y",e._my+4);
     label.setAttribute("class","char-graph-edge-label");
@@ -1343,6 +1379,26 @@ function charRelationshipGraph(){
   });
   const inner=document.createElement("div"); inner.className="char-graph-wrap"; inner.appendChild(svg);
   wrap.appendChild(inner);
+  /* 그래프 위 라벨은 인물이 많아지면 아무리 간격을 벌려도 겹칠 수 있으므로, 아래에 전체 관계를
+     글로 정리한 목록을 항상 함께 보여준다(2026-08-20 추가) — 그래프가 복잡해도 여기서는 항상
+     또렷하게 읽을 수 있다. 그래프의 원 색상과 같은 색 점으로 어느 화살표인지 짝지어 준다. */
+  if(edges.length){
+    const legend=document.createElement("div"); legend.className="char-graph-legend";
+    const rows=edges.map(e=>{
+      const fromCh=chars.find(c=>c.id===e.from), toCh=chars.find(c=>c.id===e.to);
+      if(!fromCh||!toCh) return "";
+      const dotColor=TAG_PALETTE[hashStr(fromCh.id)%TAG_PALETTE.length];
+      const arrow=e.rel.mutual?"↔":"→";
+      const labelText=e.rel.label?esc(e.rel.label):'<span class="char-graph-legend-empty">(설명 없음)</span>';
+      return `<div class="char-graph-legend-row">
+        <span class="char-graph-legend-dot" style="background:${dotColor}"></span>
+        <span class="char-graph-legend-names">${esc(fromCh.name)} ${arrow} ${esc(toCh.name)}</span>
+        <span class="char-graph-legend-text">${labelText}</span>
+      </div>`;
+    }).join("");
+    legend.innerHTML=`<div class="char-graph-legend-title">관계 목록</div>${rows}`;
+    wrap.appendChild(legend);
+  }
   return wrap;
 }
 
