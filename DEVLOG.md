@@ -2,6 +2,59 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-20 (5) — 상단 툴바 "서버에 저장됨" 표시 제거 + 교수(수업) 표시/드롭다운 추가
+
+**요청**: "1) 상단 툴바의 왼쪽에 [서버에 저장됨] 표시는 삭제해주고, 어떤 교수의 수업인지 표시되도록
+해줘. 2) 등록한 교수가 여러명일 경우에는 드롭다운으로 표시해서 선택하도록 해주고. 3) 과제 제출할 때
+교수를 선택하게 하지 말고 툴바에서 선택한 교수에게 보내지도록 해줘."
+
+- **index.html**: 우측 상단 `#serverStatus`("서버에 저장됨"/"로컬 저장" 등) 스팬 삭제. 그 자리(아바타
+  버튼 왼쪽)에 빈 `#profBarWrap` 컨테이너 추가(교수 계정/미등록 시 hidden, app.js가 채움). 프로젝트별
+  로컬 저장 상태를 보여주는 `#saveStatus`("저장됨"/"저장 중…")는 그대로 유지.
+- **app.js**:
+  - `refreshProfBar()`(신규) — 학생 계정에서 `student-professors`를 불러와 `#profBarWrap`을 채움.
+    1명이면 이름 텍스트만, 2명 이상이면 `<select>` 드롭다운으로 표시. 고른 값은 기존
+    `rememberSelectedProf()`(localStorage `shl_selected_prof`)로 기억되어 새로고침해도 유지됨.
+    전역 `profBarId`가 "지금 선택된 교수"의 단일 기준값이 됨. 교수/관리자 계정이거나 등록된 교수가
+    없으면 숨김.
+  - `onAuthChanged()`에 `refreshProfBar()` 호출 추가 — 로그인/로그아웃/교수 코드 추가 등록 시(이미
+    onAuthChanged를 부르고 있던 지점들) 자동으로 갱신됨.
+  - `openSubmitModal()`/`rFeedbackList()`: 모달·화면 안에서 교수를 다시 고르던 `profSelectHtml()`
+    드롭다운을 제거하고, 항상 `profBarId`(툴바에서 고른 교수) 기준으로 `student-assignments`를 조회.
+    미등록 상태 안내 문구는 그대로 유지.
+  - `profSelectHtml()` 함수는 더 이상 쓰이지 않아 삭제(`rememberSelectedProf`/`recalledSelectedProf`는
+    `refreshProfBar`가 계속 사용하므로 유지).
+- **auth.js**: [설정] 패널의 학생용 안내 주석을 "제출/첨삭 화면 드롭다운" → "상단 툴바 드롭다운"으로
+  갱신(실제 코드 동작 변경 없음, 주석만).
+- **style.css**: `.prof-bar-wrap`(+ 내부 아이콘/select) 스타일 추가.
+- jsdom으로 로그인 → 교수 2명 등록 → 드롭다운 전환 → [제출]/[첨삭 보기] 흐름을 시뮬레이션해 정상
+  동작 확인(수동 QA, 자동화 테스트 파일로 커밋하지는 않음).
+
+## 2026-08-20 (4) — 캐릭터 설정에도 기획서 미리보기 + 캐릭터/배경/사건 설정 과제 제출 지원
+
+**요청**: "1) 캐릭터 설정 페이지에도 오른쪽에 기획서가 보이도록 해줘(배경 설정 페이지 참고). 2) 캐릭터
+설정, 배경 설정, 사건 설정도 과제로 제출 가능하도록 해줘."
+
+- **app.js `rChar()`**: 캐릭터 목록(갤러리/관계도) 화면과 캐릭터 상세 편집 화면 모두
+  `mountWithPlanViewer()`로 감싸, 배경/사건 설정과 동일하게 오른쪽에 "기획서 작성" 내용 미리보기가
+  나타나도록 변경(기존엔 상세 편집 화면만 폭을 맞췄을 뿐 미리보기는 없었음).
+- **제출 가능 타입 확장**: `TYPE_LABEL`에 `character/background/event` 추가.
+  - `rChar()`/`rBg()`/`rEvent()` 각 헤더에 `submitBtnHtml()`([제출]/[첨삭 보기]) 추가, 각 함수 진입부에
+    `feedbackPage.type` 체크 추가(다른 탭과 동일 패턴).
+  - **배경/사건**: 필드가 이미 평평한 key-value라 `BG_FIELDS`/`EVENT_FIELDS` 목록으로 "기획서" 타입과
+    동일하게 항목별 첨삭 지원(배경은 `P.world`+`P.background` 두 객체를 소스로만 구분해서 병합).
+  - **캐릭터**: 인원 × 항목 수가 너무 많아지는 걸 피하려고, 캐릭터 한 명당 "라벨: 값" 줄들을 합친
+    텍스트 블록 하나로 제출(플롯/글쓰기 탭과 같은 방식). `charFieldsToText()`/`parseCharFeedbackText()`로
+    직렬화·역직렬화(값에 줄바꿈이 있어도 다음 라벨 전까지는 같은 항목으로 복원됨).
+  - `buildSubmissionData`/`buildReviewPairs`/`buildFeedbackFromPairs`/`applyFeedbackToProject`에 세
+    타입 분기 추가. 첨삭 화면(교수 첨삭 편집, 학생 첨삭 보기, PDF 일괄 다운로드, 버전 관리 등)은 이미
+    타입을 몰라도 되게 설계돼 있어서 이 네 함수만 손대면 나머지는 그대로 동작함.
+- **functions/api/student-submit.js**: `VALID_TYPES`에 `character/background/event` 추가(없으면 제출
+  API가 400으로 거부함).
+- **functions/api/professor-assignment.js**: `TYPE_LABEL`에 동일 항목 추가(교수 쪽 제출함 목록 표시용).
+- 과제 폴더 자체는 원래도 타입 구분이 없어(학생이 어느 탭의 [제출] 버튼을 눌렀는지로만 타입이 정해짐)
+  스키마·과제 등록 화면 변경은 필요 없었음.
+
 ## 2026-08-20 (3) — 앱 이름 "스토리텔링 가이드" → "스토리 가이드"로 변경
 
 **요청**: "앱 이름을 스토리 가이드로 변경해줘."

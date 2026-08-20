@@ -126,8 +126,8 @@ function openSettings() {
     `;
   } else {
     // 2026-08-20: 학생 1명이 여러 교수를 등록할 수 있도록 변경 — 코드를 입력하면 기존 등록을
-    // 대체하지 않고 목록에 추가된다. 실제 어느 교수의 과제를 볼지는 과제 제출/첨삭 화면의
-    // 드롭다운에서 고른다.
+    // 대체하지 않고 목록에 추가된다. 실제 어느 교수의 과제를 볼지는 상단 툴바의 교수 표시/
+    // 드롭다운(app.js refreshProfBar)에서 고른다.
     body.innerHTML = `
       <div id="settingsProfList"><p class="hint">등록된 교수 목록을 불러오는 중…</p></div>
       <div class="plan-block">

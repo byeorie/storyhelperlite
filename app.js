@@ -53,9 +53,41 @@ function forceTab(name){
 function onAuthChanged(){
   refreshAdminTabVisibility();
   refreshProfNavVisibility();
+  refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
   if((activeTab==="profStudents"||activeTab==="profAssignments") && !isProfessor()) forceTab("idea");
   render();
+}
+/* 상단 툴바 — 학생 계정이 등록한 교수(수업) 표시/선택 (2026-08-20 추가).
+   과제 제출·첨삭 보기는 항상 여기서 고른 교수를 기준으로 동작하며, 모달 안에서 다시 고르지 않는다.
+   1명만 등록했으면 이름만 보여주고, 2명 이상이면 드롭다운으로 바꿔서 고를 수 있게 한다. */
+let profBarList=[];  // 내가 등록한 교수 목록 [{id,name,school}]
+let profBarId=null;  // 지금 선택된 교수 id — student-assignments/student-submit 호출에 그대로 씀
+async function refreshProfBar(){
+  const wrap=document.getElementById("profBarWrap");
+  if(!wrap) return;
+  if(!currentUser || isProfessor() || isAdmin()){
+    wrap.hidden=true; profBarList=[]; profBarId=null; return;
+  }
+  const res=await apiFetch("student-professors");
+  if(!document.body.contains(wrap)) return;
+  profBarList=(res.ok && res.body && res.body.professors) || [];
+  if(!profBarList.length){ wrap.hidden=true; profBarId=null; return; }
+  const recalled=recalledSelectedProf();
+  const defaultId=res.body.defaultProfId;
+  profBarId = (recalled && profBarList.some(p=>p.id===recalled)) ? recalled
+    : ((defaultId && profBarList.some(p=>p.id===defaultId)) ? defaultId : profBarList[0].id);
+  rememberSelectedProf(profBarId);
+  wrap.hidden=false;
+  if(profBarList.length<2){
+    const p=profBarList[0];
+    wrap.innerHTML=`${ICONS.user}<span>${esc(p.school||"")} ${esc(p.name||"")}</span>`;
+  }else{
+    wrap.innerHTML=`${ICONS.user}<select id="profBarSelect" title="과제를 제출/열람할 교수(수업)">
+      ${profBarList.map(p=>`<option value="${p.id}"${p.id===profBarId?" selected":""}>${esc(p.school||"")} · ${esc(p.name||"")}</option>`).join("")}
+    </select>`;
+    wrap.querySelector("#profBarSelect").onchange=e=>{ profBarId=Number(e.target.value); rememberSelectedProf(profBarId); };
+  }
 }
 /* ===== 왼쪽 메뉴·플롯 목록·미리보기 접기/펼치기 (곰국을끼리오너라 프로젝트 참고) =====
    작업 공간을 넓게 쓰고 싶을 때 각 패널을 접을 수 있다. 상태는 localStorage에 저장해 다음에도 유지 */
@@ -963,23 +995,20 @@ function cleanCharRelationships(){
   (P.characters||[]).forEach(c=>{ c.relationships=(c.relationships||[]).filter(r=>r&&ids.has(r.targetId)); });
 }
 function rChar(){
+  if(feedbackPage && feedbackPage.type==="character"){ rFeedbackPage(); return; }
   if(!Array.isArray(P.characters)||!P.characters.length) P.characters=[blankChar()];
   cleanCharRelationships();
   if(charDetailFor){
     const dch=P.characters.find(x=>x.id===charDetailFor);
     if(dch){
-      /* 배경 설정 페이지와 동일한 폭(.setting-split > .setting-main, main 60%)으로 맞춘다 */
-      const layout=document.createElement("div"); layout.className="setting-split";
-      const left=document.createElement("div"); left.className="setting-main";
-      left.appendChild(charDetailPage(dch));
-      layout.appendChild(left);
-      app.appendChild(layout);
+      /* 배경 설정 페이지와 동일하게 오른쪽에 기획서 미리보기를 붙인다 */
+      mountWithPlanViewer(charDetailPage(dch));
       return;
     }
     charDetailFor=null;
   }
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.user} 캐릭터 설정</h2>
+  c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.user} 캐릭터 설정</h2>${submitBtnHtml()}</div>
     <p class="hint">MBTI와 에니어그램으로 성격의 뼈대를 잡고, 목표·결함·변화, 다른 인물과의 관계를 채워보세요.</p>
     <div class="char-toolbar">
       <div class="char-view-toggle">
@@ -989,7 +1018,8 @@ function rChar(){
       <button class="btn icon-btn" id="addCharBtn">${ICONS.plus} 캐릭터 추가</button>
     </div>
     <div id="charBody"></div></div>`;
-  app.appendChild(c);
+  mountWithPlanViewer(c);
+  wireSubmitBtn(c,"character");
   c.querySelectorAll(".char-view-btn").forEach(b=>b.onclick=()=>{ charViewMode=b.dataset.view; render(); });
   c.querySelector("#addCharBtn").onclick=()=>{
     const nc=blankChar(); P.characters.push(nc); save(); charDetailFor=nc.id; render();
@@ -1341,9 +1371,10 @@ function mountWithPlanViewer(cardEl){
 
 /* 배경 설정 (세계관 + 배경을 하나로 통합) */
 function rBg(){
+  if(feedbackPage && feedbackPage.type==="background"){ rFeedbackPage(); return; }
   const c=document.createElement("div");
   const worldTypeOpts=(typeof STORY_GUIDE_SLOTS!=="undefined"?((STORY_GUIDE_SLOTS.find(s=>s.key==="worldview")||{}).options||[]):[]);
-  c.innerHTML=`<div class="card"><h2>${ICONS.globe} 배경 설정</h2>
+  c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.globe} 배경 설정</h2>${submitBtnHtml()}</div>
     <p class="hint">이야기가 펼쳐지는 세계의 규칙과 분위기, 지리·역사·사회 구조를 정리합니다. 굵은 항목만 채워도 충분하며 나머지는 필요한 만큼만 채우세요.</p>
 
     <div class="section-title">기본 정보</div>
@@ -1383,6 +1414,7 @@ function rBg(){
     <button type="button" class="btn ghost sm" id="wvGlossaryAdd">${ICONS.plus} 용어 추가</button>
   </div>`;
   mountWithPlanViewer(c);
+  wireSubmitBtn(c,"background");
   bind(c.querySelector("#w_summary"),P.world,"summary");
   bind(c.querySelector("#w_type"),P.world,"type");
   bind(c.querySelector("#w_era"),P.world,"era");
@@ -1462,9 +1494,10 @@ function rBg(){
 const EVENT_AGENCY_OPTS=["주인공 능동 사건 (주인공이 먼저 갈등을 겁니다)","주인공 피동 사건 (적대자가 갈등을 걸어옵니다)"];
 const EVENT_CONFLICT_TYPE_OPTS=["내적 갈등 (인물 내면의 심리·도덕적 딜레마)","외적 갈등 — 인물 vs 인물","외적 갈등 — 인물 vs 자신","외적 갈등 — 인물 vs 사회","외적 갈등 — 인물 vs 자연","외적 갈등 — 인물 vs 운명·초자연"];
 function rEvent(){
+  if(feedbackPage && feedbackPage.type==="event"){ rFeedbackPage(); return; }
   const c=document.createElement("div");
   const optHtml=(opts)=>opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("");
-  c.innerHTML=`<div class="card"><h2>${ICONS.bolt} 사건 설정</h2>
+  c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.bolt} 사건 설정</h2>${submitBtnHtml()}</div>
     <p class="hint">이야기 전체의 구조(발단~결말)는 "플롯 생성" 탭에서 다룹니다. 여기서는 사건 하나하나를
     "목표 → 갈등 → 결과 → 다음 사건"의 흐름으로 설계합니다. 굵은 항목만 채워도 충분합니다.</p>
 
@@ -1497,6 +1530,7 @@ function rEvent(){
     <button type="button" class="btn ghost sm" id="evLogAdd">${ICONS.plus} 사건 추가</button>
   </div>`;
   mountWithPlanViewer(c);
+  wireSubmitBtn(c,"event");
   bind(c.querySelector("#e_name"),P.event,"name");
   bind(c.querySelector("#e_main"),P.event,"main");
   bind(c.querySelector("#e_characters"),P.event,"characters");
@@ -3425,7 +3459,7 @@ async function doAdminReset(mode){
    제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
    "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
    professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
-const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기"};
+const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정"};
 /* "과제 관리" 탭 안의 현재 화면 상태(팝업 대신 같은 탭 안에서 페이지처럼 전환) */
 let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
@@ -3458,6 +3492,75 @@ function diffPrevHtml(beforeText, afterText){
   return out;
 }
 
+/* 배경 설정 제출용 항목 — P.world/P.background 두 객체에 나뉘어 있는 필드를 하나의 평평한
+   목록으로 다룬다(키가 서로 겹치지 않으므로 안전). src로 원래 어느 객체 소속인지 기억해둔다. */
+const BG_FIELDS=[
+  {k:"summary", label:"한 줄 요약", src:"world"},
+  {k:"type", label:"세계관 유형", src:"world"},
+  {k:"era", label:"시대", src:"world"},
+  {k:"place", label:"장소", src:"world"},
+  {k:"mood", label:"전체 분위기/톤", src:"background"},
+  {k:"regions", label:"주요 지역/장소", src:"world"},
+  {k:"timeline", label:"연표 · 주요 사건", src:"world"},
+  {k:"politics", label:"정치체제", src:"world"},
+  {k:"factions", label:"계급 · 종족 · 세력 구도", src:"world"},
+  {k:"economy", label:"경제", src:"world"},
+  {k:"social", label:"사회 전반 설명", src:"background"},
+  {k:"rules", label:"마법 · 기술 · 초자연 규칙", src:"world"},
+  {k:"taboo", label:"절대 금기", src:"world"},
+  {k:"culture", label:"풍습 · 종교", src:"world"},
+  {k:"language", label:"언어 · 호칭 특징", src:"world"},
+  {k:"conflict", label:"대립 세력 / 전쟁·분쟁 요소", src:"world"},
+  {k:"detail", label:"기타 세부 묘사", src:"background"},
+];
+/* 사건 설정 제출용 항목 — 모두 P.event 하나의 객체에 있다 */
+const EVENT_FIELDS=[
+  {k:"name", label:"사건명"},
+  {k:"main", label:"사건 설명"},
+  {k:"characters", label:"관련 인물"},
+  {k:"agency", label:"사건 유형"},
+  {k:"conflictType", label:"갈등 유형"},
+  {k:"goal", label:"목표"},
+  {k:"conflict", label:"갈등 · 장애물"},
+  {k:"disaster", label:"결과"},
+  {k:"reaction", label:"인물의 반응"},
+  {k:"decision", label:"결정"},
+  {k:"transform", label:"이 사건으로 달라진 것"},
+  {k:"nextLink", label:"다음 사건과의 연결"},
+  {k:"ending", label:"결말 방향"},
+];
+/* 캐릭터 설정 제출용 항목 — 캐릭터 한 명당 하나의 텍스트 블록("라벨: 값" 줄들)으로 합쳐서 제출한다
+   (여러 캐릭터 × 여러 항목을 전부 개별 칸으로 나누면 목록이 지나치게 길어지므로, 플롯/글쓰기 탭과
+   같은 방식을 따름). 값에 줄바꿈이 있어도 다음 "라벨:"이 나오기 전까지는 같은 항목으로 이어붙인다. */
+const CHAR_FIELDS=[
+  {k:"name", label:"이름"}, {k:"role", label:"역할"}, {k:"age", label:"나이"}, {k:"gender", label:"성별"},
+  {k:"job", label:"직업/신분"}, {k:"affiliation", label:"소속/세력"},
+  {k:"mbti", label:"MBTI"}, {k:"enneagram", label:"에니어그램"},
+  {k:"goal", label:"목표"}, {k:"flaw", label:"결함"}, {k:"strength", label:"강점"}, {k:"secret", label:"비밀"},
+  {k:"parentsInfo", label:"부모의 정보 및 관계"}, {k:"familyRelations", label:"가족 관계"}, {k:"backstory", label:"성장배경 / 과거사"},
+  {k:"arcType", label:"인물호 유형"}, {k:"arcBefore", label:"변화 전 모습"}, {k:"arcAfter", label:"변화 후 모습"},
+  {k:"appearance", label:"외모 상세"}, {k:"speechHabit", label:"말투 / 버릇"}, {k:"charmPoint", label:"매력 포인트"},
+  {k:"likes", label:"좋아하는 것"}, {k:"dislikes", label:"싫어하는 것"}, {k:"dialogueSample", label:"대사 샘플"},
+  {k:"desc", label:"기타 메모"},
+];
+function charFieldsToText(ch){
+  return CHAR_FIELDS.map(f=>({label:f.label, v:(ch[f.k]||"").toString().trim()}))
+    .filter(x=>x.v).map(x=>`${x.label}: ${x.v}`).join("\n");
+}
+/* charFieldsToText의 역변환 — "라벨: 값" 줄로 시작하는 지점마다 새 항목을 열고, 그다음 줄부터
+   다음 라벨이 나오기 전까지는 같은 항목에 줄바꿈으로 이어붙인다(여러 줄 항목도 손실 없이 복원). */
+function parseCharFeedbackText(text){
+  const labelToKey={}; CHAR_FIELDS.forEach(f=>{ labelToKey[f.label]=f.k; });
+  const out={}; let curKey=null;
+  (text||"").split("\n").forEach(line=>{
+    const m=line.match(/^([^:：\n]+):\s(.*)$/);
+    const key=m && labelToKey[m[1].trim()];
+    if(key){ curKey=key; out[curKey]=m[2]; }
+    else if(curKey){ out[curKey]+="\n"+line; }
+  });
+  return out;
+}
+
 /* 현재 프로젝트에서 제출용 스냅샷을 만든다 (탭 종류별로 모양이 다름, 서버는 그대로 JSON 저장만 함) */
 function buildSubmissionData(type){
   if(type==="plan") return P.planDoc || blankPlanDoc();
@@ -3474,6 +3577,19 @@ function buildSubmissionData(type){
       text:(bl.items||[]).filter(it=>(it.text||"").trim())
         .map(it=> it.type==="line" ? `${it.char||"(미지정)"}: ${it.text.trim()}` : it.text.trim()).join("\n"),
     }));
+  }
+  if(type==="background"){
+    const obj={};
+    BG_FIELDS.forEach(f=>{ obj[f.k]=(f.src==="world"?((P.world||{})[f.k]):((P.background||{})[f.k]))||""; });
+    return obj;
+  }
+  if(type==="event"){
+    const obj={};
+    EVENT_FIELDS.forEach(f=>{ obj[f.k]=(P.event||{})[f.k]||""; });
+    return obj;
+  }
+  if(type==="character"){
+    return (P.characters||[]).map(ch=>({id:ch.id, name:ch.name||"", text:charFieldsToText(ch)}));
   }
   return null;
 }
@@ -3495,20 +3611,13 @@ function wireSubmitBtn(container, type){
 /* [첨삭 보기] 버튼 클릭 — 그 탭 안에서 제출 목록 페이지로 전환 */
 function showFeedbackPage(type){ feedbackPage={type, mode:"list"}; render(); }
 
-/* 여러 교수를 등록한 학생을 위한 교수 선택 드롭다운(2026-08-20 추가).
-   localStorage에 마지막으로 고른 교수를 기억해뒀다가 다음에 열 때도 그대로 보여준다. */
+/* 상단 툴바에서 고른 교수를 localStorage에 기억해뒀다가 다음에 열 때도 그대로 쓴다
+   (제출/첨삭 화면에서 다시 고르지 않고 refreshProfBar가 정한 profBarId를 그대로 사용). */
 const SELECTED_PROF_KEY="shl_selected_prof";
 function rememberSelectedProf(profId){ try{ localStorage.setItem(SELECTED_PROF_KEY, String(profId||"")); }catch(e){} }
 function recalledSelectedProf(){ try{ return Number(localStorage.getItem(SELECTED_PROF_KEY))||null; }catch(e){ return null; } }
-function profSelectHtml(professors, selectedId){
-  if(!professors || professors.length<2) return "";
-  return `<label class="hint" style="display:flex;align-items:center;gap:6px;margin:0 0 12px">교수 선택
-    <select id="profPickSelect" style="font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:6px">
-      ${professors.map(p=>`<option value="${p.id}"${p.id===selectedId?" selected":""}>${esc(p.school||"")} · ${esc(p.name||"")}</option>`).join("")}
-    </select></label>`;
-}
 
-/* 제출 대상 과제 선택 모달 (학생) */
+/* 제출 대상 과제 선택 모달 (학생) — 대상 교수는 상단 툴바에서 고른 profBarId 고정 */
 async function openSubmitModal(type){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
@@ -3521,56 +3630,47 @@ async function openSubmitModal(type){
   box.appendChild(body);
   overlay.appendChild(box); document.body.appendChild(overlay);
 
-  async function loadFor(profId){
-    body.innerHTML=`<p class="hint">불러오는 중…</p>`;
-    const res=await apiFetch("student-assignments"+(profId?("?profId="+profId):""));
-    if(!overlay.isConnected) return;
-    if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
-    const curProfId=res.body.profId, prof=res.body.prof, assignments=res.body.assignments||[], professors=res.body.professors||[];
-    if(curProfId) rememberSelectedProf(curProfId);
-    if(!curProfId){
-      body.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`;
-      return;
-    }
-    const pickHtml=profSelectHtml(professors, curProfId);
-    const openList=assignments.filter(a=>a.open);
-    const listHtml=!openList.length
-      ? `<p class="hint">${esc(prof?prof.name:"교수")}님이 등록한, 제출 가능한(마감되지 않은) 과제가 없습니다.</p>`
-      : `<p class="hint">제출할 과제 폴더를 선택하세요. (${esc(prof?prof.name:"")} 교수님)</p>
-        <div class="submit-assign-list">${openList.map(a=>{
-          const mine=(a.mySubmissions||[]).filter(s=>s.type===type);
-          const already=mine.length
-            ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":""}</span>`
-            : "";
-          return `<button type="button" class="submit-assign-item" data-id="${a.id}">
-            <b>${esc(a.title)}</b>
-            <span class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"}</span>
-            ${already}
-          </button>`;
-        }).join("")}</div>`;
-    body.innerHTML=pickHtml+listHtml;
-    const pickSel=document.getElementById("profPickSelect");
-    if(pickSel) pickSel.onchange=()=>loadFor(Number(pickSel.value));
-    body.querySelectorAll(".submit-already[data-view-id]").forEach(el=>{
-      el.onclick=(e)=>{
-        e.stopPropagation();
-        if(overlay.isConnected) document.body.removeChild(overlay);
-        feedbackPage={type, mode:"detail", id:Number(el.dataset.viewId)}; render();
-      };
-    });
-    body.querySelectorAll(".submit-assign-item").forEach(btn=>{
-      btn.onclick=async ()=>{
-        btn.disabled=true; btn.textContent="제출 중…";
-        const data=buildSubmissionData(type);
-        const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
-          assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
-        })});
-        if(r.ok){ alert("제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
-        else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
-      };
-    });
+  if(!profBarId){
+    body.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`;
+    return;
   }
-  loadFor(recalledSelectedProf());
+  const res=await apiFetch("student-assignments?profId="+profBarId);
+  if(!overlay.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const prof=res.body.prof, assignments=res.body.assignments||[];
+  const openList=assignments.filter(a=>a.open);
+  body.innerHTML=!openList.length
+    ? `<p class="hint">${esc(prof?prof.name:"교수")}님이 등록한, 제출 가능한(마감되지 않은) 과제가 없습니다.</p>`
+    : `<p class="hint">제출할 과제 폴더를 선택하세요. (${esc(prof?prof.name:"")} 교수님)</p>
+      <div class="submit-assign-list">${openList.map(a=>{
+        const mine=(a.mySubmissions||[]).filter(s=>s.type===type);
+        const already=mine.length
+          ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":""}</span>`
+          : "";
+        return `<button type="button" class="submit-assign-item" data-id="${a.id}">
+          <b>${esc(a.title)}</b>
+          <span class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"}</span>
+          ${already}
+        </button>`;
+      }).join("")}</div>`;
+  body.querySelectorAll(".submit-already[data-view-id]").forEach(el=>{
+    el.onclick=(e)=>{
+      e.stopPropagation();
+      if(overlay.isConnected) document.body.removeChild(overlay);
+      feedbackPage={type, mode:"detail", id:Number(el.dataset.viewId)}; render();
+    };
+  });
+  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=async ()=>{
+      btn.disabled=true; btn.textContent="제출 중…";
+      const data=buildSubmissionData(type);
+      const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
+        assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
+      })});
+      if(r.ok){ alert("제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
+      else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
+    };
+  });
 }
 
 /* [첨삭 보기] 페이지 — feedbackPage.mode에 따라 목록/상세 중 하나를 그 탭 안에 그림(팝업 아님) */
@@ -3584,41 +3684,30 @@ async function rFeedbackList(type){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="feedbackListBackBtn" style="margin-bottom:10px">${ICONS.close} 돌아가기</button>
     <h2>${ICONS.chat} ${esc(TYPE_LABEL[type])} 첨삭 보기</h2>
-    <div id="feedbackListPick"></div>
     <div id="feedbackListWrap"><p class="hint">불러오는 중…</p></div>`;
   app.appendChild(c);
   c.querySelector("#feedbackListBackBtn").onclick=()=>{ feedbackPage=null; render(); };
 
-  async function loadFor(profId){
-    const wrap=document.getElementById("feedbackListWrap");
-    const pickWrap=document.getElementById("feedbackListPick");
-    if(!wrap) return;
-    wrap.innerHTML=`<p class="hint">불러오는 중…</p>`;
-    const res=await apiFetch("student-assignments"+(profId?("?profId="+profId):""));
-    if(!c.isConnected) return;
-    if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
-    const curProfId=res.body.profId, assignments=res.body.assignments||[], professors=res.body.professors||[];
-    if(curProfId) rememberSelectedProf(curProfId);
-    if(pickWrap) pickWrap.innerHTML=profSelectHtml(professors, curProfId);
-    const pickSel=document.getElementById("profPickSelect");
-    if(pickSel) pickSel.onchange=()=>loadFor(Number(pickSel.value));
-    if(!curProfId){ wrap.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`; return; }
-    const list=[];
-    assignments.forEach(a=>{
-      (a.mySubmissions||[]).filter(s=>s.type===type).forEach(s=>list.push({...s, assignmentTitle:a.title}));
-    });
-    list.sort((x,y)=>(y.submitted_at||0)-(x.submitted_at||0));
-    if(!list.length){ wrap.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
-    wrap.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
-      <button type="button" class="submit-assign-item" data-id="${s.id}">
-        <b>${esc(s.assignmentTitle)}</b>
-        <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
-      </button>`).join("")}</div>`;
-    wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
-      btn.onclick=()=>{ feedbackPage={type, mode:"detail", id:Number(btn.dataset.id)}; render(); };
-    });
-  }
-  loadFor(recalledSelectedProf());
+  const wrap=document.getElementById("feedbackListWrap");
+  if(!profBarId){ wrap.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`; return; }
+  const res=await apiFetch("student-assignments?profId="+profBarId);
+  if(!c.isConnected) return;
+  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const assignments=res.body.assignments||[];
+  const list=[];
+  assignments.forEach(a=>{
+    (a.mySubmissions||[]).filter(s=>s.type===type).forEach(s=>list.push({...s, assignmentTitle:a.title}));
+  });
+  list.sort((x,y)=>(y.submitted_at||0)-(x.submitted_at||0));
+  if(!list.length){ wrap.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
+  wrap.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
+    <button type="button" class="submit-assign-item" data-id="${s.id}">
+      <b>${esc(s.assignmentTitle)}</b>
+      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
+    </button>`).join("")}</div>`;
+  wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
+    btn.onclick=()=>{ feedbackPage={type, mode:"detail", id:Number(btn.dataset.id)}; render(); };
+  });
 }
 /* 내가 제출한 것 + 교수 첨삭 결과 보기(+ 내 작업물에 반영) 상세 페이지.
    version을 주면(버전 드롭다운으로 과거 기록을 고르면) 그 버전을 보여준다 — 항상 읽기 전용이며,
@@ -3643,6 +3732,8 @@ async function rFeedbackDetail(type, id, version){
     plan:"",
     plot:" 섹션 설명(예시 설명)에 첨삭 내용 전체가 반영되고, 배치된 아이디어 카드는 그대로 유지됩니다.",
     write:" \"이름: 대사\" 형식의 줄만 대사로 인식해서 되돌리며, 분기 블록은 복원되지 않습니다.",
+    background:"", event:"",
+    character:" \"항목명: 내용\" 형식의 줄로 각 항목을 인식해 되돌립니다.",
   }[sub.type]||"";
   const mismatch = sub.projectName && P.name && sub.projectName!==P.name;
   const versionPicker=(sub.versions && sub.versions.length>1)
@@ -4003,6 +4094,28 @@ function buildReviewPairs(type, data, feedback){
       return { id:b.id||("i"+i), label:b.title||`블록 ${i+1}`, before:b.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||"") };
     });
   }
+  if(type==="background"){
+    const fb=feedback||{};
+    return BG_FIELDS.map(f=>({
+      id:f.k, label:f.label, before:(data&&data[f.k])||"",
+      after: Object.prototype.hasOwnProperty.call(fb,f.k) ? fb[f.k] : ((data&&data[f.k])||""),
+    }));
+  }
+  if(type==="event"){
+    const fb=feedback||{};
+    return EVENT_FIELDS.map(f=>({
+      id:f.k, label:f.label, before:(data&&data[f.k])||"",
+      after: Object.prototype.hasOwnProperty.call(fb,f.k) ? fb[f.k] : ((data&&data[f.k])||""),
+    }));
+  }
+  if(type==="character"){
+    const chars=Array.isArray(data)?data:[];
+    const fbArr=Array.isArray(feedback)?feedback:[];
+    return chars.map((ch,i)=>{
+      const fbItem=fbArr[i];
+      return { id:ch.id||("i"+i), label:ch.name||`캐릭터 ${i+1}`, before:ch.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (ch.text||"") };
+    });
+  }
   return [];
 }
 
@@ -4232,6 +4345,16 @@ function buildFeedbackFromPairs(type, data, afterList){
     const blocks=Array.isArray(data)?data:[];
     return blocks.map((b,i)=>({ id:b.id, text:afterList[i]||"" }));
   }
+  if(type==="background"){
+    const fb={}; BG_FIELDS.forEach((f,i)=>{ fb[f.k]=afterList[i]||""; }); return fb;
+  }
+  if(type==="event"){
+    const fb={}; EVENT_FIELDS.forEach((f,i)=>{ fb[f.k]=afterList[i]||""; }); return fb;
+  }
+  if(type==="character"){
+    const chars=Array.isArray(data)?data:[];
+    return chars.map((ch,i)=>({ id:ch.id, text:afterList[i]||"" }));
+  }
   return null;
 }
 
@@ -4266,6 +4389,23 @@ function applyFeedbackToProject(type, feedback){
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
       const bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
       if(bl) bl.items=parseFeedbackTextToItems(fb.text||"");
+    });
+  }else if(type==="background"){
+    if(!P.world) P.world={}; if(!P.background) P.background={};
+    BG_FIELDS.forEach(f=>{
+      if(!Object.prototype.hasOwnProperty.call(feedback,f.k)) return;
+      if(f.src==="world") P.world[f.k]=feedback[f.k]; else P.background[f.k]=feedback[f.k];
+    });
+  }else if(type==="event"){
+    if(!P.event) P.event={};
+    EVENT_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.event[f.k]=feedback[f.k]; });
+  }else if(type==="character"){
+    if(!Array.isArray(P.characters)) return;
+    (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
+      const ch=P.characters.find(c=>c.id===fb.id);
+      if(!ch) return;
+      const parsed=parseCharFeedbackText(fb.text||"");
+      Object.keys(parsed).forEach(k=>{ ch[k]=parsed[k]; });
     });
   }
   save(); render();

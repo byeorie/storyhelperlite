@@ -1,6 +1,6 @@
 import { requireAuth, jsonResponse, nowSec } from "./_utils.js";
 
-const VALID_TYPES = ["plan", "plot", "write"];
+const VALID_TYPES = ["plan", "plot", "write", "character", "background", "event"];
 
 /* POST /api/student-submit — 과제 제출  body: { assignmentId, type, projectName, data }
    2026-08-20: 학생이 여러 교수를 등록할 수 있게 되면서, "가입 여부" 확인을 auth.user.profId(기본
