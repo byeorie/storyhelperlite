@@ -3736,27 +3736,28 @@ async function rFeedbackDetail(type, id, version){
     character:" \"항목명: 내용\" 형식의 줄로 각 항목을 인식해 되돌립니다.",
   }[sub.type]||"";
   const mismatch = sub.projectName && P.name && sub.projectName!==P.name;
+  const memos=Array.isArray(sub.memos)?sub.memos:[];
+  const memoNote = memos.length ? ` 교수님이 남긴 메모(${memos.length}개)도 해당 항목 끝에 "[교수님 메모]"로 함께 반영됩니다.` : "";
   const versionPicker=(sub.versions && sub.versions.length>1)
     ? `<label class="hint" style="display:inline-flex;align-items:center;gap:5px;margin:0 0 10px">버전
         <select id="feedbackVersionSelect" style="font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px">
           ${sub.versions.slice().reverse().map(v=>`<option value="${v.version}"${v.version===sub.viewingVersion?" selected":""}>버전 ${v.version}${v.version===sub.latestVersion?" (최신)":""}</option>`).join("")}
         </select></label>`
     : "";
-  wrap.innerHTML=`${versionPicker}<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
+  wrap.innerHTML=`${versionPicker}<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat}${memoNote} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
     ${mismatch?`<br><b style="color:#b3503a">※ 이 과제는 "${esc(sub.projectName)}" 작품에서 제출했는데, 지금 열려있는 작품은 "${esc(P.name)}"입니다. 다른 작품에 반영될 수 있으니 확인해주세요.</b>`:""}</p>
     <button class="btn" id="applyFeedbackBtn" style="margin-bottom:14px;width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>
     <div id="feedbackPairs"></div>`;
   const verSel=document.getElementById("feedbackVersionSelect");
   if(verSel) verSel.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(verSel.value)}; render(); };
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  const memos=Array.isArray(sub.memos)?sub.memos:[];
   renderReviewPairs(document.getElementById("feedbackPairs"), pairs, false, null, memos, {
     canDelete:true,
     onDelete:(m)=>{ apiFetch("student-submission-memo", {method:"POST", body:JSON.stringify({id, version:sub.viewingVersion, memoId:m.id})}); },
   });
   document.getElementById("applyFeedbackBtn").onclick=()=>{
     if(!confirm(`이 첨삭 내용을 지금 작업 중인 "${P.name||""}"의 ${TYPE_LABEL[sub.type]}에 덮어씁니다.\n제출 이후 더 수정한 내용이 있다면 사라질 수 있습니다. 계속할까요?`)) return;
-    applyFeedbackToProject(sub.type, sub.feedback);
+    applyFeedbackToProject(sub.type, sub.feedback, memos);
     alert("내 작업물에 반영했습니다.");
     feedbackPage=null; render();
   };
@@ -4372,36 +4373,47 @@ function parseFeedbackTextToItems(text){
     })
     .filter(it=>it.text.trim().length);
 }
+/* pairId(review-pair 기준, buildReviewPairs의 id와 동일)에 달린 메모들을 "[교수님 메모]" 블록으로
+   합쳐서 돌려준다. 메모의 start/end는 제출 당시의 "원본" 텍스트 기준 글자 오프셋이라 첨삭을 반영한
+   뒤에는 그 위치가 더 이상 정확하지 않으므로, 인용 없이 메모 내용만 목록으로 붙인다. */
+function memoNoteBlock(memos, pairId){
+  const mine=(memos||[]).filter(m=>m.pairId===pairId && (m.text||"").trim());
+  if(!mine.length) return "";
+  return "\n\n[교수님 메모]\n"+mine.map(m=>"- "+m.text.trim()).join("\n");
+}
 /* 교수 첨삭(feedback)을 학생의 지금 작업 중인 작품(P)에 그대로 덮어쓴다 — 학생이 직접 버튼을 눌러야만 실행됨.
    plan(기획서): 항목별로 그대로 대입(손실 없음)
    plot(플롯): 섹션의 desc(설명)에 첨삭 텍스트 전체를 대입 — 아이디어 카드 배치(ideaIds)는 건드리지 않음
-   write(글쓰기): 위 parseFeedbackTextToItems로 블록의 items를 다시 만듦(분기는 복원 안 됨) */
-function applyFeedbackToProject(type, feedback){
+   write(글쓰기): 위 parseFeedbackTextToItems로 블록의 items를 다시 만듦(분기는 복원 안 됨)
+   memos(각 항목에 달린 메모)는 있으면 해당 항목의 반영된 텍스트 끝에 "[교수님 메모]" 목록으로 함께
+   붙는다(2026-08-20 추가) — character만 항목이 여러 필드로 나뉘어 있어 "기타 메모" 필드에 붙인다. */
+function applyFeedbackToProject(type, feedback, memos){
   if(!feedback) return;
   if(type==="plan"){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
-    PLAN_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.planDoc[f.k]=feedback[f.k]; });
+    PLAN_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.planDoc[f.k]=(feedback[f.k]||"")+memoNoteBlock(memos,f.k); });
   }else if(type==="plot"){
     if(!P.plotDoc || !Array.isArray(P.plotDoc.sections)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
       const sec=P.plotDoc.sections.find(s=>s.id===fb.id);
-      if(sec) sec.desc=fb.text||"";
+      if(sec) sec.desc=(fb.text||"")+memoNoteBlock(memos,fb.id);
     });
   }else if(type==="write"){
     if(!P.writeDoc || !Array.isArray(P.writeDoc.blocks)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
       const bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
-      if(bl) bl.items=parseFeedbackTextToItems(fb.text||"");
+      if(bl) bl.items=parseFeedbackTextToItems((fb.text||"")+memoNoteBlock(memos,fb.id));
     });
   }else if(type==="background"){
     if(!P.world) P.world={}; if(!P.background) P.background={};
     BG_FIELDS.forEach(f=>{
       if(!Object.prototype.hasOwnProperty.call(feedback,f.k)) return;
-      if(f.src==="world") P.world[f.k]=feedback[f.k]; else P.background[f.k]=feedback[f.k];
+      const val=(feedback[f.k]||"")+memoNoteBlock(memos,f.k);
+      if(f.src==="world") P.world[f.k]=val; else P.background[f.k]=val;
     });
   }else if(type==="event"){
     if(!P.event) P.event={};
-    EVENT_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.event[f.k]=feedback[f.k]; });
+    EVENT_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)) P.event[f.k]=(feedback[f.k]||"")+memoNoteBlock(memos,f.k); });
   }else if(type==="character"){
     if(!Array.isArray(P.characters)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
@@ -4409,6 +4421,8 @@ function applyFeedbackToProject(type, feedback){
       if(!ch) return;
       const parsed=parseCharFeedbackText(fb.text||"");
       Object.keys(parsed).forEach(k=>{ ch[k]=parsed[k]; });
+      const note=memoNoteBlock(memos,fb.id);
+      if(note) ch.desc=(ch.desc||"")+note;
     });
   }
   save(); render();
