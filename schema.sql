@@ -119,3 +119,19 @@ CREATE TABLE IF NOT EXISTS password_resets (
   used INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+
+-- ===== 2026-08-20: 첨삭 피드백 버전별 저장 + 원본 블록 메모 =====
+-- 이미 DB를 만든 뒤라면 아래 내용을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+-- (교수가 "피드백 전달"을 다시 누를 때마다 새 버전이 이 표에 쌓인다. submissions.feedback/feedback_at은
+--  계속 "최신 버전"의 캐시로 함께 갱신되므로 기존 기능(과제 목록의 첨삭 완료 표시 등)은 그대로 동작한다.
+--  이 표 도입 이전에 저장된 첨삭은 서버 코드가 자동으로 "버전 1"로 간주해 보여준다 — 별도 백필 불필요)
+CREATE TABLE IF NOT EXISTS submission_feedback_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  submission_id INTEGER NOT NULL,
+  version INTEGER NOT NULL,
+  feedback TEXT NOT NULL,   -- 그 버전의 첨삭 내용(JSON)
+  memos TEXT,               -- 그 버전에서 원본 블록에 단 메모 목록(JSON 배열), 없으면 NULL
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sfv_submission ON submission_feedback_versions(submission_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sfv_submission_version ON submission_feedback_versions(submission_id, version);

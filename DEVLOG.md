@@ -2,6 +2,64 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-20 (1) — 첨삭 화면에 "메모" 기능 추가 + 첨삭 피드백 버전별 저장
+
+**요청**: "과제 관리 페이지에서 학생들 과제를 첨삭하는 페이지가 구축되어있는데, 첨삭과 별도로 학생 과제에
+메모를 해주는 기능을 추가해줘. (1) 텍스트 드래그 후 우클릭 또는 블록에서 그냥 우클릭 시 메모 추가 메뉴
+(2) 메모는 블록 아래 옅은 노란색 배경, 돋움체로 여백 없이 (3) 드래그 선택 메모는 배경 노랑+각주번호
+(4) 선택 없는 메모는 각주번호 없이 *로 표시. 참고용 메모 기능이 이미 구축된 파일(첨부한 별도 프로젝트의
+index.html)을 검색해서 참고." + 추가 요청: "메모도 피드백 보내기로 반환했을 때 학생이 볼 수 있어야 하고
+학생이 지울 수도 있어야 한다" + "피드백 파일들은 버전별로 저장되도록 해서, 같은 과제를 여러 번 피드백
+했을 때 열 수 있도록 해줘. 과제 관리의 과제 리스트에서 해당 과제 블럭 오른쪽에 버전 드롭다운을 작게
+붙여줘." (버전 재편집 방식은 "이전 버전 이어서 편집", 학생 버전 열람 범위는 "모든 버전 열람 가능"으로
+질문해 확인 후 진행)
+
+- **스키마(신규, 수동 적용 필요 — 아래 "⚠️ 적용 안내" 참고)**: `submission_feedback_versions` 표 추가
+  (`submission_id, version, feedback, memos, created_at`, `(submission_id, version)` UNIQUE). 첨삭을
+  "피드백 전달"할 때마다 새 버전 행이 쌓이고, 기존 `submissions.feedback`/`feedback_at`은 항상 "최신
+  버전" 캐시로 함께 갱신되어 과제 목록의 "첨삭 완료" 표시 등 기존 기능은 그대로 동작. 이 표 도입 이전에
+  저장된 첨삭은 서버가 자동으로 "버전 1"로 간주해 보여주고, 그 상태에서 다음 저장이 일어나면 그 레거시
+  내용을 실제 버전 1 행으로 먼저 백필한 뒤 버전 2를 추가함(수동 백필 스크립트 불필요).
+- **functions/api/professor-submission.js**: GET에 `&version=N` 지원(없으면 최신) + 응답에 `memos`,
+  `versions`(전체 버전 목록), `viewingVersion`, `latestVersion` 추가. POST(`피드백 전달`) body에 `memos`
+  추가, 항상 새 버전으로 INSERT(덮어쓰지 않음) + `submissions` 캐시도 갱신.
+- **functions/api/student-submission.js**: GET에 동일하게 `&version=N` + `memos`/`versions`/
+  `viewingVersion`/`latestVersion` 추가(학생도 과거 버전 전체 열람 가능).
+- **functions/api/student-submission-memo.js**(신규): `POST {id, version, memoId}` — 학생이 자기
+  제출물의 특정 버전에 달린 메모 하나를 삭제.
+- **functions/api/professor-assignment.js**: 제출함 목록 쿼리에 `version_count` 서브쿼리 추가(버전
+  드롭다운 렌더링용).
+- **app.js**:
+  - `renderReviewPairs`/`openReviewBlockCtxMenu`를 메모 지원하도록 확장(`memos`, `memoOpts` 매개변수
+    추가). 신규 함수: `uidMemo`, `rawOffsetInMemoText`, `captureMemoSelection`(우클릭 직전 드래그 선택
+    범위를 원본 문자열 글자 오프셋으로 캡처 — 참고 파일의 `rawOffsetInTaContent`와 같은 방식),
+    `computePairMemoNumbering`, `renderMemoTargetText`(하이라이트+각주번호/*), `renderMemoCardsInto`
+    (메모 카드 목록). 메모는 항상 학생의 "원본" 텍스트에만 달림(첨삭 입력란 자체엔 안 달림).
+  - 이미 분리된(첨삭 중인) 블록에 메모가 있으면 "이전 버전" 패널은 diff 강조 대신 메모 강조를 우선
+    보여줌(같은 텍스트 위에 두 강조를 동시에 표시하기 어려워서 — 폴리시로 채택).
+  - `rProfSubmissionReview(id, version)`: 특정 과거 버전을 읽기 전용으로 볼 수 있게 되고, 최신 버전에서만
+    편집/메모/저장 가능. 저장 시 `memos`도 함께 전달, 저장 후 최신 버전으로 새로고침.
+  - `rProfAssignmentFolder`: 제출함 목록의 각 줄에 버전이 2개 이상이면 작은 `<select>` 버전 드롭다운을
+    붙여, 고르면 그 버전으로 바로 첨삭 화면이 열림(읽기 전용).
+  - `rFeedbackDetail(type, id, version)`(학생): 버전이 2개 이상이면 상단에 작은 버전 드롭다운 추가,
+    메모 카드에 삭제(✕) 버튼을 붙여 눌리면 `student-submission-memo` API로 즉시 서버 반영.
+- **style.css**: `mark.memo-hl`(드래그 메모 하이라이트, 노랑), `sup.memo-fn-num`/`sup.memo-star`(각주
+  번호/*), `.memo-block-list`/`.memo-block`(옅은 노란색 배경 + 돋움체, 본문 바로 아래 여백 없이 붙임),
+  `.submit-assign-row`/`.submit-version-select`(버전 드롭다운) 신규 추가.
+- **참고**: 첨부받은 다른 프로젝트("논문쓰기 도우미" 계열)의 index.html에 이미 구축돼 있던 메모 기능
+  (`addMemoAt`, `applyMemoHighlights`, `rawOffsetInTaContent` 등)을 검색해 오프셋 계산 방식(합성 배지
+  요소를 0글자로 세는 방식)을 그대로 참고해 적용함 — 단, 그 파일은 contentEditable 기반의 훨씬 복잡한
+  구조라 그대로 이식하지 않고, 이 프로젝트의 읽기전용 텍스트 구조에 맞게 단순화해서 새로 작성함.
+- **알려진 제한**: PDF 일괄 다운로드(`submissionToPdfBlob`)는 메모를 포함하지 않음(첨삭 내용만 인쇄).
+- **검증**: `node -c`로 app.js 및 새/수정된 functions/api/*.js 문법 확인. 실제 로그인·D1 저장까지 필요한
+  전체 흐름은 이 환경에서 재현 불가 — 실사용 중 이상이 있으면 알려달라고 안내 필요.
+
+**⚠️ 적용 안내(필수)**: 이번 기능은 새 표(`submission_feedback_versions`)가 필요합니다. Cloudflare
+대시보드 → Workers & Pages → D1 → storyhelperlite-db → Console에서 `schema.sql` 맨 아래
+"2026-08-20: 첨삭 피드백 버전별 저장 + 원본 블록 메모" 섹션의 SQL을 한 번 실행해야 메모/버전 기능이
+동작합니다(안 하면 "피드백 전달"이 실패함). 이전에도 이 단계를 깜빡해 며칠간 기능 전체가 500 에러였던
+적이 있으니([[project CLAUDE.md]] 참고) 꼭 확인 부탁드립니다.
+
 ## 2026-08-19 (19) — 플롯 구조 5종 추가(8단계 원형·사건 중간부터 시작·액자·비선형·옴니버스) + 구조별 가이드 문구
 
 **요청**: "플롯 생성에서 새 플롯 만들때 플롯 구조 선택할 때 현재 3막, 5막, 영웅의여정 12단계만 있는데.

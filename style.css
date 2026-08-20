@@ -524,6 +524,12 @@ body.logged-in .login-overlay { display: none; }
 .assign-type-badge { display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent);
   background: var(--accent2); border-radius: 999px; padding: 2px 9px; }
 
+/* 교수 — 과제 폴더 제출함 목록의 각 줄: 제출물 버튼 + (버전이 2개 이상이면) 작은 버전 드롭다운 */
+.submit-assign-row { display: flex; align-items: center; gap: 6px; }
+.submit-assign-row .submit-assign-item { flex: 1; min-width: 0; }
+.submit-version-select { flex-shrink: 0; font-size: 11px; padding: 3px 4px; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }
+
 /* 교수 — 과제 폴더 그리드 */
 .prof-assign-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
 .assign-folder { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; cursor: pointer; background: #fff; }
@@ -567,6 +573,26 @@ body.logged-in .login-overlay { display: none; }
 /* 이전 버전 안에서, 지금 입력 중인 첨삭 내용과 비교했을 때 실제로 달라진 부분만 옅은 붉은 배경으로 표시 */
 .version-prev-text .diff-bg{background:#f6d3cc;border-radius:2px}
 .ta-wrap.version-current{border-radius:0 0 6px 6px;border-color:var(--line);background:#fff}
+
+/* ===== 첨삭 화면 — 메모(첨삭과 별도로 학생 원본 텍스트에 다는 메모) =====
+   드래그로 선택해서 단 메모: 선택 범위 배경을 노랗게(mark.memo-hl) + 끝에 작은 각주번호(sup.memo-fn-num).
+   선택 없이 블록을 그냥 우클릭해서 단 메모: 각주번호 없이 블록 끝에 *(sup.memo-star)만 표시.
+   메모 카드(.memo-block)는 그 블록 텍스트 바로 아래에 여백 없이(margin-top:0) 붙고, 옅은 노란색 배경 +
+   돋움체를 쓴다. */
+mark.memo-hl{background:#ffe066;border-radius:2px;padding:0 1px;font:inherit;color:inherit}
+sup.memo-fn-num{font-size:10px;font-weight:700;color:var(--accent);margin:0 1px}
+sup.memo-star{font-size:12px;font-weight:700;color:var(--accent);margin:0 1px}
+.memo-block-list{margin-top:0;display:flex;flex-direction:column;gap:2px}
+/* 이전 버전(prev) 패널은 자체 padding이 0이고 안쪽 version-prev-text가 하단 padding을 갖고 있어서,
+   메모 카드 목록을 그 바로 밑에 진짜 "여백 없이" 붙이려면 그 하단 padding만큼 끌어올려야 한다 */
+.version-prev > .memo-block-list{margin-top:-6px}
+.memo-block{background:#fdf6d3;padding:5px 8px;display:flex;align-items:flex-start;gap:6px}
+.memo-block-marker{flex-shrink:0;font-size:11px;font-weight:700;color:var(--accent);line-height:1.6}
+.memo-block-text{flex:1;min-width:0;font-family:Dotum,"돋움",sans-serif;font-size:12px;line-height:1.6;
+  color:var(--ink);white-space:pre-wrap;word-break:break-word}
+.memo-block-del{flex-shrink:0;background:transparent;border:none;color:var(--muted);cursor:pointer;
+  font-size:11px;padding:2px 4px}
+.memo-block-del:hover{color:#b3503a}
 
 /* ===== 심플라인 아이콘 / 아이콘 버튼 ===== */
 .icon{width:15px;height:15px;vertical-align:-3px;flex-shrink:0}

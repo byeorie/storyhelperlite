@@ -3429,6 +3429,7 @@ const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기"};
 /* "과제 관리" 탭 안의 현재 화면 상태(팝업 대신 같은 탭 안에서 페이지처럼 전환) */
 let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
+let profReviewVersion=null;  // 과제 관리 목록의 버전 드롭다운으로 옛 버전을 골랐을 때 그 버전 번호 — null이면 최신(=이어서 편집 가능)
 let reviewSplitIds=new Set();// 첨삭 화면에서 "이전 버전 / 첨삭"으로 위아래 분리된 블록 id 모음
 /* 학생 계정의 [첨삭 보기] — 팝업 대신 그 탭(기획서/플롯/글쓰기) 안에서 페이지로 전환.
    null이면 평소 탭 화면, {type, mode:'list'}면 그 타입의 제출 목록, {type, mode:'detail', id}면 상세 */
@@ -3554,7 +3555,7 @@ async function openSubmitModal(type){
 
 /* [첨삭 보기] 페이지 — feedbackPage.mode에 따라 목록/상세 중 하나를 그 탭 안에 그림(팝업 아님) */
 function rFeedbackPage(){
-  if(feedbackPage.mode==="detail") return rFeedbackDetail(feedbackPage.type, feedbackPage.id);
+  if(feedbackPage.mode==="detail") return rFeedbackDetail(feedbackPage.type, feedbackPage.id, feedbackPage.version);
   return rFeedbackList(feedbackPage.type);
 }
 /* 이 탭(기획서/플롯/글쓰기) 종류로 내가 제출한 것들을 한 번에 모아 보여주는 목록 페이지
@@ -3587,8 +3588,10 @@ async function rFeedbackList(type){
     btn.onclick=()=>{ feedbackPage={type, mode:"detail", id:Number(btn.dataset.id)}; render(); };
   });
 }
-/* 내가 제출한 것 + 교수 첨삭 결과 보기(+ 내 작업물에 반영) 상세 페이지 */
-async function rFeedbackDetail(type, id){
+/* 내가 제출한 것 + 교수 첨삭 결과 보기(+ 내 작업물에 반영) 상세 페이지.
+   version을 주면(버전 드롭다운으로 과거 기록을 고르면) 그 버전을 보여준다 — 항상 읽기 전용이며,
+   교수님이 원본 블록에 단 메모는 학생이 직접 지울 수 있다(첨삭 텍스트 자체는 학생이 수정할 수 없음). */
+async function rFeedbackDetail(type, id, version){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="feedbackDetailBackBtn" style="margin-bottom:10px">${ICONS.close} 목록으로</button>
     <h2 id="feedbackDetailTitle">${ICONS.chat} 불러오는 중…</h2>
@@ -3596,7 +3599,7 @@ async function rFeedbackDetail(type, id){
   app.appendChild(c);
   c.querySelector("#feedbackDetailBackBtn").onclick=()=>{ feedbackPage={type, mode:"list"}; render(); };
 
-  const res=await apiFetch("student-submission?id="+id);
+  const res=await apiFetch("student-submission?id="+id+(version?("&version="+version):""));
   if(!c.isConnected) return;
   const titleEl=document.getElementById("feedbackDetailTitle");
   const wrap=document.getElementById("feedbackDetailWrap");
@@ -3610,12 +3613,24 @@ async function rFeedbackDetail(type, id){
     write:" \"이름: 대사\" 형식의 줄만 대사로 인식해서 되돌리며, 분기 블록은 복원되지 않습니다.",
   }[sub.type]||"";
   const mismatch = sub.projectName && P.name && sub.projectName!==P.name;
-  wrap.innerHTML=`<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
+  const versionPicker=(sub.versions && sub.versions.length>1)
+    ? `<label class="hint" style="display:inline-flex;align-items:center;gap:5px;margin:0 0 10px">버전
+        <select id="feedbackVersionSelect" style="font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px">
+          ${sub.versions.slice().reverse().map(v=>`<option value="${v.version}"${v.version===sub.viewingVersion?" selected":""}>버전 ${v.version}${v.version===sub.latestVersion?" (최신)":""}</option>`).join("")}
+        </select></label>`
+    : "";
+  wrap.innerHTML=`${versionPicker}<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
     ${mismatch?`<br><b style="color:#b3503a">※ 이 과제는 "${esc(sub.projectName)}" 작품에서 제출했는데, 지금 열려있는 작품은 "${esc(P.name)}"입니다. 다른 작품에 반영될 수 있으니 확인해주세요.</b>`:""}</p>
     <button class="btn" id="applyFeedbackBtn" style="margin-bottom:14px;width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>
     <div id="feedbackPairs"></div>`;
+  const verSel=document.getElementById("feedbackVersionSelect");
+  if(verSel) verSel.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(verSel.value)}; render(); };
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  renderReviewPairs(document.getElementById("feedbackPairs"), pairs, false, null);
+  const memos=Array.isArray(sub.memos)?sub.memos:[];
+  renderReviewPairs(document.getElementById("feedbackPairs"), pairs, false, null, memos, {
+    canDelete:true,
+    onDelete:(m)=>{ apiFetch("student-submission-memo", {method:"POST", body:JSON.stringify({id, version:sub.viewingVersion, memoId:m.id})}); },
+  });
   document.getElementById("applyFeedbackBtn").onclick=()=>{
     if(!confirm(`이 첨삭 내용을 지금 작업 중인 "${P.name||""}"의 ${TYPE_LABEL[sub.type]}에 덮어씁니다.\n제출 이후 더 수정한 내용이 있다면 사라질 수 있습니다. 계속할까요?`)) return;
     applyFeedbackToProject(sub.type, sub.feedback);
@@ -3648,7 +3663,7 @@ async function rProfStudents(){
    팝업이 아니라 이 탭 안에서 화면만 바뀐다: 과제 목록 → (폴더 클릭) 제출함 → (제출물 클릭) 첨삭 화면.
    profAssignFolderId/profReviewId 상태값으로 어느 화면을 보여줄지 결정한다(뒤로가기 버튼이 각각 null로 리셋). */
 function rProfAssignments(){
-  if(profReviewId){ rProfSubmissionReview(profReviewId); return; }
+  if(profReviewId){ rProfSubmissionReview(profReviewId, profReviewVersion); return; }
   if(profAssignFolderId){ rProfAssignmentFolder(profAssignFolderId); return; }
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>${ICONS.book} 과제 관리</h2>
@@ -3754,14 +3769,27 @@ async function rProfAssignmentFolder(id){
     pdfBtn.onclick=()=>bulkDownloadAssignmentPdfs(assignment.title, submissions, pdfBtn);
   }
   if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
-  wrap.innerHTML=`<div class="submit-assign-list submit-assign-list--compact">${submissions.map(s=>`
-    <button type="button" class="submit-assign-item" data-id="${s.id}">
-      <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
-      <span class="assign-type-badge">${esc(s.type_label)}</span>
-      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}</span>
-    </button>`).join("")}</div>`;
+  wrap.innerHTML=`<div class="submit-assign-list submit-assign-list--compact">${submissions.map(s=>{
+    /* version_count는 버전 테이블 기준(2026-08-20 이 기능 이후 저장분만) — 그 이전에 저장된 첨삭 1건은
+       버전 테이블엔 없지만 has_feedback만으로도 "버전 1" 하나로 취급해 보여준다(서버 GET과 동일한 규칙) */
+    const effCount = s.version_count || (s.has_feedback?1:0);
+    return `<div class="submit-assign-row">
+      <button type="button" class="submit-assign-item" data-id="${s.id}">
+        <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
+        <span class="assign-type-badge">${esc(s.type_label)}</span>
+        <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}</span>
+      </button>${effCount>1?`
+      <select class="submit-version-select" data-id="${s.id}" title="과거 피드백 버전 보기">
+        ${Array.from({length:effCount},(_,i)=>effCount-i).map(v=>`<option value="${v}">버전 ${v}${v===effCount?" (최신)":""}</option>`).join("")}
+      </select>`:""}
+    </div>`;
+  }).join("")}</div>`;
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
-    btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); render(); };
+    btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); profReviewVersion=null; render(); };
+  });
+  wrap.querySelectorAll(".submit-version-select").forEach(sel=>{
+    sel.onclick=e=>e.stopPropagation();
+    sel.onchange=()=>{ profReviewId=Number(sel.dataset.id); profReviewVersion=Number(sel.value); render(); };
   });
 }
 
@@ -3860,29 +3888,49 @@ async function bulkDownloadAssignmentPdfs(assignmentTitle, submissionList, btn){
 
 /* 제출물 상세 — 첨삭 화면 (교수, 페이지). 기본은 원본 블록만 한 줄로 보여주고,
    블록을 우클릭해 [첨삭]을 선택해야 그 블록만 이전 버전(위)/첨삭 입력란(아래)으로 분리된다.
-   이미 첨삭이 저장되어 원본과 달라진 블록은 처음부터 분리된 채로 보여준다. */
-async function rProfSubmissionReview(id){
+   이미 첨삭이 저장되어 원본과 달라진 블록은 처음부터 분리된 채로 보여준다.
+   version을 주면(과제 관리 목록의 버전 드롭다운에서 옛 버전을 골랐을 때) 그 버전을 읽기 전용으로 보여준다 —
+   편집·메모 추가·피드백 전달은 항상 최신 버전에서만 할 수 있고, "피드백 전달"을 다시 누르면 지금 화면
+   내용(이전 버전에서 이어서 편집한 첨삭+메모)이 새 버전으로 저장된다. */
+async function rProfSubmissionReview(id, version){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} 제출함으로</button>
     <h2 id="reviewTitle">${ICONS.edit} 불러오는 중…</h2>
-    <p class="hint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>을 선택하면 이전 버전(위)·첨삭 입력란(아래)으로 나뉩니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
+    <p class="hint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>(위/아래로 분리) 또는 <b>메모</b>(텍스트를 드래그해 선택한 채 우클릭하면 그 범위에 각주로, 그냥 우클릭하면 블록 전체에 표시)를 달 수 있습니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
+    <div id="reviewVersionBanner"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
     <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
   app.appendChild(c);
-  c.querySelector("#reviewBackBtn").onclick=()=>{ profReviewId=null; render(); };
+  c.querySelector("#reviewBackBtn").onclick=()=>{ profReviewId=null; profReviewVersion=null; render(); };
 
-  const res=await apiFetch("professor-submission?id="+id);
+  const res=await apiFetch("professor-submission?id="+id+(version?("&version="+version):""));
   if(!c.isConnected) return;
   const titleEl=document.getElementById("reviewTitle");
   const pairsEl=document.getElementById("reviewPairs");
+  const bannerEl=document.getElementById("reviewVersionBanner");
+  const saveBtn=document.getElementById("reviewSaveBtn");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const sub=res.body.submission;
+  const isLatest = !sub.latestVersion || sub.viewingVersion===sub.latestVersion;
   if(titleEl) titleEl.innerHTML=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}`;
+  if(bannerEl){
+    if(!isLatest){
+      bannerEl.innerHTML=`<p class="hint" style="color:var(--accent)">버전 ${sub.viewingVersion} / ${sub.latestVersion} 을 보고 있습니다 (과거 기록, 읽기 전용). <button type="button" class="btn ghost sm" id="reviewGoLatestBtn" style="margin-left:6px">최신 버전에서 계속 편집</button></p>`;
+      const goBtn=document.getElementById("reviewGoLatestBtn");
+      if(goBtn) goBtn.onclick=()=>{ profReviewVersion=null; render(); };
+    }else if(sub.latestVersion){
+      bannerEl.innerHTML=`<p class="hint">현재 버전 ${sub.latestVersion}을 이어서 편집하는 중입니다. "피드백 전달"을 누르면 버전 ${sub.latestVersion+1}로 새로 저장됩니다.</p>`;
+    }else{
+      bannerEl.innerHTML="";
+    }
+  }
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
   reviewSplitIds=new Set(pairs.filter(p=>p.after!==p.before).map(p=>p.id));
-  renderReviewPairs(pairsEl, pairs, true, reviewSplitIds);
+  const reviewMemos=Array.isArray(sub.memos)?sub.memos.slice():[];
+  renderReviewPairs(pairsEl, pairs, isLatest, reviewSplitIds, reviewMemos, {canAdd:isLatest, canDelete:isLatest});
+  if(saveBtn) saveBtn.style.display=isLatest?"":"none";
 
-  document.getElementById("reviewSaveBtn").onclick=async ()=>{
+  if(saveBtn) saveBtn.onclick=async ()=>{
     const byId={}; pairs.forEach(p=>byId[p.id]=p);
     pairsEl.querySelectorAll(".review-pair.split textarea").forEach(ta=>{
       const wrap=ta.closest(".review-pair");
@@ -3891,8 +3939,8 @@ async function rProfSubmissionReview(id){
     });
     const afterList=pairs.map(p=>p.after);
     const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList);
-    const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback})});
-    if(r.ok) alert("피드백을 학생에게 전달했습니다.");
+    const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback, memos:reviewMemos})});
+    if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewVersion=null; rProfSubmissionReview(id); }
     else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
   };
 }
@@ -3925,24 +3973,142 @@ function buildReviewPairs(type, data, feedback){
   }
   return [];
 }
-/* 첨삭 화면 공통 렌더러 — editable=true(교수: 원본 블록 우클릭으로 첨삭 분리, textarea로 입력)
-   editable=false(학생: 읽기전용, 원본과 다른 블록만 자동으로 위/아래 분리해서 보여줌) */
-function renderReviewPairs(container, pairs, editable, splitIds){
+
+/* ===== 첨삭 화면 — 메모(첨삭과는 별도로 학생 원본 텍스트에 다는 메모) =====
+   드래그로 범위를 선택하고 우클릭 "메모"를 누르면 그 범위가 노란 배경(<mark>)으로 남고 끝에 작은
+   각주번호(윗첨자)가 붙는다. 선택 없이 블록을 그냥 우클릭해서 단 메모는 범위가 없는(start:null)
+   "일반 메모"로, 블록 끝에 *(윗첨자)만 붙는다. 메모는 review-pair마다(p.id 기준) 독립적으로 번호를
+   매긴다. 저장 형태: {id, pairId, start, end, text} (start/end는 원본(before) 문자열 기준 글자
+   오프셋 — end==null이면 일반 메모). 항상 학생의 "원본" 텍스트에만 달리고(첨삭 입력란 자체에는 안 달림),
+   피드백과 함께 버전별로 저장되어 학생도 그대로 볼 수 있다. */
+function uidMemo(){ return "m"+Date.now()+Math.floor(Math.random()*1000); }
+/* el(순수 텍스트만 담긴 요소) 안의 (targetNode,targetOffset) 위치가 rawText 기준 몇 번째 글자인지 계산.
+   메모 표시용으로 심어둔 <sup data-memo-synthetic="1">(각주번호·별표)은 원본 글자수에 안 잡히도록 건너뛴다
+   (그래야 이미 메모가 달린 블록에서 새로 드래그 선택해도 오프셋이 밀리지 않는다). */
+function rawOffsetInMemoText(el, targetNode, targetOffset){
+  let acc=0, done=false;
+  function measure(node){
+    if(done) return;
+    if(node===targetNode){ acc += node.nodeType===3 ? Math.min(targetOffset, node.nodeValue.length) : 0; done=true; return; }
+    if(node.nodeType===3){ acc+=node.nodeValue.length; return; }
+    if(node.dataset && node.dataset.memoSynthetic==="1") return;
+    for(let i=0;i<node.childNodes.length;i++){ measure(node.childNodes[i]); if(done) return; }
+  }
+  if(targetNode===el){
+    for(let i=0;i<targetOffset && i<el.childNodes.length;i++) measure(el.childNodes[i]);
+    return acc;
+  }
+  measure(el);
+  return acc;
+}
+/* 우클릭 순간(메뉴가 뜨기 직전) el 안에 걸린 드래그 선택 범위를 원본 문자열 오프셋으로 캡처.
+   선택이 없거나 el 밖이면 null(=이 우클릭은 "선택 없이 단 일반 메모"로 처리됨). */
+function captureMemoSelection(el){
+  const sel=window.getSelection();
+  if(!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  const r=sel.getRangeAt(0);
+  if(!el.contains(r.startContainer) || !el.contains(r.endContainer)) return null;
+  const start=rawOffsetInMemoText(el, r.startContainer, r.startOffset);
+  const end=rawOffsetInMemoText(el, r.endContainer, r.endOffset);
+  if(end<=start) return null;
+  return {start:Math.min(start,end), end:Math.max(start,end)};
+}
+/* memos 중 이 pair(pairId)에 속한 것만 골라, 드래그 선택(각주) 메모에 시작 위치 순서로 1,2,3...을 매긴다.
+   (본문 옆 각주번호와 아래 메모 카드의 번호가 항상 같은 순서로 매겨지도록 이 번호표를 함께 씀) */
+function computePairMemoNumbering(memos, pairId){
+  const mine=(memos||[]).filter(m=>m.pairId===pairId);
+  const ranged=mine.filter(m=>m.start!=null).sort((a,b)=>a.start-b.start);
+  const numMap=new Map(); ranged.forEach((m,i)=>numMap.set(m.id, i+1));
+  return {mine, numMap};
+}
+/* rawText를 mine(이 블록의 메모들)의 범위에 따라 일반 텍스트/<mark>(드래그 메모, 각주번호 포함)로
+   다시 그리고, 끝에 "일반 메모"(범위 없음) 개수만큼 *를 붙인다. */
+function renderMemoTargetText(el, rawText, mine, numMap){
+  el.textContent="";
+  const ranged=mine.filter(m=>m.start!=null && m.end!=null && m.end>m.start).sort((a,b)=>a.start-b.start);
+  const general=mine.filter(m=>m.start==null);
+  if(rawText && rawText.trim()){
+    if(!ranged.length){
+      el.appendChild(document.createTextNode(rawText));
+    }else{
+      let cur=0;
+      ranged.forEach(m=>{
+        const s=Math.max(cur,Math.min(m.start,rawText.length)), en=Math.max(s,Math.min(m.end,rawText.length));
+        if(s>cur) el.appendChild(document.createTextNode(rawText.slice(cur,s)));
+        const mark=document.createElement("mark"); mark.className="memo-hl"; mark.dataset.memoId=m.id;
+        mark.textContent=rawText.slice(s,en);
+        el.appendChild(mark);
+        const sup=document.createElement("sup"); sup.className="memo-fn-num"; sup.dataset.memoSynthetic="1";
+        sup.textContent=String(numMap.get(m.id)||"");
+        el.appendChild(sup);
+        cur=en;
+      });
+      if(cur<rawText.length) el.appendChild(document.createTextNode(rawText.slice(cur)));
+    }
+  }else if(!general.length){
+    el.innerHTML='<span class="muted">(내용 없음)</span>';
+  }
+  general.forEach(()=>{
+    const sup=document.createElement("sup"); sup.className="memo-star"; sup.dataset.memoSynthetic="1"; sup.textContent="*";
+    el.appendChild(sup);
+  });
+}
+/* container(블록 el의 부모, 예: box/prev) 맨 아래에 이 블록(mine)에 달린 메모들을 카드로 나열한다.
+   본문 텍스트 바로 아래 여백 없이 붙고(margin-top:0), 옅은 노란색 배경/돋움체는 style.css의 .memo-block에서.
+   opts.canDelete=true면 각 카드에 삭제(✕) 버튼을 붙이고 opts.onDelete(memo)를 호출한다. */
+function renderMemoCardsInto(container, mine, numMap, opts){
+  const old=container.querySelector(":scope > .memo-block-list"); if(old) old.remove();
+  if(!mine.length) return;
+  const list=document.createElement("div"); list.className="memo-block-list";
+  mine.forEach(m=>{
+    const box=document.createElement("div"); box.className="memo-block";
+    const marker=document.createElement("span"); marker.className="memo-block-marker";
+    marker.textContent = m.start!=null ? String(numMap.get(m.id)||"") : "*";
+    box.appendChild(marker);
+    const txt=document.createElement("div"); txt.className="memo-block-text"; txt.textContent=m.text||"";
+    box.appendChild(txt);
+    if(opts && opts.canDelete){
+      const del=document.createElement("button"); del.type="button"; del.className="memo-block-del"; del.textContent="✕"; del.title="메모 삭제";
+      del.onclick=()=>opts.onDelete(m);
+      box.appendChild(del);
+    }
+    list.appendChild(box);
+  });
+  container.appendChild(list);
+}
+
+/* 첨삭 화면 공통 렌더러 — editable=true(교수: 원본 블록 우클릭으로 첨삭 분리·메모 추가, textarea로 입력)
+   editable=false(학생: 읽기전용, 원본과 다른 블록만 자동으로 위/아래 분리해서 보여줌)
+   memos: 이 제출물(버전)에 달린 메모 배열(모든 pair 공통, pairId로 구분됨) — 없으면 [].
+   memoOpts: {canAdd, canDelete, onDelete(memo)} — canAdd면 우클릭 메뉴에 [메모]가 추가되고,
+   canDelete면 메모 카드에 삭제 버튼이 붙는다(눌리면 로컬에서 지우고 onDelete로 알려줌 — 교수 초안
+   편집 중엔 저장 전이라 onDelete 없이 로컬 배열만 바뀌고, 학생 화면에선 onDelete로 즉시 서버에 반영). */
+function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts){
+  memos = memos || [];
+  memoOpts = memoOpts || {};
   container.innerHTML="";
   if(!pairs.length){ container.innerHTML=`<p class="hint">내용이 없습니다.</p>`; return; }
+  const rerender=()=>renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts);
+  const onDeleteMemo=(m)=>{
+    const idx=memos.indexOf(m); if(idx>-1) memos.splice(idx,1);
+    if(memoOpts.onDelete) memoOpts.onDelete(m);
+    rerender();
+  };
   pairs.forEach(p=>{
     const changed=p.after!==p.before;
     const split = editable ? splitIds.has(p.id) : changed;
+    const {mine, numMap}=computePairMemoNumbering(memos, p.id);
     const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":""); wrap.dataset.id=p.id;
+    let memoTargetEl;
     if(!split){
       const box=document.createElement("div"); box.className="plan-block review-before";
       const lbl=document.createElement("label"); lbl.textContent=p.label;
       const txt=document.createElement("div"); txt.className="review-before-text";
-      if(p.before && p.before.trim()) txt.textContent=p.before;
-      else txt.innerHTML='<span class="muted">(내용 없음)</span>';
+      renderMemoTargetText(txt, p.before, mine, numMap);
       box.append(lbl, txt);
+      renderMemoCardsInto(box, mine, numMap, {canDelete:memoOpts.canDelete, onDelete:onDeleteMemo});
       wrap.appendChild(box);
-      if(editable) wrap.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openReviewBlockCtxMenu(e.clientX, e.clientY, p, wrap, container, pairs, splitIds, editable); });
+      memoTargetEl=txt;
     }else{
       const prev=document.createElement("div"); prev.className="version-prev";
       const toggle=document.createElement("div"); toggle.className="version-prev-toggle";
@@ -3958,7 +4124,7 @@ function renderReviewPairs(container, pairs, editable, splitIds){
       let getAfter;
       if(editable){
         const ta=document.createElement("textarea"); ta.className="plan-ta-lg"; ta.value=p.after;
-        ta.oninput=()=>{ prevText.innerHTML=diffPrevHtml(p.before, ta.value); };
+        ta.oninput=()=>{ if(!mine.length) prevText.innerHTML=diffPrevHtml(p.before, ta.value); };
         cur.appendChild(ta);
         getAfter=()=>ta.value;
       }else{
@@ -3967,25 +4133,46 @@ function renderReviewPairs(container, pairs, editable, splitIds){
         cur.appendChild(txt);
         getAfter=()=>p.after;
       }
-      prevText.innerHTML=diffPrevHtml(p.before, getAfter());
+      /* 이 블록에 메모가 있으면 "이전 버전" 패널은 첨삭 diff 강조 대신 메모 강조(하이라이트+각주번호)를
+         보여준다 — 같은 텍스트 위에 두 강조를 함께 표시하기 어려워, 메모가 달린 블록은 메모 표시를 우선한다 */
+      if(mine.length) renderMemoTargetText(prevText, p.before, mine, numMap);
+      else prevText.innerHTML=diffPrevHtml(p.before, getAfter());
+      renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, onDelete:onDeleteMemo});
       wrap.append(prev, cur);
-      if(editable) wrap.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openReviewBlockCtxMenu(e.clientX, e.clientY, p, wrap, container, pairs, splitIds, editable); });
+      memoTargetEl=prevText;
+    }
+    if(editable){
+      wrap.addEventListener("contextmenu", e=>{
+        e.preventDefault(); e.stopPropagation();
+        const memoRange = memoOpts.canAdd ? captureMemoSelection(memoTargetEl) : null;
+        openReviewBlockCtxMenu(e.clientX, e.clientY, p, wrap, pairs, splitIds, editable, memos, memoOpts, memoRange, rerender);
+      });
     }
     container.appendChild(wrap);
   });
 }
 /* 첨삭 화면(교수) 블록 우클릭 메뉴 — 원본 블록이면 [첨삭](위/아래로 분리),
-   이미 분리된 블록이면 [원본 보기로 되돌리기](입력 중이던 첨삭 내용은 유지한 채 다시 원본 한 줄 보기로) */
-function openReviewBlockCtxMenu(x, y, p, wrap, container, pairs, splitIds, editable){
+   이미 분리된 블록이면 [원본 보기로 되돌리기](입력 중이던 첨삭 내용은 유지한 채 다시 원본 한 줄 보기로),
+   메모는 memoOpts.canAdd일 때 항상 추가 가능 — 우클릭 직전에 캡처한 memoRange가 있으면 드래그 선택
+   메모(각주번호), 없으면 범위 없는 일반 메모(*)가 된다. */
+function openReviewBlockCtxMenu(x, y, p, wrap, pairs, splitIds, editable, memos, memoOpts, memoRange, rerender){
   if(!editable) return;
   const m=document.getElementById("ctxMenu"); if(!m) return;
   const split=splitIds.has(p.id);
   const items = split
     ? [["원본 보기로 되돌리기",ICONS.eraser,()=>{
         const ta=wrap.querySelector("textarea"); if(ta) p.after=ta.value;
-        splitIds.delete(p.id); renderReviewPairs(container, pairs, editable, splitIds);
+        splitIds.delete(p.id); rerender();
       }]]
-    : [["첨삭",ICONS.edit,()=>{ splitIds.add(p.id); renderReviewPairs(container, pairs, editable, splitIds); }]];
+    : [["첨삭",ICONS.edit,()=>{ splitIds.add(p.id); rerender(); }]];
+  if(memoOpts && memoOpts.canAdd){
+    items.push([memoRange?"메모":"메모 추가", ICONS.chat, ()=>{
+      const text=prompt("메모를 입력하세요:", "");
+      if(text===null || !text.trim()) return;
+      memos.push({ id:uidMemo(), pairId:p.id, start:memoRange?memoRange.start:null, end:memoRange?memoRange.end:null, text:text.trim() });
+      rerender();
+    }]);
+  }
   m.innerHTML="";
   items.forEach(([label,icon,fn])=>{
     const b=document.createElement("button");

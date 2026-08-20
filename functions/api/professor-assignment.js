@@ -18,7 +18,8 @@ export async function onRequestGet({ request, env }) {
 
   const { results } = await env.DB.prepare(
     "SELECT s.id, s.type, s.project_name, s.submitted_at, s.feedback_at, " +
-    "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username " +
+    "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username, " +
+    "  (SELECT COUNT(*) FROM submission_feedback_versions v WHERE v.submission_id = s.id) AS version_count " +
     "FROM submissions s JOIN users u ON u.id = s.student_id " +
     "WHERE s.assignment_id = ? ORDER BY s.submitted_at DESC"
   ).bind(id).all();
