@@ -273,6 +273,17 @@ body.sb-collapsed .plot-modal-overlay.center-content{left:44px}
 .plot-pick-item:hover{background:var(--accent2);border-color:var(--accent)}
 .plot-pick-text{flex:1;font-size:13px;font-weight:600;min-width:0;word-break:break-word}
 
+/* 사용법 안내 모달 */
+.guide-modal{width:640px}
+.guide-modal-body{overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px}
+.guide-section{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:#fff}
+.guide-section summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--accent);list-style:none}
+.guide-section summary::-webkit-details-marker{display:none}
+.guide-section summary::before{content:"▸ ";display:inline-block}
+.guide-section[open] summary::before{content:"▾ "}
+.guide-section-body{margin-top:8px;font-size:13px;line-height:1.6;color:var(--ink)}
+.guide-section-body ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+
 /* ===== ✍️ 글쓰기 ===== */
 #app.wide{max-width:none}
 .write-layout{display:flex;gap:14px;align-items:flex-start}

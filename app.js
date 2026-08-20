@@ -4487,8 +4487,84 @@ function applyFeedbackToProject(type, feedback, memos){
 /* 정보 */
 document.getElementById("aboutLink").onclick=e=>{
   e.preventDefault();
-  alert("스토리 가이드\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
+  alert("스토리 가이드\n웹툰 전공 스토리 제작 도구\n\n- 로그인하면 서버와 브라우저에 함께 저장됩니다\n- 정기적으로 '내보내기 → 작품 파일(.story)'로 백업을 권장합니다");
 };
+
+/* 사용법 안내 모달 */
+const GUIDE_SECTIONS=[
+  {title:"시작하기 (회원가입 · 로그인)", open:true, html:`
+    <ul>
+      <li>화면 왼쪽 위 "회원가입" 탭에서 소속 학교 · 이름 · 아이디 · 비밀번호 · 이메일을 입력해 가입합니다.</li>
+      <li>가입 후 아이디 · 비밀번호로 로그인하면, 우측 상단에 프로필 아이콘이 나타납니다.</li>
+      <li>아이디나 비밀번호를 잊었다면 로그인 화면의 "아이디 / 비밀번호를 잊으셨나요?" 링크를 눌러 가입 시 등록한 이메일로 찾을 수 있습니다.</li>
+    </ul>`},
+  {title:"작품 관리 (상단 툴바)", html:`
+    <ul>
+      <li><b>새 작품</b>: 좌측 상단 문서 아이콘으로 새 작품을 만들고, 여러 작품을 탭으로 동시에 열어 작업할 수 있습니다.</li>
+      <li><b>다른 작품 열기</b>: 상단 가운데 드롭다운에서 닫아둔 작품도 다시 열 수 있습니다. 옆의 아이콘으로 이름 변경 · 삭제도 가능합니다.</li>
+      <li><b>저장</b>: 작업 중 자동 저장되며, 저장 아이콘(Ctrl+S)으로 즉시 저장할 수도 있습니다. 실행취소(Ctrl+Z) · 다시실행(Ctrl+Shift+Z)도 지원합니다.</li>
+      <li><b>불러오기 / 내보내기</b>: 내보내기 아이콘에서 기획서 · 대본 · 대사만 (.docx), 콘티 (.pdf), 작품 전체 백업 파일(.story)을 받을 수 있습니다. 받아둔 .story 파일은 "불러오기"로 다시 열 수 있습니다.</li>
+    </ul>`},
+  {title:"창작 순서 (왼쪽 메뉴)", html:`
+    <ul>
+      <li><b>아이디어 수집 → 아이디어 탐색</b>: 떠오르는 소재를 자유롭게 기록하고, 태그로 분류하며 방향을 넓혀갑니다.</li>
+      <li><b>기획서 작성</b>: 제목 · 장르 · 시놉시스 등 작품의 전체 뼈대를 정리합니다.</li>
+      <li><b>캐릭터 설정</b>: 등장인물을 MBTI · 에니어그램 기반으로 구체화합니다. 오른쪽에서 기획서 미리보기를 함께 볼 수 있습니다.</li>
+      <li><b>배경 설정 / 사건 설정</b>: 세계관 · 배경, 주요 사건을 정리합니다. 역시 기획서 미리보기가 함께 제공됩니다.</li>
+      <li><b>플롯 생성</b>: "영웅의 여정" 12단계 구조에 맞춰 아이디어 블록을 배치해 이야기 흐름을 짭니다.</li>
+      <li><b>글쓰기</b>: 장면별 대본 · 대사를 작성합니다.</li>
+      <li><b>콘티제작</b>: 이미지를 업로드하거나 직접 그려 콘티를 만듭니다.</li>
+    </ul>`},
+  {title:"스토리텔링 학습", html:`
+    <ul>
+      <li>창작이 막힐 때 참고할 수 있는 스토리텔링 이론 카드 모음입니다. 항목을 눌러 자세한 설명 · 표 · 예시를 볼 수 있습니다.</li>
+    </ul>`},
+  {title:"과제 제출과 첨삭 반영 (학생)", html:`
+    <ul>
+      <li>담당 교수님을 여러 명 등록했다면, 상단 툴바에서 제출할 교수(수업)를 먼저 선택하세요.</li>
+      <li>각 작성 화면 상단의 <b>[제출]</b> 버튼으로 현재 내용을 교수님께 제출합니다.</li>
+      <li><b>[첨삭 보기]</b>에서 교수님이 남긴 항목별 피드백과 메모를 확인할 수 있습니다.</li>
+      <li>"반영" 버튼을 누르면 첨삭 내용이 내 작업물에 자동으로 채워지고, 교수님 메모는 별도 카드로 표시됩니다(필요 없으면 카드의 ✕로 삭제 가능).</li>
+    </ul>`},
+  {title:"교수 계정 기능", html:`
+    <ul>
+      <li><b>학생 관리</b>: 내 수업 코드로 등록한 학생 명단과 과제 제출 현황을 확인합니다.</li>
+      <li><b>과제 관리</b>: 과제 폴더를 만들고, 제출된 작업물에 항목별 첨삭과 메모를 남깁니다.</li>
+    </ul>`},
+  {title:"관리자 계정 기능", html:`
+    <ul>
+      <li><b>회원 관리 · 서버 초기화</b>: 전체 회원(학생 · 교수) 목록 관리와 서버 데이터 초기화를 수행합니다.</li>
+    </ul>`},
+  {title:"계정 설정", html:`
+    <ul>
+      <li>우측 상단 프로필 아이콘 → <b>설정</b>에서 소속 학교 · 이름 · 이메일을 수정할 수 있습니다.</li>
+      <li>같은 화면에서 "비밀번호 변경 메일 보내기"를 누르면 가입 이메일로 비밀번호 변경 링크가 발송됩니다.</li>
+    </ul>`},
+  {title:"데이터 보관 안내", html:`
+    <ul>
+      <li>로그인 상태에서는 작성 내용이 서버와 이 브라우저에 함께 저장됩니다.</li>
+      <li>서버 저장본은 3개월 이상 갱신되지 않으면 자동 삭제됩니다(브라우저에 저장된 내용은 그대로 유지).</li>
+      <li>중요한 작품은 [내보내기 → 작품 파일(.story)]로 주기적으로 백업해두는 것을 권장합니다.</li>
+    </ul>`},
+];
+function openUsageGuide(){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay center-content";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal guide-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="사용법";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div"); body.className="guide-modal-body";
+  body.innerHTML=GUIDE_SECTIONS.map(sec=>
+    `<details class="guide-section"${sec.open?" open":""}>
+       <summary>${esc(sec.title)}</summary>
+       <div class="guide-section-body">${sec.html}</div>
+     </details>`).join("");
+  box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+}
+document.getElementById("usageGuideLink").onclick=e=>{ e.preventDefault(); openUsageGuide(); };
 
 /* 왼쪽 메뉴 접기/펼치기 버튼 + 저장된 접힘 상태 적용 */
 document.getElementById("sbToggleBtn").onclick=()=>{ UICOL.sb=!UICOL.sb; saveUiCollapse(); applyUiCollapse(); };
