@@ -55,7 +55,7 @@ function onAuthChanged(){
   refreshProfNavVisibility();
   refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
-  if((activeTab==="profStudents"||activeTab==="profAssignments") && !isProfessor()) forceTab("idea");
+  if((activeTab==="profStudents"||activeTab==="profAssignments"||activeTab==="sampleData") && !isProfessor()) forceTab("idea");
   render();
 }
 /* 상단 툴바 — 학생 계정이 등록한 교수(수업) 표시/선택 (2026-08-20 추가).
@@ -500,14 +500,17 @@ function render(){
   try{
     refreshProjSelect();
     app.innerHTML="";
-    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||(activeTab==="character"&&!!charDetailFor));
+    // 2026-08-20: 캐릭터 탭은 상세 편집 화면(charDetailFor 있음)일 때만 넓게 표시됐는데,
+    // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
+    // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
+    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character");
     if(!P) P=currentProject();
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profStudents:rProfStudents, profAssignments:rProfAssignments, learn:rLearn};
+      profStudents:rProfStudents, profAssignments:rProfAssignments, sampleData:rSampleData, learn:rLearn};
     (renderers[activeTab]||rIdea)();
   }catch(e){
     console.error("렌더링 오류:", e);
@@ -2893,17 +2896,25 @@ async function exportScript(){
   triggerDownload(blob, (P.name||"story")+"_대본.docx");
 }
 
-/* 2) 대사만 출력 — Word(.docx), 표 없이 줄바꿈으로만 블록 구분. 같은 블록의 대사는 이어서 출력, 캐릭터명은 제외 */
+/* 2) 대사만 출력 — Word(.docx), 캐릭터명은 제외하고 대사만. 대사 한 줄마다 문단을 따로 만들고,
+   그 사이를 빈 줄 2개(2줄)로 띄워서 한 줄로 이어 붙지 않고 구분되어 보이도록 함 (2026-08-20 수정 —
+   예전엔 같은 블록 안 대사를 공백으로 이어붙여 한 줄로 출력했었음) */
 async function exportDialogueOnly(){
   const blocks=allWriteBlocksOrdered();
   if(typeof docx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
   const {Document,Packer,Paragraph,TextRun}=docx;
-  const paras=[];
+  const lines=[];
   blocks.forEach(bl=>{
-    const lines=(bl.items||[]).filter(it=>it.type==="line" && (it.text||"").trim().length).map(it=>it.text.trim());
-    if(lines.length) paras.push(new Paragraph({children:[new TextRun({text:lines.join(" "), bold:true})]}));
+    (bl.items||[]).forEach(it=>{
+      if(it.type==="line" && (it.text||"").trim().length) lines.push(it.text.trim());
+    });
   });
-  if(!paras.length){ alert("작성된 대사가 없습니다."); return; }
+  if(!lines.length){ alert("작성된 대사가 없습니다."); return; }
+  const paras=[];
+  lines.forEach((text,i)=>{
+    paras.push(new Paragraph({children:[new TextRun({text, bold:true})]}));
+    if(i<lines.length-1){ paras.push(new Paragraph("")); paras.push(new Paragraph("")); }
+  });
   const doc=new Document({sections:[{children:paras}]});
   const blob=await Packer.toBlob(doc);
   triggerDownload(blob, (P.name||"story")+"_대사.docx");
@@ -2992,7 +3003,7 @@ function importStory(e){
     try{
       const obj=JSON.parse(rd.result);
       if(!obj.plot||!obj.characters)throw 0;
-      obj.id=uid(); obj.name=(obj.name||"가져온 작품")+" (복원)";
+      obj.id=uid(); obj.name=obj.name||"가져온 작품"; // 2026-08-20: 불러온 이름 그대로 사용(예전엔 " (복원)"을 자동으로 붙였음)
       DB.projects.push(obj); DB.openIds.push(obj.id); DB.current=obj.id; P=currentProject();
       resetUndoHistory(); save(); refreshProjSelect(); render();
       alert("불러오기 완료!");
@@ -3791,6 +3802,39 @@ async function rProfStudents(){
   </tr></thead><tbody>${students.map(s=>`<tr>
     <td>${esc(s.school)}</td><td>${esc(s.name)}</td><td>${esc(s.username)}</td><td>${esc(s.email)}</td><td>${fmtDate(s.created_at)}</td>
   </tr>`).join("")}</tbody></table><p class="hint">총 ${students.length}명</p>`;
+}
+
+/* ===== 교수 — 샘플 데이터 (2026-08-20 추가)
+   앱의 모든 기능(아이디어 수집·탐색, 기획서, 캐릭터, 배경, 사건, 플롯, 글쓰기)을 미리 채워둔 예시
+   작품을 목록에서 바로 열 수 있게 한다 — 학생들에게 사용법을 시연할 때 쓰기 위함. 예시 데이터 원본은
+   data.js의 SAMPLE_PROJECTS. "열기"를 누를 때마다 깊은 복사본을 새 작품 탭으로 추가한다(원본은 그대로). */
+function rSampleData(){
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<h2>${ICONS.file} 샘플 데이터</h2>
+    <p class="hint">앱의 모든 기능(아이디어 수집·탐색, 기획서, 캐릭터, 배경, 사건, 플롯, 글쓰기)을 미리 채워둔 예시 작품입니다. 학생들에게 사용법을 보여줄 때 활용해보세요. "열기"를 누르면 새 작품 탭으로 추가됩니다(원본은 그대로 남아 있어 여러 번 열 수 있어요).</p>
+    <div id="sampleDataList"></div>`;
+  app.appendChild(c);
+  const list=c.querySelector("#sampleDataList");
+  const samples=(typeof SAMPLE_PROJECTS!=="undefined") ? SAMPLE_PROJECTS : [];
+  if(!samples.length){
+    list.innerHTML='<p class="hint">등록된 샘플이 없습니다.</p>';
+    return;
+  }
+  samples.forEach(s=>{
+    const row=document.createElement("div"); row.className="sample-data-row";
+    row.innerHTML=`<div class="sample-data-info"><b>${esc(s.label)}</b><p class="hint" style="margin:4px 0 0">${esc(s.desc||"")}</p></div>`;
+    const btn=document.createElement("button"); btn.className="btn"; btn.textContent="열기";
+    btn.onclick=()=>openSampleProject(s);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+function openSampleProject(sample){
+  const obj=JSON.parse(JSON.stringify(sample.data));
+  obj.id=uid();
+  DB.projects.push(obj);
+  openProjectTab(obj.id); // openIds에 추가 + 전환 + 저장 + refreshProjSelect + render
+  forceTab("idea"); render();
 }
 
 /* ===== 교수 — 과제 관리 =====

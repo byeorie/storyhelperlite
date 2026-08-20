@@ -520,6 +520,10 @@ body.logged-in .login-overlay { display: none; }
 .admin-table tbody tr:nth-child(even) { background: #fbfaf7; }
 .settings-prof-list { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
 .settings-prof-list li { margin: 2px 0; }
+/* 교수 계정 — 샘플 데이터 목록 (2026-08-20 추가) */
+.sample-data-row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:10px;background:#fff}
+.sample-data-info{min-width:0}
 .admin-reset-row { display: flex; gap: 14px; flex-wrap: wrap; }
 .admin-reset-box { flex: 1; min-width: 220px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .admin-reset-box .plan-guide { margin: 4px 0 10px; }
