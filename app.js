@@ -4274,7 +4274,7 @@ function applyFeedbackToProject(type, feedback){
 /* 정보 */
 document.getElementById("aboutLink").onclick=e=>{
   e.preventDefault();
-  alert("스토리텔링 가이드\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
+  alert("스토리 가이드\n웹툰 전공 스토리 제작 도구\n\n- 데이터는 이 브라우저에만 저장됩니다\n- 정기적으로 '백업 파일 내보내기'를 권장합니다");
 };
 
 /* 왼쪽 메뉴 접기/펼치기 버튼 + 저장된 접힘 상태 적용 */

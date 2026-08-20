@@ -26,7 +26,7 @@ export async function onRequestPost({ request, env }) {
     `본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.`;
 
   try {
-    await sendEmail(env, { to: auth.user.email, subject: "[스토리텔링 가이드] 비밀번호 변경 링크", text });
+    await sendEmail(env, { to: auth.user.email, subject: "[스토리 가이드] 비밀번호 변경 링크", text });
   } catch (e) {
     return jsonResponse({ error: "메일 발송에 실패했습니다: " + e.message }, 500);
   }
