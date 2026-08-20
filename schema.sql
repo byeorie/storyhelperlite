@@ -154,3 +154,12 @@ CREATE INDEX IF NOT EXISTS idx_student_professors_prof ON student_professors(pro
 -- 기존에 이미 교수를 등록해둔 학생들(users.prof_id가 있던 경우)을 새 표로 백필 — 한 번만 실행하면 됨
 INSERT OR IGNORE INTO student_professors (student_id, prof_id, joined_at)
   SELECT id, prof_id, created_at FROM users WHERE prof_id IS NOT NULL AND role = 'student';
+
+-- ===== 2026-08-20 (3): 서버 데이터 정기 초기화 — 매년 3/1·9/1에 계정(users) 정보만 남기고 삭제 =====
+-- 이미 DB를 만든 뒤라면 아래 내용을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+-- (이 표는 "마지막으로 전체 초기화를 실행한 기준일"을 기록해, 같은 반기 동안 중복 실행되지 않게 합니다.
+--  서버 용량 관리를 위한 것으로, users 표는 절대 지워지지 않습니다)
+CREATE TABLE IF NOT EXISTS server_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

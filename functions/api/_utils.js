@@ -15,25 +15,48 @@ export function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
 
-/* 2026-08-20: 데이터 자동 삭제 주기를 "3개월 이상 미접속 시 계속 삭제"(rolling)에서
-   "매년 3월 1일 · 9월 1일, 두 고정 기준일"로 변경.
+/* 2026-08-20(2): 데이터 자동 삭제 방식을 "미접속 기간 기반 삭제"에서 "매년 3월 1일·9월 1일,
+   두 고정 기준일에 계정(users) 정보만 남기고 나머지 서버 저장 데이터를 전부 초기화"로 변경.
+   서버 용량을 일정하게 유지하려는 목적으로, 미접속 여부와 무관하게 기준일이 되면 무조건 지운다.
    Cloudflare Pages Functions에는 지정 시각에 저절로 실행되는 cron이 없어(요청이 들어올 때만
-   코드가 실행됨), 대신 요청 시점마다 "지금 기준으로 가장 최근에 지난 기준일"이 언제였는지 계산해서
-   그 기준일 하나 전(반년 전) 기준일보다 오래된 데이터를 지운다. 예: 지금이 3/1~8/31 사이라면 작년
-   9/1 이전 데이터를, 9/1~다음해 2/28 사이라면 올해 3/1 이전 데이터를 지운다 — 즉 각 기준일이
-   지나야 그 전 반기의 미접속 데이터가 한 번에 정리되는 방식(UTC 자정 기준). */
-export function dataRetentionCutoffSec(nowSecVal) {
+   코드가 실행됨), 대신 요청이 들어올 때마다 "지금 기준으로 가장 최근에 지난 기준일"을 계산하고,
+   server_meta 표에 기록된 "마지막으로 초기화를 실행한 기준일"과 다르면 그때 한 번만 전체 삭제를
+   실행한다(같은 반기 동안 여러 번 요청이 와도 중복 실행되지 않음). */
+export function latestWipeBoundarySec(nowSecVal) {
   const now = new Date(nowSecVal * 1000);
   const y = now.getUTCFullYear();
   const boundaries = [
     Date.UTC(y - 1, 8, 1), // 작년 9/1 (월은 0-indexed → 8 = 9월)
     Date.UTC(y, 2, 1),     // 올해 3/1
     Date.UTC(y, 8, 1),     // 올해 9/1
-    Date.UTC(y + 1, 2, 1), // 내년 3/1 (연말 근처 안전용)
   ];
-  const passed = boundaries.filter((t) => t <= now.getTime()).sort((a, b) => b - a);
-  const prevBoundary = passed.length > 1 ? passed[1] : boundaries[0];
-  return Math.floor(prevBoundary / 1000);
+  const passed = boundaries.filter((t) => t <= now.getTime());
+  const latest = passed[passed.length - 1];
+  return Math.floor(latest / 1000);
+}
+
+/* users 테이블을 제외한 모든 표를 비운다. server_meta에 마지막 실행 기준일을 기록해 같은 반기
+   동안 중복 실행되지 않게 한다. 실제로 삭제를 실행했으면 true, 이미 처리된 기준일이면 false. */
+export async function wipeIfDue(env) {
+  const boundary = latestWipeBoundarySec(nowSec());
+  const row = await env.DB.prepare(
+    "SELECT value FROM server_meta WHERE key = 'last_wipe_boundary'"
+  ).first();
+  const last = row ? parseInt(row.value, 10) : 0;
+  if (last >= boundary) return false;
+
+  const tables = [
+    "assignments", "submissions", "submission_feedback_versions",
+    "user_data", "student_professors", "sessions", "password_resets",
+  ];
+  for (const t of tables) {
+    await env.DB.prepare(`DELETE FROM ${t}`).run();
+  }
+  await env.DB.prepare(
+    "INSERT INTO server_meta (key, value) VALUES ('last_wipe_boundary', ?) " +
+    "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).bind(String(boundary)).run();
+  return true;
 }
 
 function bytesToHex(bytes) {

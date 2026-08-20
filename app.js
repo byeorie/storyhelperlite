@@ -57,6 +57,50 @@ function onAuthChanged(){
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
   if((activeTab==="profStudents"||activeTab==="profAssignments"||activeTab==="sampleData") && !isProfessor()) forceTab("idea");
   render();
+  maybeShowWipeNotice();
+}
+/* 2026-08-20(3): 서버 데이터 초기화(매년 3/1·9/1) 1주일 전부터, 로그인 시(또는 접속 유지 상태 확인 시)마다
+   자동으로 안내 팝업을 띄운다. "다시 보지 않음"을 누르면 이번 기준일까지는 다시 뜨지 않고,
+   그 기준일이 지나 다음 기준일로 넘어가면(값이 달라지므로) 자동으로 다시 안내된다. */
+const WIPE_NOTICE_KEY = "storyhelper_wipe_notice_dismissed";
+function nextWipeBoundarySec(nowSecVal){
+  const now = new Date(nowSecVal * 1000);
+  const y = now.getUTCFullYear();
+  const boundaries = [Date.UTC(y, 2, 1), Date.UTC(y, 8, 1), Date.UTC(y + 1, 2, 1)];
+  const upcoming = boundaries.find(t => t > now.getTime());
+  return Math.floor(upcoming / 1000);
+}
+function maybeShowWipeNotice(){
+  if(!currentUser) return;
+  if(document.querySelector(".wipe-notice-modal")) return;
+  const nowSecVal = Math.floor(Date.now()/1000);
+  const boundary = nextWipeBoundarySec(nowSecVal);
+  if(boundary - nowSecVal > 7*86400) return;
+  let dismissed = null;
+  try{ dismissed = localStorage.getItem(WIPE_NOTICE_KEY); }catch(e){}
+  if(String(dismissed) === String(boundary)) return;
+  const d = new Date(boundary*1000);
+  const dateLabel = `${d.getUTCMonth()+1}월 ${d.getUTCDate()}일`;
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal wipe-notice-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="데이터 초기화 안내";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const body=document.createElement("div");
+  body.innerHTML=`<p><b>${dateLabel}</b>이 되면 서버 용량 관리를 위해 계정 정보를 제외한 서버 저장 데이터(작품 데이터·과제·제출물 등)가 모두 초기화됩니다.</p>
+    <p class="hint">중요한 작품은 [내보내기 → 작품 파일(.story)]로 미리 백업해 두세요. (브라우저에 저장된 내용은 그대로 유지됩니다)</p>`;
+  box.appendChild(body);
+  const actions=document.createElement("div"); actions.className="wipe-notice-actions";
+  const dismissBtn=document.createElement("button"); dismissBtn.className="btn ghost"; dismissBtn.textContent="다시 보지 않음";
+  dismissBtn.onclick=()=>{
+    try{ localStorage.setItem(WIPE_NOTICE_KEY, String(boundary)); }catch(e){}
+    document.body.removeChild(overlay);
+  };
+  actions.appendChild(dismissBtn);
+  box.appendChild(actions);
+  overlay.appendChild(box); document.body.appendChild(overlay);
 }
 /* 상단 툴바 — 학생 계정이 등록한 교수(수업) 표시/선택 (2026-08-20 추가).
    과제 제출·첨삭 보기는 항상 여기서 고른 교수를 기준으로 동작하며, 모달 안에서 다시 고르지 않는다.
@@ -4643,7 +4687,7 @@ const GUIDE_SECTIONS=[
   {title:"데이터 보관 안내", html:`
     <ul>
       <li>로그인 상태에서는 작성 내용이 서버와 이 브라우저에 함께 저장됩니다.</li>
-      <li>서버 저장본은 매년 3월 1일과 9월 1일, 두 기준일에 그 이전 반년(직전 기준일) 동안 갱신되지 않았으면 자동 삭제됩니다(브라우저에 저장된 내용은 그대로 유지).</li>
+      <li>서버 용량 관리를 위해 매년 3월 1일과 9월 1일이 되면 계정 정보를 제외한 서버 저장 데이터(작품 데이터·과제·제출물 등)가 모두 초기화됩니다(브라우저에 저장된 내용은 그대로 유지).</li>
       <li>중요한 작품은 [내보내기 → 작품 파일(.story)]로 주기적으로 백업해두는 것을 권장합니다.</li>
     </ul>`},
 ];

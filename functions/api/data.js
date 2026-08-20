@@ -1,13 +1,12 @@
-import { requireAuth, jsonResponse, nowSec, dataRetentionCutoffSec } from "./_utils.js";
+import { requireAuth, jsonResponse, nowSec, wipeIfDue } from "./_utils.js";
 
 export async function onRequestGet({ request, env }) {
   const auth = await requireAuth(request, env);
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
 
-  // 매년 3/1, 9/1 기준으로 그 이전 반기 동안 갱신되지 않은 데이터를 조회 시점에 정리
-  // (요청이 들어올 때마다 자동 청소 — dataRetentionCutoffSec() 설명 참고)
-  const cutoff = dataRetentionCutoffSec(nowSec());
-  await env.DB.prepare("DELETE FROM user_data WHERE updated_at < ?").bind(cutoff).run();
+  // 매년 3/1, 9/1 기준일이 지나면 계정(users) 정보만 남기고 나머지 서버 데이터를 조회 시점에 정리
+  // (요청이 들어올 때마다 확인 — wipeIfDue() 설명 참고, 같은 반기 동안은 한 번만 실행됨)
+  await wipeIfDue(env);
 
   const row = await env.DB.prepare(
     "SELECT data, updated_at FROM user_data WHERE user_id = ?"
