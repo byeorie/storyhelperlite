@@ -86,7 +86,7 @@ function toggleUserMenu(forceHide) {
     document.body.appendChild(menu); // 상단바 overflow에 잘리지 않도록 밖으로 이동
     const r = btn.getBoundingClientRect();
     let top = r.bottom + 8;
-    if (top + 150 > window.innerHeight) top = r.top - 8 - 150;
+    if (top + 210 > window.innerHeight) top = r.top - 8 - 210;
     menu.style.top = top + "px";
     menu.style.right = (window.innerWidth - r.right) + "px";
     menu.style.left = "auto";
@@ -102,137 +102,147 @@ document.addEventListener("click", (e) => {
   if (!insideBtn && !insideMenu) toggleUserMenu(true);
 });
 
-function openSettings() {
+// 계정 관련 모달 공통 뼈대 — 2026-08-20: 예전에는 [설정] 버튼 하나가 개인정보/교수 코드/비밀번호
+// 변경을 전부 한 모달에 몰아넣어 내용이 길어지면 화면 아래로 잘리는 문제가 있었음. 계정 드롭다운
+// 메뉴 자체를 3개 항목으로 나누고, 각 항목은 이 헬퍼로 자기 내용만 담은 작은 모달을 띄운다.
+function openAccountModal(title, bodyHtml, onMount) {
   toggleUserMenu(true);
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  const box=document.createElement("div"); box.className="plot-modal";
+  const box=document.createElement("div"); box.className="plot-modal account-modal";
   const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="설정";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=title;
   const closeBtn=(typeof iconBtn==="function" && typeof ICONS!=="undefined")
     ? iconBtn(ICONS.close, "닫기", ()=>document.body.removeChild(overlay))
     : (()=>{ const b=document.createElement("button"); b.type="button"; b.textContent="닫기"; b.onclick=()=>document.body.removeChild(overlay); return b; })();
   top.append(ttl, closeBtn);
   box.appendChild(top);
 
-  const body=document.createElement("div");
-  const esc2 = typeof esc==="function" ? esc : (s=>String(s==null?"":s));
-
-  // 개인정보 수정 — 모든 계정(학생/교수/관리자) 공통. 아이디(username)는 로그인 식별자라 여기서는
-  // 바꾸지 않는다(비밀번호는 아래 별도 블록에서 이메일로 변경).
-  body.innerHTML = `
-    <div class="settings-profile-block">
-      <p class="hint">개인정보를 수정할 수 있습니다.</p>
-      <div class="plan-block"><label>학교</label><input type="text" id="profileSchoolInput" value="${esc2(currentUser && currentUser.school || "")}"></div>
-      <div class="plan-block"><label>이름</label><input type="text" id="profileNameInput" value="${esc2(currentUser && currentUser.name || "")}"></div>
-      <div class="plan-block"><label>이메일</label><input type="email" id="profileEmailInput" value="${esc2(currentUser && currentUser.email || "")}"></div>
-      <p id="profileMsg" class="hint" style="min-height:18px"></p>
-      <button class="btn ghost" id="profileSaveBtn" style="width:100%">개인정보 저장</button>
-    </div>
-  `;
-
-  if (currentUser && currentUser.role === "professor") {
-    body.insertAdjacentHTML("beforeend", `
-      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-        <p class="hint">학생들에게 아래 코드를 알려주면, 학생이 [설정]에서 이 코드를 입력해 내 그룹에 등록할 수 있습니다.</p>
-        <div class="prof-code-display">${esc2(currentUser.profCode || "코드 없음")}</div>
-      </div>
-    `);
-  } else {
-    // 2026-08-20: 학생 1명이 여러 교수를 등록할 수 있도록 변경 — 코드를 입력하면 기존 등록을
-    // 대체하지 않고 목록에 추가된다. 실제 어느 교수의 과제를 볼지는 상단 툴바의 교수 표시/
-    // 드롭다운(app.js refreshProfBar)에서 고른다.
-    body.insertAdjacentHTML("beforeend", `
-      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-        <div id="settingsProfList"><p class="hint">등록된 교수 목록을 불러오는 중…</p></div>
-        <div class="plan-block">
-          <label>교수 코드 추가 등록</label>
-          <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 123456" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
-        </div>
-        <p id="profJoinMsg" class="hint" style="min-height:18px"></p>
-        <button class="btn" id="profJoinBtn" style="width:100%">등록하기</button>
-      </div>
-    `);
-  }
-
-  // 비밀번호 변경 — 모든 계정(학생/교수/관리자) 공통
-  body.insertAdjacentHTML("beforeend", `
-    <div class="settings-pw-block" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-      <p class="hint">가입하신 이메일(<b>${esc2((currentUser && currentUser.email) || "")}</b>)로 비밀번호 변경 링크를 보내드립니다.</p>
-      <button class="btn ghost" id="pwChangeBtn" style="width:100%">비밀번호 변경 메일 보내기</button>
-      <p id="pwChangeMsg" class="hint" style="min-height:18px"></p>
-    </div>
-  `);
-
+  const body=document.createElement("div"); body.className="account-modal-body";
+  body.innerHTML = bodyHtml;
   box.appendChild(body);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  if (currentUser && currentUser.role !== "professor") {
-    loadSettingsProfList();
-  }
+  if (typeof onMount === "function") onMount(body, overlay);
+  return { overlay, body };
+}
 
-  const joinBtn = document.getElementById("profJoinBtn");
-  if (joinBtn) {
-    joinBtn.onclick = async () => {
-      const input = document.getElementById("profCodeInput");
-      const msgEl = document.getElementById("profJoinMsg");
-      const code = (input.value || "").trim();
-      if (!/^\d{6}$/.test(code)) { msgEl.textContent = "6자리 숫자 코드를 입력해주세요."; return; }
-      joinBtn.disabled = true;
-      msgEl.textContent = "확인 중…";
-      const res = await apiFetch("student-join", { method: "POST", body: JSON.stringify({ code }) });
-      joinBtn.disabled = false;
-      if (res.ok && res.body && res.body.ok) {
-        const prof = res.body.prof || {};
-        if (!currentUser.profId) currentUser.profId = prof.id;
-        saveAuth(getToken(), currentUser);
-        msgEl.textContent = `${prof.school || ""} ${prof.name || ""} 교수님을 등록했습니다.`;
-        input.value = "";
-        loadSettingsProfList();
-        if (typeof onAuthChanged === "function") onAuthChanged();
-      } else {
-        msgEl.textContent = (res.body && res.body.error) || "등록에 실패했습니다.";
+// 개인정보 수정 — 모든 계정(학생/교수/관리자) 공통. 아이디(username)는 로그인 식별자라 여기서는
+// 바꾸지 않는다(비밀번호는 openPasswordChange()에서 이메일로 변경).
+function openProfileEdit() {
+  const esc2 = typeof esc==="function" ? esc : (s=>String(s==null?"":s));
+  const html = `
+    <p class="hint">개인정보를 수정할 수 있습니다.</p>
+    <div class="plan-block"><label>학교</label><input type="text" id="profileSchoolInput" value="${esc2(currentUser && currentUser.school || "")}"></div>
+    <div class="plan-block"><label>이름</label><input type="text" id="profileNameInput" value="${esc2(currentUser && currentUser.name || "")}"></div>
+    <div class="plan-block"><label>이메일</label><input type="email" id="profileEmailInput" value="${esc2(currentUser && currentUser.email || "")}"></div>
+    <p id="profileMsg" class="hint" style="min-height:18px"></p>
+    <button class="btn ghost" id="profileSaveBtn" style="width:100%">개인정보 저장</button>
+  `;
+  openAccountModal("개인정보 수정", html, () => {
+    const profileSaveBtn = document.getElementById("profileSaveBtn");
+    if (profileSaveBtn) {
+      profileSaveBtn.onclick = async () => {
+        const school = document.getElementById("profileSchoolInput").value.trim();
+        const name = document.getElementById("profileNameInput").value.trim();
+        const email = document.getElementById("profileEmailInput").value.trim();
+        const msgEl = document.getElementById("profileMsg");
+        if (!school || !name || !email) { msgEl.textContent = "모든 항목을 입력해주세요."; return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msgEl.textContent = "올바른 이메일 형식이 아닙니다."; return; }
+        profileSaveBtn.disabled = true;
+        msgEl.textContent = "저장 중…";
+        const res = await apiFetch("update-profile", { method: "POST", body: JSON.stringify({ school, name, email }) });
+        profileSaveBtn.disabled = false;
+        if (res.ok && res.body && res.body.user) {
+          currentUser = Object.assign({}, currentUser, res.body.user);
+          saveAuth(getToken(), currentUser);
+          setLoggedInUI();
+          if (typeof onAuthChanged === "function") onAuthChanged();
+          msgEl.textContent = "저장되었습니다.";
+        } else {
+          msgEl.textContent = (res.body && res.body.error) || "저장에 실패했습니다.";
+        }
+      };
+    }
+  });
+}
+
+// 교수 코드 — 교수 계정은 자기 코드 확인, 학생 계정은 등록된 교수 목록 확인 + 코드로 추가 등록.
+function openProfCodeManager() {
+  const esc2 = typeof esc==="function" ? esc : (s=>String(s==null?"":s));
+  let html;
+  if (currentUser && currentUser.role === "professor") {
+    html = `
+      <p class="hint">학생들에게 아래 코드를 알려주면, 학생이 [계정] → [교수 코드]에서 이 코드를 입력해 내 그룹에 등록할 수 있습니다.</p>
+      <div class="prof-code-display">${esc2(currentUser.profCode || "코드 없음")}</div>
+    `;
+  } else {
+    // 2026-08-20: 학생 1명이 여러 교수를 등록할 수 있도록 변경 — 코드를 입력하면 기존 등록을
+    // 대체하지 않고 목록에 추가된다. 실제 어느 교수의 과제를 볼지는 상단 툴바의 교수 표시/
+    // 드롭다운(app.js refreshProfBar)에서 고른다.
+    html = `
+      <div id="settingsProfList"><p class="hint">등록된 교수 목록을 불러오는 중…</p></div>
+      <div class="plan-block">
+        <label>교수 코드 추가 등록</label>
+        <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 123456" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
+      </div>
+      <p id="profJoinMsg" class="hint" style="min-height:18px"></p>
+      <button class="btn" id="profJoinBtn" style="width:100%">등록하기</button>
+    `;
+  }
+  openAccountModal("교수 코드", html, () => {
+    if (currentUser && currentUser.role !== "professor") {
+      loadSettingsProfList();
+      const joinBtn = document.getElementById("profJoinBtn");
+      if (joinBtn) {
+        joinBtn.onclick = async () => {
+          const input = document.getElementById("profCodeInput");
+          const msgEl = document.getElementById("profJoinMsg");
+          const code = (input.value || "").trim();
+          if (!/^\d{6}$/.test(code)) { msgEl.textContent = "6자리 숫자 코드를 입력해주세요."; return; }
+          joinBtn.disabled = true;
+          msgEl.textContent = "확인 중…";
+          const res = await apiFetch("student-join", { method: "POST", body: JSON.stringify({ code }) });
+          joinBtn.disabled = false;
+          if (res.ok && res.body && res.body.ok) {
+            const prof = res.body.prof || {};
+            if (!currentUser.profId) currentUser.profId = prof.id;
+            saveAuth(getToken(), currentUser);
+            msgEl.textContent = `${prof.school || ""} ${prof.name || ""} 교수님을 등록했습니다.`;
+            input.value = "";
+            loadSettingsProfList();
+            if (typeof onAuthChanged === "function") onAuthChanged();
+          } else {
+            msgEl.textContent = (res.body && res.body.error) || "등록에 실패했습니다.";
+          }
+        };
       }
-    };
-  }
+    }
+  });
+}
 
-  const pwBtn = document.getElementById("pwChangeBtn");
-  if (pwBtn) {
-    pwBtn.onclick = async () => {
-      const msgEl = document.getElementById("pwChangeMsg");
-      pwBtn.disabled = true;
-      msgEl.textContent = "전송 중…";
-      const res = await apiFetch("request-password-change", { method: "POST" });
-      pwBtn.disabled = false;
-      msgEl.textContent = (res.body && (res.body.message || res.body.error)) || "요청에 실패했습니다.";
-    };
-  }
-
-  const profileSaveBtn = document.getElementById("profileSaveBtn");
-  if (profileSaveBtn) {
-    profileSaveBtn.onclick = async () => {
-      const school = document.getElementById("profileSchoolInput").value.trim();
-      const name = document.getElementById("profileNameInput").value.trim();
-      const email = document.getElementById("profileEmailInput").value.trim();
-      const msgEl = document.getElementById("profileMsg");
-      if (!school || !name || !email) { msgEl.textContent = "모든 항목을 입력해주세요."; return; }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msgEl.textContent = "올바른 이메일 형식이 아닙니다."; return; }
-      profileSaveBtn.disabled = true;
-      msgEl.textContent = "저장 중…";
-      const res = await apiFetch("update-profile", { method: "POST", body: JSON.stringify({ school, name, email }) });
-      profileSaveBtn.disabled = false;
-      if (res.ok && res.body && res.body.user) {
-        currentUser = Object.assign({}, currentUser, res.body.user);
-        saveAuth(getToken(), currentUser);
-        setLoggedInUI();
-        if (typeof onAuthChanged === "function") onAuthChanged();
-        msgEl.textContent = "저장되었습니다.";
-      } else {
-        msgEl.textContent = (res.body && res.body.error) || "저장에 실패했습니다.";
-      }
-    };
-  }
+// 비밀번호 변경 — 모든 계정(학생/교수/관리자) 공통
+function openPasswordChange() {
+  const esc2 = typeof esc==="function" ? esc : (s=>String(s==null?"":s));
+  const html = `
+    <p class="hint">가입하신 이메일(<b>${esc2((currentUser && currentUser.email) || "")}</b>)로 비밀번호 변경 링크를 보내드립니다.</p>
+    <button class="btn ghost" id="pwChangeBtn" style="width:100%">비밀번호 변경 메일 보내기</button>
+    <p id="pwChangeMsg" class="hint" style="min-height:18px"></p>
+  `;
+  openAccountModal("비밀번호 변경", html, () => {
+    const pwBtn = document.getElementById("pwChangeBtn");
+    if (pwBtn) {
+      pwBtn.onclick = async () => {
+        const msgEl = document.getElementById("pwChangeMsg");
+        pwBtn.disabled = true;
+        msgEl.textContent = "전송 중…";
+        const res = await apiFetch("request-password-change", { method: "POST" });
+        pwBtn.disabled = false;
+        msgEl.textContent = (res.body && (res.body.message || res.body.error)) || "요청에 실패했습니다.";
+      };
+    }
+  });
 }
 
 /* [설정]의 학생용 "등록된 교수 목록" — 여러 명 등록 가능해진 뒤(2026-08-20) 추가 */
@@ -393,8 +403,12 @@ function bindAuthForms() {
     resultEl.textContent = (res.body && res.body.message) || "확인할 수 없습니다.";
   };
 
-  const settingsBtn = document.getElementById("menuSettingsBtn");
-  if (settingsBtn) settingsBtn.onclick = openSettings;
+  const profileBtn = document.getElementById("menuProfileBtn");
+  if (profileBtn) profileBtn.onclick = openProfileEdit;
+  const profCodeBtn = document.getElementById("menuProfCodeBtn");
+  if (profCodeBtn) profCodeBtn.onclick = openProfCodeManager;
+  const pwMenuBtn = document.getElementById("menuPwBtn");
+  if (pwMenuBtn) pwMenuBtn.onclick = openPasswordChange;
   const logoutBtn = document.getElementById("menuLogoutBtn");
   if (logoutBtn) logoutBtn.onclick = signOut;
 

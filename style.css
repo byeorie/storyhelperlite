@@ -268,6 +268,9 @@ textarea{resize:vertical;min-height:70px}
 body.sb-collapsed .plot-modal-overlay.center-content{left:44px}
 .plot-modal{background:var(--card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.25);
   width:520px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;padding:16px 18px}
+/* 계정(개인정보/교수 코드/비밀번호 변경) 모달 — 내용이 모달 높이(max-height:85vh)를 넘으면
+   스크롤되도록 함(2026-08-20: 예전에 한 모달에 다 몰아넣었을 때 아래쪽이 화면 밖으로 잘리던 문제 수정) */
+.account-modal-body{overflow-y:auto;flex:1;min-height:0}
 .plot-picker-top{display:flex;align-items:center;margin-bottom:12px}
 .plot-picker-title{flex:1;font-size:15px;font-weight:700;color:var(--accent)}
 .plot-picker-filter{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;

@@ -15,6 +15,27 @@ export function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
 
+/* 2026-08-20: 데이터 자동 삭제 주기를 "3개월 이상 미접속 시 계속 삭제"(rolling)에서
+   "매년 3월 1일 · 9월 1일, 두 고정 기준일"로 변경.
+   Cloudflare Pages Functions에는 지정 시각에 저절로 실행되는 cron이 없어(요청이 들어올 때만
+   코드가 실행됨), 대신 요청 시점마다 "지금 기준으로 가장 최근에 지난 기준일"이 언제였는지 계산해서
+   그 기준일 하나 전(반년 전) 기준일보다 오래된 데이터를 지운다. 예: 지금이 3/1~8/31 사이라면 작년
+   9/1 이전 데이터를, 9/1~다음해 2/28 사이라면 올해 3/1 이전 데이터를 지운다 — 즉 각 기준일이
+   지나야 그 전 반기의 미접속 데이터가 한 번에 정리되는 방식(UTC 자정 기준). */
+export function dataRetentionCutoffSec(nowSecVal) {
+  const now = new Date(nowSecVal * 1000);
+  const y = now.getUTCFullYear();
+  const boundaries = [
+    Date.UTC(y - 1, 8, 1), // 작년 9/1 (월은 0-indexed → 8 = 9월)
+    Date.UTC(y, 2, 1),     // 올해 3/1
+    Date.UTC(y, 8, 1),     // 올해 9/1
+    Date.UTC(y + 1, 2, 1), // 내년 3/1 (연말 근처 안전용)
+  ];
+  const passed = boundaries.filter((t) => t <= now.getTime()).sort((a, b) => b - a);
+  const prevBoundary = passed.length > 1 ? passed[1] : boundaries[0];
+  return Math.floor(prevBoundary / 1000);
+}
+
 function bytesToHex(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }

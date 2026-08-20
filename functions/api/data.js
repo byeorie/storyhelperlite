@@ -1,13 +1,12 @@
-import { requireAuth, jsonResponse, nowSec } from "./_utils.js";
-
-const THREE_MONTHS_SEC = 60 * 60 * 24 * 90;
+import { requireAuth, jsonResponse, nowSec, dataRetentionCutoffSec } from "./_utils.js";
 
 export async function onRequestGet({ request, env }) {
   const auth = await requireAuth(request, env);
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
 
-  // 3개월 이상 갱신되지 않은 데이터는 조회 시점에 정리 (요청이 들어올 때마다 자동 청소)
-  const cutoff = nowSec() - THREE_MONTHS_SEC;
+  // 매년 3/1, 9/1 기준으로 그 이전 반기 동안 갱신되지 않은 데이터를 조회 시점에 정리
+  // (요청이 들어올 때마다 자동 청소 — dataRetentionCutoffSec() 설명 참고)
+  const cutoff = dataRetentionCutoffSec(nowSec());
   await env.DB.prepare("DELETE FROM user_data WHERE updated_at < ?").bind(cutoff).run();
 
   const row = await env.DB.prepare(
