@@ -2,6 +2,51 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-20 (2) — 계정 설정 비밀번호 변경(이메일) + 학생 다중 교수 등록 + 관리 표 밀도 축소
+
+**요청**: "1) 모든 계정의 설정에 비밀번호 변경하는 옵션 넣어줘. 변경은 이메일로. 2) 한 학생이 여러명의
+교수와 그룹을 맺을 수 있어. 여러명의 교수코드를 등록하고, 해당교수의 수업시간에 드롭다운으로 해당 교수를
+선택할 수 있는 기능을 만들어줘. 주로 과제를 보내고 피드백 받는 기능위주로. 3) 과제관리/학생관리/회원관리
+리스트들의 표와 블럭 상하 높이가 너무 커서 촘촘하게."
+
+- **스키마(신규, 수동 적용 필요 — 아래 "⚠️ 적용 안내" 참고)**: `student_professors` 표 추가
+  (`student_id, prof_id, joined_at`, `(student_id, prof_id)` UNIQUE). 학생 1명이 여러 교수를 동시에
+  등록할 수 있게 됨. `users.prof_id` 컬럼은 삭제하지 않고 "기본 선택 교수"로 계속 사용(첫 등록 시
+  자동 지정). 기존에 이미 교수를 등록해뒀던 학생은 `INSERT OR IGNORE ... SELECT`로 새 표에 자동
+  백필됨(수동 스크립트 불필요, schema.sql 실행만 하면 됨).
+- **functions/api/request-password-change.js**(신규): 로그인 상태에서 POST — find-account.js와 같은
+  방식(같은 `password_resets` 표, 같은 reset-password.js로 실제 변경)으로 본인 가입 이메일에 비밀번호
+  변경 링크를 보낸다. 이메일을 다시 입력할 필요 없음. 학생/교수/관리자 계정 전부 동일하게 사용 가능.
+- **auth.js**: `openSettings()`에 모든 계정 공통 "비밀번호 변경 메일 보내기" 버튼 추가(하단, 구분선
+  아래). 학생 계정의 [설정]은 코드 입력 시 기존 등록을 대체하지 않고 목록에 추가하도록 변경, 등록된
+  교수 목록을 보여주는 `loadSettingsProfList()` 추가.
+- **functions/api/student-join.js**: 코드 입력 시 `student_professors`에 INSERT(이미 등록된 코드면
+  에러). 첫 등록이면 `users.prof_id`(기본 선택)도 함께 지정.
+- **functions/api/student-professors.js**(신규, GET): 내가 등록한 교수 전체 목록 + 기본 선택 교수 id.
+- **functions/api/student-assignments.js**: `?profId=` 쿼리 지원 — 여러 교수 중 하나를 골라 그 교수의
+  과제 목록만 반환, 응답에 `professors`(드롭다운 구성용 전체 목록) 추가.
+- **functions/api/student-submit.js**: 제출 가능 여부를 `auth.user.profId`(기본 선택 하나) 대신
+  `student_professors` 등록 여부로 직접 확인하도록 변경(어느 교수 드롭다운에서 제출했든 그 과제의
+  실제 prof_id 기준으로만 검증).
+- **functions/api/professor-students.js**(학생 관리): 조회 기준을 `users.prof_id`(기본 선택)에서
+  `student_professors`(등록 전체)로 변경 — 학생이 다른 교수를 기본으로 바꿔도 내 코드로 등록한 학생이면
+  계속 명단에 나옴.
+- **functions/api/admin.js**: 회원 삭제(`deleteUser`)/등급 변경(`setRole`, 교수→학생) 시
+  `student_professors` 정리 로직 추가(교수 삭제/강등 시 그 교수를 등록해뒀던 학생들의 기본 선택을
+  다른 등록 교수로 넘기거나 비움; 회원 본인 삭제 시 자신의 등록 목록도 함께 삭제).
+- **app.js**: 학생의 [제출] 모달(`openSubmitModal`)과 [첨삭 보기] 목록(`rFeedbackList`)에 등록 교수가
+  2명 이상이면 상단에 교수 선택 드롭다운 추가(`profSelectHtml`), 마지막 선택은 `localStorage`
+  (`shl_selected_prof`)에 기억해뒀다가 다음에 열 때도 유지.
+- **style.css**: `.admin-table`(회원 관리·학생 관리 표) 셀 padding 7px 10px → 4px 8px, 폰트 13px →
+  12.5px로 축소. `.assign-folder`(과제 관리 폴더 블록) padding 12px 14px → 8px 12px,
+  `.prof-assign-grid` gap 12px → 8px로 축소해 더 촘촘하게 표시.
+
+**⚠️ 적용 안내(교수님 진행 필요)**: 이번 변경은 D1에 새 표(`student_professors`)가 필요합니다.
+Cloudflare 대시보드 → Workers & Pages → D1 → 사용 중인 DB(`storyguide-db` 등) → Console 탭에서
+`schema.sql`의 "2026-08-20 (2)" 구간(`CREATE TABLE student_professors...`부터 `INSERT OR IGNORE...`
+까지)을 붙여넣고 실행해야 새 기능이 정상 동작합니다. 실행 전에는 학생이 교수 코드를 등록해도
+`student_professors` 표가 없어 에러가 납니다.
+
 ## 2026-08-20 (1) — 첨삭 화면에 "메모" 기능 추가 + 첨삭 피드백 버전별 저장
 
 **요청**: "과제 관리 페이지에서 학생들 과제를 첨삭하는 페이지가 구축되어있는데, 첨삭과 별도로 학생 과제에

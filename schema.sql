@@ -135,3 +135,22 @@ CREATE TABLE IF NOT EXISTS submission_feedback_versions (
 );
 CREATE INDEX IF NOT EXISTS idx_sfv_submission ON submission_feedback_versions(submission_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sfv_submission_version ON submission_feedback_versions(submission_id, version);
+
+-- ===== 2026-08-20 (2): 학생 1명이 여러 교수를 등록할 수 있도록 확장 =====
+-- 이미 DB를 만든 뒤라면 아래 내용을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+-- (users.prof_id 컬럼은 삭제하지 않고 "기본 선택 교수"로 계속 사용합니다 — 과제 조회/제출은
+--  이제 이 새 표의 등록 여부로 확인하므로, 학생은 여러 교수를 동시에 등록해두고 화면의 드롭다운으로
+--  어느 교수의 과제를 볼지 고를 수 있습니다)
+CREATE TABLE IF NOT EXISTS student_professors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL,
+  prof_id INTEGER NOT NULL,
+  joined_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_student_professors_pair ON student_professors(student_id, prof_id);
+CREATE INDEX IF NOT EXISTS idx_student_professors_student ON student_professors(student_id);
+CREATE INDEX IF NOT EXISTS idx_student_professors_prof ON student_professors(prof_id);
+
+-- 기존에 이미 교수를 등록해둔 학생들(users.prof_id가 있던 경우)을 새 표로 백필 — 한 번만 실행하면 됨
+INSERT OR IGNORE INTO student_professors (student_id, prof_id, joined_at)
+  SELECT id, prof_id, created_at FROM users WHERE prof_id IS NOT NULL AND role = 'student';

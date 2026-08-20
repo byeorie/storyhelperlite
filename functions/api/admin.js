@@ -62,6 +62,15 @@ export async function onRequestPost({ request, env }) {
     if (role === "professor" && !profCode) profCode = await generateProfCode(env);
     if (role === "student") profCode = null;
 
+    // 교수 → 학생으로 강등: 이 교수를 등록해뒀던 학생들의 연결을 정리(다른 등록 교수가 있으면
+    // 그 교수를 기본 선택으로 넘기고, 없으면 기본 선택을 비움), student_professors 등록도 삭제
+    if (role === "student" && target.role === "professor") {
+      await env.DB.prepare(
+        "UPDATE users SET prof_id = (SELECT prof_id FROM student_professors WHERE student_id = users.id AND prof_id != ? LIMIT 1) WHERE prof_id = ?"
+      ).bind(userId, userId).run();
+      await env.DB.prepare("DELETE FROM student_professors WHERE prof_id = ?").bind(userId).run();
+    }
+
     await env.DB.prepare("UPDATE users SET role = ?, prof_code = ? WHERE id = ?")
       .bind(role, profCode, userId).run();
 
@@ -78,14 +87,20 @@ export async function onRequestPost({ request, env }) {
     if (target.username === ADMIN_USERNAME) return jsonResponse({ error: "관리자 계정은 삭제할 수 없습니다." }, 400);
 
     if (target.role === "professor") {
-      // 이 교수가 낸 과제들의 제출물부터 지우고, 과제를 지운 뒤, 이 교수 그룹에 속한 학생들의 연결을 끊는다
+      // 이 교수가 낸 과제들의 제출물부터 지우고, 과제를 지운 뒤, 이 교수를 등록해뒀던 학생들의 연결을 끊는다
+      // (다른 등록 교수가 있으면 그 교수를 기본 선택으로 넘겨준다)
       const { results: assigns } = await env.DB.prepare("SELECT id FROM assignments WHERE prof_id = ?").bind(userId).all();
       for (const a of (assigns || [])) {
         await env.DB.prepare("DELETE FROM submissions WHERE assignment_id = ?").bind(a.id).run();
       }
       await env.DB.prepare("DELETE FROM assignments WHERE prof_id = ?").bind(userId).run();
-      await env.DB.prepare("UPDATE users SET prof_id = NULL WHERE prof_id = ?").bind(userId).run();
+      await env.DB.prepare(
+        "UPDATE users SET prof_id = (SELECT prof_id FROM student_professors WHERE student_id = users.id AND prof_id != ? LIMIT 1) WHERE prof_id = ?"
+      ).bind(userId, userId).run();
+      await env.DB.prepare("DELETE FROM student_professors WHERE prof_id = ?").bind(userId).run();
     }
+    // 이 회원이 학생으로서 등록해둔 교수 목록도 정리
+    await env.DB.prepare("DELETE FROM student_professors WHERE student_id = ?").bind(userId).run();
     // 학생 계정이든(자신이 제출한 것) 교수 계정이든(교수 자신도 제출자로 남아있을 수 있음) 제출물 정리
     await env.DB.prepare("DELETE FROM submissions WHERE student_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM user_data WHERE user_id = ?").bind(userId).run();

@@ -3495,6 +3495,19 @@ function wireSubmitBtn(container, type){
 /* [첨삭 보기] 버튼 클릭 — 그 탭 안에서 제출 목록 페이지로 전환 */
 function showFeedbackPage(type){ feedbackPage={type, mode:"list"}; render(); }
 
+/* 여러 교수를 등록한 학생을 위한 교수 선택 드롭다운(2026-08-20 추가).
+   localStorage에 마지막으로 고른 교수를 기억해뒀다가 다음에 열 때도 그대로 보여준다. */
+const SELECTED_PROF_KEY="shl_selected_prof";
+function rememberSelectedProf(profId){ try{ localStorage.setItem(SELECTED_PROF_KEY, String(profId||"")); }catch(e){} }
+function recalledSelectedProf(){ try{ return Number(localStorage.getItem(SELECTED_PROF_KEY))||null; }catch(e){ return null; } }
+function profSelectHtml(professors, selectedId){
+  if(!professors || professors.length<2) return "";
+  return `<label class="hint" style="display:flex;align-items:center;gap:6px;margin:0 0 12px">교수 선택
+    <select id="profPickSelect" style="font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:6px">
+      ${professors.map(p=>`<option value="${p.id}"${p.id===selectedId?" selected":""}>${esc(p.school||"")} · ${esc(p.name||"")}</option>`).join("")}
+    </select></label>`;
+}
+
 /* 제출 대상 과제 선택 모달 (학생) */
 async function openSubmitModal(type){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
@@ -3508,49 +3521,56 @@ async function openSubmitModal(type){
   box.appendChild(body);
   overlay.appendChild(box); document.body.appendChild(overlay);
 
-  const res=await apiFetch("student-assignments");
-  if(!overlay.isConnected) return;
-  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
-  const profId=res.body.profId, prof=res.body.prof, assignments=res.body.assignments||[];
-  if(!profId){
-    body.innerHTML=`<p class="hint">아직 가입한 교수 그룹이 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`;
-    return;
+  async function loadFor(profId){
+    body.innerHTML=`<p class="hint">불러오는 중…</p>`;
+    const res=await apiFetch("student-assignments"+(profId?("?profId="+profId):""));
+    if(!overlay.isConnected) return;
+    if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+    const curProfId=res.body.profId, prof=res.body.prof, assignments=res.body.assignments||[], professors=res.body.professors||[];
+    if(curProfId) rememberSelectedProf(curProfId);
+    if(!curProfId){
+      body.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`;
+      return;
+    }
+    const pickHtml=profSelectHtml(professors, curProfId);
+    const openList=assignments.filter(a=>a.open);
+    const listHtml=!openList.length
+      ? `<p class="hint">${esc(prof?prof.name:"교수")}님이 등록한, 제출 가능한(마감되지 않은) 과제가 없습니다.</p>`
+      : `<p class="hint">제출할 과제 폴더를 선택하세요. (${esc(prof?prof.name:"")} 교수님)</p>
+        <div class="submit-assign-list">${openList.map(a=>{
+          const mine=(a.mySubmissions||[]).filter(s=>s.type===type);
+          const already=mine.length
+            ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":""}</span>`
+            : "";
+          return `<button type="button" class="submit-assign-item" data-id="${a.id}">
+            <b>${esc(a.title)}</b>
+            <span class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"}</span>
+            ${already}
+          </button>`;
+        }).join("")}</div>`;
+    body.innerHTML=pickHtml+listHtml;
+    const pickSel=document.getElementById("profPickSelect");
+    if(pickSel) pickSel.onchange=()=>loadFor(Number(pickSel.value));
+    body.querySelectorAll(".submit-already[data-view-id]").forEach(el=>{
+      el.onclick=(e)=>{
+        e.stopPropagation();
+        if(overlay.isConnected) document.body.removeChild(overlay);
+        feedbackPage={type, mode:"detail", id:Number(el.dataset.viewId)}; render();
+      };
+    });
+    body.querySelectorAll(".submit-assign-item").forEach(btn=>{
+      btn.onclick=async ()=>{
+        btn.disabled=true; btn.textContent="제출 중…";
+        const data=buildSubmissionData(type);
+        const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
+          assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
+        })});
+        if(r.ok){ alert("제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
+        else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
+      };
+    });
   }
-  const openList=assignments.filter(a=>a.open);
-  if(!openList.length){
-    body.innerHTML=`<p class="hint">${esc(prof?prof.name:"교수")}님이 등록한, 제출 가능한(마감되지 않은) 과제가 없습니다.</p>`;
-    return;
-  }
-  body.innerHTML=`<p class="hint">제출할 과제 폴더를 선택하세요. (${esc(prof?prof.name:"")} 교수님)</p>
-    <div class="submit-assign-list">${openList.map(a=>{
-      const mine=(a.mySubmissions||[]).filter(s=>s.type===type);
-      const already=mine.length
-        ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":""}</span>`
-        : "";
-      return `<button type="button" class="submit-assign-item" data-id="${a.id}">
-        <b>${esc(a.title)}</b>
-        <span class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"}</span>
-        ${already}
-      </button>`;
-    }).join("")}</div>`;
-  body.querySelectorAll(".submit-already[data-view-id]").forEach(el=>{
-    el.onclick=(e)=>{
-      e.stopPropagation();
-      if(overlay.isConnected) document.body.removeChild(overlay);
-      feedbackPage={type, mode:"detail", id:Number(el.dataset.viewId)}; render();
-    };
-  });
-  body.querySelectorAll(".submit-assign-item").forEach(btn=>{
-    btn.onclick=async ()=>{
-      btn.disabled=true; btn.textContent="제출 중…";
-      const data=buildSubmissionData(type);
-      const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
-        assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
-      })});
-      if(r.ok){ alert("제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
-      else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
-    };
-  });
+  loadFor(recalledSelectedProf());
 }
 
 /* [첨삭 보기] 페이지 — feedbackPage.mode에 따라 목록/상세 중 하나를 그 탭 안에 그림(팝업 아님) */
@@ -3564,29 +3584,41 @@ async function rFeedbackList(type){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="feedbackListBackBtn" style="margin-bottom:10px">${ICONS.close} 돌아가기</button>
     <h2>${ICONS.chat} ${esc(TYPE_LABEL[type])} 첨삭 보기</h2>
+    <div id="feedbackListPick"></div>
     <div id="feedbackListWrap"><p class="hint">불러오는 중…</p></div>`;
   app.appendChild(c);
   c.querySelector("#feedbackListBackBtn").onclick=()=>{ feedbackPage=null; render(); };
 
-  const res=await apiFetch("student-assignments");
-  if(!c.isConnected) return;
-  const wrap=document.getElementById("feedbackListWrap");
-  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
-  const assignments=res.body.assignments||[];
-  const list=[];
-  assignments.forEach(a=>{
-    (a.mySubmissions||[]).filter(s=>s.type===type).forEach(s=>list.push({...s, assignmentTitle:a.title}));
-  });
-  list.sort((x,y)=>(y.submitted_at||0)-(x.submitted_at||0));
-  if(!list.length){ wrap.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
-  wrap.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
-    <button type="button" class="submit-assign-item" data-id="${s.id}">
-      <b>${esc(s.assignmentTitle)}</b>
-      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
-    </button>`).join("")}</div>`;
-  wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
-    btn.onclick=()=>{ feedbackPage={type, mode:"detail", id:Number(btn.dataset.id)}; render(); };
-  });
+  async function loadFor(profId){
+    const wrap=document.getElementById("feedbackListWrap");
+    const pickWrap=document.getElementById("feedbackListPick");
+    if(!wrap) return;
+    wrap.innerHTML=`<p class="hint">불러오는 중…</p>`;
+    const res=await apiFetch("student-assignments"+(profId?("?profId="+profId):""));
+    if(!c.isConnected) return;
+    if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+    const curProfId=res.body.profId, assignments=res.body.assignments||[], professors=res.body.professors||[];
+    if(curProfId) rememberSelectedProf(curProfId);
+    if(pickWrap) pickWrap.innerHTML=profSelectHtml(professors, curProfId);
+    const pickSel=document.getElementById("profPickSelect");
+    if(pickSel) pickSel.onchange=()=>loadFor(Number(pickSel.value));
+    if(!curProfId){ wrap.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`; return; }
+    const list=[];
+    assignments.forEach(a=>{
+      (a.mySubmissions||[]).filter(s=>s.type===type).forEach(s=>list.push({...s, assignmentTitle:a.title}));
+    });
+    list.sort((x,y)=>(y.submitted_at||0)-(x.submitted_at||0));
+    if(!list.length){ wrap.innerHTML=`<p class="hint">아직 제출한 ${esc(TYPE_LABEL[type])} 과제가 없습니다.</p>`; return; }
+    wrap.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
+      <button type="button" class="submit-assign-item" data-id="${s.id}">
+        <b>${esc(s.assignmentTitle)}</b>
+        <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
+      </button>`).join("")}</div>`;
+    wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
+      btn.onclick=()=>{ feedbackPage={type, mode:"detail", id:Number(btn.dataset.id)}; render(); };
+    });
+  }
+  loadFor(recalledSelectedProf());
 }
 /* 내가 제출한 것 + 교수 첨삭 결과 보기(+ 내 작업물에 반영) 상세 페이지.
    version을 주면(버전 드롭다운으로 과거 기록을 고르면) 그 버전을 보여준다 — 항상 읽기 전용이며,

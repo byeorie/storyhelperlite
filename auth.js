@@ -120,25 +120,41 @@ function openSettings() {
 
   if (currentUser && currentUser.role === "professor") {
     body.innerHTML = `
-      <p class="hint">학생들에게 아래 코드를 알려주면, 학생이 [설정]에서 이 코드를 입력해 내 그룹에 가입할 수 있습니다.</p>
+      <p class="hint">학생들에게 아래 코드를 알려주면, 학생이 [설정]에서 이 코드를 입력해 내 그룹에 등록할 수 있습니다.</p>
       <div class="prof-code-display">${esc2(currentUser.profCode || "코드 없음")}</div>
       <p class="hint">${esc2(currentUser.school || "")} · ${esc2(currentUser.name || "")}</p>
     `;
   } else {
-    const joined = !!(currentUser && currentUser.profId);
+    // 2026-08-20: 학생 1명이 여러 교수를 등록할 수 있도록 변경 — 코드를 입력하면 기존 등록을
+    // 대체하지 않고 목록에 추가된다. 실제 어느 교수의 과제를 볼지는 과제 제출/첨삭 화면의
+    // 드롭다운에서 고른다.
     body.innerHTML = `
-      <p class="hint">${joined ? "이미 교수 그룹에 가입되어 있습니다. 다른 코드를 입력하면 그룹이 변경됩니다." : "교수님께 받은 6자리 코드를 입력하면 과제 제출 그룹에 가입됩니다."}</p>
+      <div id="settingsProfList"><p class="hint">등록된 교수 목록을 불러오는 중…</p></div>
       <div class="plan-block">
-        <label>교수 코드</label>
+        <label>교수 코드 추가 등록</label>
         <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 123456" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
       </div>
       <p id="profJoinMsg" class="hint" style="min-height:18px"></p>
-      <button class="btn" id="profJoinBtn" style="width:100%">가입하기</button>
+      <button class="btn" id="profJoinBtn" style="width:100%">등록하기</button>
     `;
   }
+
+  // 비밀번호 변경 — 모든 계정(학생/교수/관리자) 공통
+  body.insertAdjacentHTML("beforeend", `
+    <div class="settings-pw-block" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+      <p class="hint">가입하신 이메일(<b>${esc2((currentUser && currentUser.email) || "")}</b>)로 비밀번호 변경 링크를 보내드립니다.</p>
+      <button class="btn ghost" id="pwChangeBtn" style="width:100%">비밀번호 변경 메일 보내기</button>
+      <p id="pwChangeMsg" class="hint" style="min-height:18px"></p>
+    </div>
+  `);
+
   box.appendChild(body);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
+
+  if (currentUser && currentUser.role !== "professor") {
+    loadSettingsProfList();
+  }
 
   const joinBtn = document.getElementById("profJoinBtn");
   if (joinBtn) {
@@ -153,16 +169,43 @@ function openSettings() {
       joinBtn.disabled = false;
       if (res.ok && res.body && res.body.ok) {
         const prof = res.body.prof || {};
-        currentUser.profId = prof.id;
-        currentUser.profCode = currentUser.profCode; // 학생 계정은 원래 없음
+        if (!currentUser.profId) currentUser.profId = prof.id;
         saveAuth(getToken(), currentUser);
-        msgEl.textContent = `${prof.school || ""} ${prof.name || ""} 교수님 그룹에 가입되었습니다.`;
+        msgEl.textContent = `${prof.school || ""} ${prof.name || ""} 교수님을 등록했습니다.`;
+        input.value = "";
+        loadSettingsProfList();
         if (typeof onAuthChanged === "function") onAuthChanged();
       } else {
-        msgEl.textContent = (res.body && res.body.error) || "가입에 실패했습니다.";
+        msgEl.textContent = (res.body && res.body.error) || "등록에 실패했습니다.";
       }
     };
   }
+
+  const pwBtn = document.getElementById("pwChangeBtn");
+  if (pwBtn) {
+    pwBtn.onclick = async () => {
+      const msgEl = document.getElementById("pwChangeMsg");
+      pwBtn.disabled = true;
+      msgEl.textContent = "전송 중…";
+      const res = await apiFetch("request-password-change", { method: "POST" });
+      pwBtn.disabled = false;
+      msgEl.textContent = (res.body && (res.body.message || res.body.error)) || "요청에 실패했습니다.";
+    };
+  }
+}
+
+/* [설정]의 학생용 "등록된 교수 목록" — 여러 명 등록 가능해진 뒤(2026-08-20) 추가 */
+async function loadSettingsProfList() {
+  const wrap = document.getElementById("settingsProfList");
+  if (!wrap) return;
+  const esc2 = typeof esc === "function" ? esc : (s => String(s == null ? "" : s));
+  const res = await apiFetch("student-professors");
+  if (!wrap.isConnected) return;
+  const professors = (res.ok && res.body && res.body.professors) || [];
+  wrap.innerHTML = professors.length
+    ? `<p class="hint">등록된 교수 (${professors.length}명) — 과제 제출/첨삭 화면의 드롭다운에서 고를 수 있습니다.</p>
+       <ul class="settings-prof-list">${professors.map(p => `<li>${esc2(p.school || "")} · ${esc2(p.name || "")}</li>`).join("")}</ul>`
+    : `<p class="hint">아직 등록된 교수가 없습니다. 교수님께 받은 6자리 코드를 아래에 입력해 등록하세요.</p>`;
 }
 
 async function signOut() {
