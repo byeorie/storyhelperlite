@@ -96,6 +96,12 @@ body.preview-collapsed .preview-toggle svg{transform:rotate(180deg)}
 .tab:hover{background:var(--bg)}
 .tab.active{background:var(--accent2);color:var(--accent);
   border-left-color:var(--accent);font-weight:600}
+.nav-group-help{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.tab-help{display:flex;align-items:center;gap:6px;width:100%;text-align:left;
+  padding:8px 16px 8px 20px;border:none;background:transparent;cursor:pointer;
+  font-size:14px;color:var(--muted)}
+.tab-help:hover{background:var(--bg);color:var(--ink)}
+.tab-help .icon{width:15px;height:15px}
 
 /* 메인 콘텐츠 */
 main{flex:1;padding:24px 28px 60px;max-width:860px}
