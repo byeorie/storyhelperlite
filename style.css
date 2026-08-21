@@ -419,7 +419,7 @@ body.sb-collapsed .plot-modal-overlay.center-content{left:44px}
 .wp-page{background:#e9e6df;padding:14px;border-radius:10px}
 .wp-inner{position:relative;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.1);
   padding:40px 48px;font-size:13px;line-height:1.9;color:#222}
-.wp-block{margin-bottom:2px}
+.wp-block{margin-bottom:14px;padding-bottom:14px;border-bottom:1px dashed #c9c2b4}
 .wp-text{margin:0 0 8px;white-space:pre-wrap}
 .wp-line{margin:0 0 4px}
 .wp-pagebreak{position:absolute;left:0;right:0;border-top:1px dashed #c0392b;pointer-events:none}
@@ -624,6 +624,11 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--accent);margin:0 1px}
 .memo-block-marker{flex-shrink:0;font-size:11px;font-weight:700;color:var(--accent);line-height:1.6}
 .memo-block-text{flex:1;min-width:0;font-family:Dotum,"돋움",sans-serif;font-size:12px;line-height:1.6;
   color:var(--ink);white-space:pre-wrap;word-break:break-word}
+.memo-block-editable{cursor:text}
+.memo-block-editable:hover{background:#fbecab;border-radius:3px}
+.memo-block-edit-ta{flex:1;min-width:0;font-family:Dotum,"돋움",sans-serif;font-size:12px;line-height:1.6;
+  color:var(--ink);background:#fff;border:1px solid var(--accent);border-radius:3px;padding:2px 4px;
+  resize:vertical;min-height:20px}
 .memo-block-del{flex-shrink:0;background:transparent;border:none;color:var(--muted);cursor:pointer;
   font-size:11px;padding:2px 4px}
 .memo-block-del:hover{color:#b3503a}

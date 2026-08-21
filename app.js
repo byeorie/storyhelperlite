@@ -500,6 +500,7 @@ document.getElementById("topExportPlan").onclick=()=>{ topExportMenu.hidden=true
 document.getElementById("topExportScript").onclick=()=>{ topExportMenu.hidden=true; exportScript(); };
 document.getElementById("topExportDialogue").onclick=()=>{ topExportMenu.hidden=true; exportDialogueOnly(); };
 document.getElementById("topExportStoryboard").onclick=()=>{ topExportMenu.hidden=true; exportStoryboardPdf(); };
+document.getElementById("topExportStoryboardJpg").onclick=(e)=>{ topExportMenu.hidden=true; exportStoryboardJpg(e.currentTarget); };
 document.getElementById("topExportStory").onclick=()=>{ topExportMenu.hidden=true; exportStory(); };
 document.addEventListener("click", ()=>{ toggleExportMenu(true); });
 
@@ -3092,6 +3093,87 @@ function exportStoryboardPdf(){
   setTimeout(finish, 4000);
 }
 
+/* 3-2) 콘티 출력 — JPG, 여러 블록(칸)을 A4 한 장에 격자(2열x3행=6칸)로 모아서 출력.
+   각 칸 안에서 이미지는 object-fit:contain으로 자동 축소되어 잘리지 않는다(칸 텍스트가 아주 길면
+   칸 안 글자 영역은 줄여서 일부만 보일 수 있음). 블록이 6개 넘으면 페이지를 나누고, 페이지가
+   여러 장이면 ZIP으로, 한 장이면 JPG 파일 하나로 받는다. */
+async function exportStoryboardJpg(btn){
+  const blocks=allWriteBlocksOrdered().filter(bl=> (bl.storyboard&&bl.storyboard.key) || blockBodyHtml(bl) || bl.title);
+  if(!blocks.length){ alert("글쓰기 탭에 작성된 블록이 없습니다."); return; }
+  const origText=btn?btn.textContent:null;
+  if(btn) btn.disabled=true;
+  const A4W=794, A4H=1123; // 96dpi 기준 A4 비율(210x297mm)
+  const COLS=2, ROWS=3, PER_PAGE=COLS*ROWS;
+  const totalPages=Math.ceil(blocks.length/PER_PAGE);
+  function loadImg(src){
+    return new Promise(resolve=>{
+      const img=new Image();
+      img.onload=()=>resolve(img); img.onerror=()=>resolve(null);
+      img.src=src;
+    });
+  }
+  try{
+    if(btn) btn.textContent="라이브러리를 불러오는 중…";
+    await ensureBulkPdfLibs();
+    const zip = totalPages>1 ? new window.JSZip() : null;
+    for(let p=0;p<totalPages;p++){
+      if(btn) btn.textContent=`이미지 생성 중… (${p+1}/${totalPages})`;
+      const chunk=blocks.slice(p*PER_PAGE, p*PER_PAGE+PER_PAGE);
+      const page=document.createElement("div");
+      page.style.cssText=`position:fixed;left:-99999px;top:0;width:${A4W}px;height:${A4H}px;box-sizing:border-box;`
+        +`padding:32px;background:#fff;color:#222;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;`
+        +`display:flex;flex-direction:column`;
+      const cellsHtml=chunk.map((bl,ci)=>{
+        const gi=p*PER_PAGE+ci;
+        const title=bl.title?("<b>"+esc(bl.title)+"</b><br>"):"";
+        const body=blockBodyHtml(bl);
+        const textHtml=(title||body) ? (title+body) : '<span style="color:#bbb">(내용 없음)</span>';
+        return `<div style="display:flex;flex-direction:column;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#fafafa;padding:8px;box-sizing:border-box;min-height:0">
+          <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;flex:0 0 auto">
+            <span style="width:18px;height:18px;flex:0 0 auto;background:#333;color:#fff;font-size:10px;border-radius:4px;display:flex;align-items:center;justify-content:center">${gi+1}</span>
+            <span style="font-size:11px;line-height:1.5;max-height:48px;overflow:hidden;color:#333">${textHtml}</span>
+          </div>
+          <div class="jpg-img-slot" data-gi="${gi}" style="flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff;border-radius:6px"></div>
+        </div>`;
+      }).join("");
+      page.innerHTML=`<div style="font-size:12px;color:#999;margin-bottom:10px;flex:0 0 auto">${esc(P.name||"")} · 콘티 ${p+1}/${totalPages}</div>
+        <div style="flex:1 1 auto;min-height:0;display:grid;grid-template-columns:repeat(${COLS},1fr);grid-template-rows:repeat(${ROWS},1fr);gap:12px">${cellsHtml}</div>`;
+      document.body.appendChild(page);
+      for(let ci=0;ci<chunk.length;ci++){
+        const bl=chunk[ci];
+        const slot=page.querySelector(`.jpg-img-slot[data-gi="${p*PER_PAGE+ci}"]`);
+        if(bl.storyboard && bl.storyboard.key){
+          const img=await loadImg(`/api/storyboard-image?key=${encodeURIComponent(bl.storyboard.key)}`);
+          if(img){ img.style.cssText="max-width:100%;max-height:100%;object-fit:contain"; slot.appendChild(img); }
+          else{ slot.innerHTML='<span style="color:#bbb;font-size:11px">(이미지 로드 실패)</span>'; }
+        }else{
+          slot.innerHTML='<span style="color:#bbb;font-size:11px">(콘티 없음)</span>';
+        }
+      }
+      await new Promise(r=>setTimeout(r,30)); // 레이아웃/이미지 렌더 반영 대기
+      let canvas;
+      try{
+        canvas=await window.html2canvas(page, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+      }finally{
+        document.body.removeChild(page);
+      }
+      const dataUrl=canvas.toDataURL("image/jpeg", 0.92);
+      const fname=`콘티_${String(p+1).padStart(2,"0")}.jpg`;
+      if(zip){ zip.file(fname, dataUrl.split(",")[1], {base64:true}); }
+      else{ const a=document.createElement("a"); a.href=dataUrl; a.download=fname; a.click(); }
+    }
+    if(zip){
+      if(btn) btn.textContent="압축 중…";
+      const zipBlob=await zip.generateAsync({type:"blob"});
+      triggerDownload(zipBlob, (P.name||"story")+"_콘티.zip");
+    }
+  }catch(e){
+    alert("JPG 내보내기 중 오류가 발생했습니다: "+((e&&e.message)||e));
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=origText; }
+  }
+}
+
 function exportStory(){
   const blob=new Blob([JSON.stringify(P,null,2)],{type:"application/json"});
   const a=document.createElement("a");
@@ -4212,7 +4294,7 @@ async function rProfSubmissionReview(id, version){
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
   reviewSplitIds=new Set(pairs.filter(p=>p.after!==p.before).map(p=>p.id));
   const reviewMemos=Array.isArray(sub.memos)?sub.memos.slice():[];
-  renderReviewPairs(pairsEl, pairs, isLatest, reviewSplitIds, reviewMemos, {canAdd:isLatest, canDelete:isLatest});
+  renderReviewPairs(pairsEl, pairs, isLatest, reviewSplitIds, reviewMemos, {canAdd:isLatest, canDelete:isLatest, canEdit:isLatest});
   if(saveBtn) saveBtn.style.display=isLatest?"":"none";
 
   if(saveBtn) saveBtn.onclick=async ()=>{
@@ -4376,6 +4458,31 @@ function renderMemoCardsInto(container, mine, numMap, opts){
     marker.textContent = m.start!=null ? String(numMap.get(m.id)||"") : "*";
     box.appendChild(marker);
     const txt=document.createElement("div"); txt.className="memo-block-text"; txt.textContent=m.text||"";
+    if(opts && opts.canEdit){
+      txt.classList.add("memo-block-editable");
+      txt.title="클릭해서 메모 수정";
+      txt.onclick=()=>{
+        const ta=document.createElement("textarea"); ta.className="memo-block-edit-ta"; ta.value=m.text||"";
+        txt.replaceWith(ta);
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        let done=false;
+        const commit=(save)=>{
+          if(done) return; done=true;
+          if(save){
+            const v=ta.value.trim();
+            if(v){ m.text=v; if(opts.onEdit) opts.onEdit(m); }
+          }
+          txt.textContent=m.text||"";
+          ta.replaceWith(txt);
+        };
+        ta.onblur=()=>commit(true);
+        ta.onkeydown=e=>{
+          if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); commit(true); }
+          else if(e.key==="Escape"){ e.preventDefault(); commit(false); }
+        };
+      };
+    }
     box.appendChild(txt);
     if(opts && opts.canDelete){
       const del=document.createElement("button"); del.type="button"; del.className="memo-block-del"; del.textContent="✕"; del.title="메모 삭제";
@@ -4390,9 +4497,11 @@ function renderMemoCardsInto(container, mine, numMap, opts){
 /* 첨삭 화면 공통 렌더러 — editable=true(교수: 원본 블록 우클릭으로 첨삭 분리·메모 추가, textarea로 입력)
    editable=false(학생: 읽기전용, 원본과 다른 블록만 자동으로 위/아래 분리해서 보여줌)
    memos: 이 제출물(버전)에 달린 메모 배열(모든 pair 공통, pairId로 구분됨) — 없으면 [].
-   memoOpts: {canAdd, canDelete, onDelete(memo)} — canAdd면 우클릭 메뉴에 [메모]가 추가되고,
-   canDelete면 메모 카드에 삭제 버튼이 붙는다(눌리면 로컬에서 지우고 onDelete로 알려줌 — 교수 초안
-   편집 중엔 저장 전이라 onDelete 없이 로컬 배열만 바뀌고, 학생 화면에선 onDelete로 즉시 서버에 반영). */
+   memoOpts: {canAdd, canDelete, canEdit, onDelete(memo), onEdit(memo)} — canAdd면 우클릭 메뉴에 [메모]가
+   추가되고, canDelete면 메모 카드에 삭제 버튼이 붙는다(눌리면 로컬에서 지우고 onDelete로 알려줌 — 교수
+   초안 편집 중엔 저장 전이라 onDelete 없이 로컬 배열만 바뀌고, 학생 화면에선 onDelete로 즉시 서버에
+   반영). canEdit이면 메모 카드 텍스트를 클릭해 바로 수정할 수 있다(textarea로 바뀌고 Enter/포커스
+   해제 시 저장, Esc면 취소 — onEdit은 교수 화면에서 저장 전 로컬 배열만 바꾸는 용도로 지금은 안 씀). */
 function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts){
   memos = memos || [];
   memoOpts = memoOpts || {};
@@ -4416,7 +4525,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       const txt=document.createElement("div"); txt.className="review-before-text";
       renderMemoTargetText(txt, p.before, mine, numMap);
       box.append(lbl, txt);
-      renderMemoCardsInto(box, mine, numMap, {canDelete:memoOpts.canDelete, onDelete:onDeleteMemo});
+      renderMemoCardsInto(box, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit});
       wrap.appendChild(box);
       memoTargetEl=txt;
     }else{
@@ -4447,7 +4556,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
          보여준다 — 같은 텍스트 위에 두 강조를 함께 표시하기 어려워, 메모가 달린 블록은 메모 표시를 우선한다 */
       if(mine.length) renderMemoTargetText(prevText, p.before, mine, numMap);
       else prevText.innerHTML=diffPrevHtml(p.before, getAfter());
-      renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, onDelete:onDeleteMemo});
+      renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit});
       wrap.append(prev, cur);
       memoTargetEl=prevText;
     }
