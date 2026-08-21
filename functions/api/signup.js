@@ -1,6 +1,6 @@
 import { hashPassword, makeToken, jsonResponse, nowSec, checkRateLimit, clientIp } from "./_utils.js";
 
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 7; // 2026-08-21: 토큰 탈취 시 재사용 가능 기간을 줄이기 위해 30일→7일로 단축
 const MAX_FIELD_LEN = 60; // 학교/이름이 비정상적으로 긴 문자열이 되는 걸 막는 보수적인 상한
 
 /* 가입은 항상 학생으로만 생성된다. 교수 등급은 관리자가 회원 관리 화면에서

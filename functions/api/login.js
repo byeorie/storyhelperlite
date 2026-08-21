@@ -1,6 +1,6 @@
 import { verifyPassword, makeToken, jsonResponse, nowSec, checkRateLimit, clientIp } from "./_utils.js";
 
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 7; // 2026-08-21: 토큰 탈취 시 재사용 가능 기간을 줄이기 위해 30일→7일로 단축
 /* 무차별 대입 방지(2026-08-20 보안 점검 후 추가): 같은 IP에서 같은 아이디로 15분 안에 10회 넘게
    틀리면 잠깐 막는다. 성공/실패와 무관하게 "시도" 자체를 센다 — 실패만 세면 공격자가 성공 직전에
    카운트를 리셋시키는 걸 막기 어렵기 때문. 정상적으로 쓰는 학생/교수는 15분에 10번 넘게 틀릴 일이
