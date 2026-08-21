@@ -163,3 +163,13 @@ CREATE TABLE IF NOT EXISTS server_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- ===== 2026-08-20 (4): 보안 점검 후 추가 — 로그인/가입/비밀번호 찾기 요청 횟수 제한 =====
+-- 이미 DB를 만든 뒤라면 아래 내용을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+-- (functions/api/_utils.js의 checkRateLimit()이 사용하는 표. key별로 "이번 시간창에서 몇 번
+--  시도했는지"만 기록하며, 3/1·9/1 정기 초기화 때 다른 임시 데이터와 함께 비워진다)
+CREATE TABLE IF NOT EXISTS rate_limits (
+  rl_key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  window_start INTEGER NOT NULL
+);

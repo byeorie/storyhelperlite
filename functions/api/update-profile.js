@@ -9,8 +9,8 @@ export async function onRequestPost({ request, env }) {
 
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
-  const school = (body.school || "").trim();
-  const name = (body.name || "").trim();
+  const school = (body.school || "").trim().slice(0, 60);
+  const name = (body.name || "").trim().slice(0, 60);
   const email = (body.email || "").trim();
   if (!school || !name || !email) return jsonResponse({ error: "모든 항목을 입력해주세요." }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonResponse({ error: "올바른 이메일 형식이 아닙니다." }, 400);

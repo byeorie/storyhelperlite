@@ -2940,7 +2940,10 @@ function paginatePreview(right){
 }
 
 /* 내보내기: 대본 출력(.docx) / 대사만 출력(.docx) / 콘티 출력(.pdf) */
-function esc(s){return(s||"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m])).replace(/\n/g,"<br>");}
+/* 2026-08-20 보안 점검 후 수정: 따옴표(", ')도 함께 이스케이프한다. 예전에는 &,<,>만 처리해서
+   value="${esc(x)}" 처럼 속성값 안에 넣을 때 x에 큰따옴표가 들어있으면 속성을 빠져나가 새 속성
+   (예: onmouseover=...)을 주입할 수 있었다(관리자 회원명단 등에서 실제로 가능했던 저장형 XSS). */
+function esc(s){return(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])).replace(/\n/g,"<br>");}
 
 /* 플롯 섹션 순서대로 이어붙인 전체 글쓰기 블록 목록(글쓰기 탭에서 보이는 순서와 동일) */
 function allWriteBlocksOrdered(){
@@ -3962,7 +3965,7 @@ async function renderProfAssignList(){
     <div class="assign-folder-top">
       <span class="assign-folder-title">${ICONS.book} ${esc(a.title)}</span>
       <div class="assign-folder-controls">
-        <label class="assign-switch" title="제출 마감 스위치" onclick="event.stopPropagation()">
+        <label class="assign-switch" title="제출 마감 스위치">
           <input type="checkbox" ${a.open?"checked":""} data-id="${a.id}">
           <span class="assign-switch-slider"></span>
         </label>
@@ -3971,6 +3974,12 @@ async function renderProfAssignList(){
     </div>
     <div class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
   </div>`).join("");
+  /* 2026-08-20 보안 점검 후 수정: 아래 stopPropagation을 예전엔 HTML 속성(onclick="...")으로 직접
+     넣었는데, 그렇게 하면 XSS를 원천 차단하는 CSP(script-src에서 인라인 스크립트 금지)를 걸 수
+     없어서 addEventListener 방식으로 바꿨다 — 동작은 동일하다. */
+  wrap.querySelectorAll(".assign-switch").forEach(lbl=>{
+    lbl.addEventListener("click", (e)=>e.stopPropagation());
+  });
   wrap.querySelectorAll(".assign-switch input").forEach(inp=>{
     inp.onchange=async ()=>{
       const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:Number(inp.dataset.id), open:inp.checked})});

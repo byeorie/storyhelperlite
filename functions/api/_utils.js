@@ -47,7 +47,7 @@ export async function wipeIfDue(env) {
 
   const tables = [
     "assignments", "submissions", "submission_feedback_versions",
-    "user_data", "student_professors", "sessions", "password_resets",
+    "user_data", "student_professors", "sessions", "password_resets", "rate_limits",
   ];
   for (const t of tables) {
     await env.DB.prepare(`DELETE FROM ${t}`).run();
@@ -92,6 +92,49 @@ export async function verifyPassword(password, storedHashHex, storedSaltHex) {
 export async function makeToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return bytesToHex(bytes);
+}
+
+/* ===== 요청 횟수 제한 (2026-08-20 보안 점검 후 추가) =====
+   로그인/가입/비밀번호 찾기처럼 악용(무차별 대입, 메일 폭탄 등) 소지가 있는 API에서 공통으로 쓰는
+   고정 윈도우(fixed-window) 방식 제한기. rate_limits 표(schema.sql 참고)에 key별로 "이번 창에서
+   몇 번 시도했는지"만 기록한다 — IP 주소 자체는 저장하지 않고, 호출하는 쪽에서 만든 key(예:
+   "login:1.2.3.4:studio.inknpen")의 해시가 아니라 원문을 그대로 쓰므로, key를 만들 때 굳이 IP를
+   그대로 남기고 싶지 않다면 호출부에서 알아서 가공하면 된다(현재는 필요 이상으로 복잡해지지
+   않도록 원문 그대로 사용). */
+export function clientIp(request) {
+  return request.headers.get("CF-Connecting-IP") || "unknown";
+}
+
+/* key별로 windowSec(초) 동안 최대 maxAttempts회까지 허용. 한도를 넘으면
+   { allowed:false, retryAfterSec }, 아니면 { allowed:true }를 반환한다.
+   "fail open": rate_limits 표가 아직 D1에 반영되지 않았거나(마이그레이션 전) DB에 일시적인 문제가
+   있어도 여기서 에러를 던지면 로그인/가입 자체가 전부 막혀버린다. 이 함수는 어디까지나 추가 방어선일
+   뿐이므로, 내부 오류가 나면 제한 없이 통과시키고(제한 기능만 잠깐 꺼진 셈) 원래 기능은 지킨다. */
+export async function checkRateLimit(env, key, maxAttempts, windowSec) {
+  try {
+    const now = nowSec();
+    const row = await env.DB.prepare(
+      "SELECT count, window_start FROM rate_limits WHERE rl_key = ?"
+    ).bind(key).first();
+
+    if (!row || now - row.window_start >= windowSec) {
+      // 새 창 시작 (또는 처음 요청) — 카운트를 1로 리셋
+      await env.DB.prepare(
+        "INSERT INTO rate_limits (rl_key, count, window_start) VALUES (?, 1, ?) " +
+        "ON CONFLICT(rl_key) DO UPDATE SET count = 1, window_start = excluded.window_start"
+      ).bind(key, now).run();
+      return { allowed: true };
+    }
+
+    if (row.count >= maxAttempts) {
+      return { allowed: false, retryAfterSec: Math.max(1, windowSec - (now - row.window_start)) };
+    }
+
+    await env.DB.prepare("UPDATE rate_limits SET count = count + 1 WHERE rl_key = ?").bind(key).run();
+    return { allowed: true };
+  } catch (e) {
+    return { allowed: true };
+  }
 }
 
 /* Authorization: Bearer <token> 헤더로 로그인된 사용자 조회 */

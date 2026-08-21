@@ -1,4 +1,4 @@
-import { requireAuth, jsonResponse, nowSec, makeToken, sendEmail } from "./_utils.js";
+import { requireAuth, jsonResponse, nowSec, makeToken, sendEmail, checkRateLimit } from "./_utils.js";
 
 const RESET_EXPIRE_MIN = 30;
 
@@ -9,6 +9,12 @@ const RESET_EXPIRE_MIN = 30;
 export async function onRequestPost({ request, env }) {
   const auth = await requireAuth(request, env);
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+
+  // 메일 폭탄 방지(2026-08-20 보안 점검 후 추가): 본인 계정 기준 1시간에 5건까지만 허용
+  const rl = await checkRateLimit(env, `pwchange:${auth.user.id}`, 5, 60 * 60);
+  if (!rl.allowed) {
+    return jsonResponse({ error: `너무 많이 시도했습니다. ${Math.ceil(rl.retryAfterSec / 60)}분 후 다시 시도해주세요.` }, 429);
+  }
 
   const token = await makeToken();
   const now = nowSec();

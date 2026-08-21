@@ -1,6 +1,11 @@
-import { jsonResponse, nowSec, makeToken, sendEmail } from "./_utils.js";
+import { jsonResponse, nowSec, makeToken, sendEmail, checkRateLimit, clientIp } from "./_utils.js";
 
 const RESET_EXPIRE_MIN = 30;
+/* 응답 메시지는 이메일 가입 여부와 무관하게 항상 동일하게 돌려준다(2026-08-20 보안 점검 후 수정).
+   예전에는 "등록된 계정을 찾을 수 없습니다"처럼 가입 여부에 따라 메시지가 달라서, 이 API를 여러
+   이메일로 반복 호출해보면 어떤 이메일이 가입되어 있는지 알아낼 수 있었다(계정 존재 여부 추측
+   공격). 실제 안내 메일은 가입된 이메일일 때만 발송되므로 정상 사용자 경험은 그대로다. */
+const GENERIC_MESSAGE = "입력하신 이메일이 가입되어 있다면, 아이디 안내와 비밀번호 재설정 링크를 보내드렸습니다. 메일함(스팸함도 확인)을 확인해주세요.";
 
 /* POST /api/find-account — 가입 이메일 입력 → 아이디 안내 + 비밀번호 재설정 링크 메일 발송 */
 export async function onRequestPost({ request, env }) {
@@ -10,9 +15,15 @@ export async function onRequestPost({ request, env }) {
   const email = (body.email || "").trim();
   if (!email) return jsonResponse({ error: "이메일을 입력해주세요." }, 400);
 
+  // 메일 폭탄/계정 탐색 방지(2026-08-20 보안 점검 후 추가): 같은 IP에서 1시간에 5건까지만 허용
+  const rl = await checkRateLimit(env, `find-account:${clientIp(request)}`, 5, 60 * 60);
+  if (!rl.allowed) {
+    return jsonResponse({ error: `너무 많이 시도했습니다. ${Math.ceil(rl.retryAfterSec / 60)}분 후 다시 시도해주세요.` }, 429);
+  }
+
   const user = await env.DB.prepare("SELECT id, username FROM users WHERE email = ?").bind(email).first();
   if (!user) {
-    return jsonResponse({ message: "해당 이메일로 등록된 계정을 찾을 수 없습니다." });
+    return jsonResponse({ message: GENERIC_MESSAGE });
   }
 
   const token = await makeToken();
@@ -36,7 +47,5 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ error: "메일 발송에 실패했습니다: " + e.message }, 500);
   }
 
-  return jsonResponse({
-    message: "입력하신 이메일로 아이디 안내와 비밀번호 재설정 링크를 보내드렸습니다. 메일함(스팸함도 확인)을 확인해주세요.",
-  });
+  return jsonResponse({ message: GENERIC_MESSAGE });
 }
