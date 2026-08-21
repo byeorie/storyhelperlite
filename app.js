@@ -2265,7 +2265,7 @@ function rWrite(){
     submitBtn.onclick=()=>openSubmitModal("write");
     barRight.appendChild(submitBtn);
     const feedbackBtn=document.createElement("button"); feedbackBtn.className="btn ghost sm icon-btn";
-    feedbackBtn.innerHTML=ICONS.chat+" 첨삭 보기";
+    feedbackBtn.innerHTML=ICONS.chat+" 피드백 보기";
     feedbackBtn.onclick=()=>showFeedbackPage("write");
     barRight.appendChild(feedbackBtn);
   }
@@ -3721,7 +3721,7 @@ function submitBtnHtml(){
   return (typeof currentUser!=="undefined" && currentUser && currentUser.role!=="professor")
     ? `<div class="submit-btn-group">
         <button type="button" class="btn ghost sm icon-btn submit-tab-btn">${ICONS.upload} 제출</button>
-        <button type="button" class="btn ghost sm icon-btn feedback-tab-btn">${ICONS.chat} 첨삭 보기</button>
+        <button type="button" class="btn ghost sm icon-btn feedback-tab-btn">${ICONS.chat} 피드백 보기</button>
       </div>` : "";
 }
 function wireSubmitBtn(container, type){
@@ -3805,7 +3805,7 @@ function rFeedbackPage(){
 async function rFeedbackList(type){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="feedbackListBackBtn" style="margin-bottom:10px">${ICONS.close} 돌아가기</button>
-    <h2>${ICONS.chat} ${esc(TYPE_LABEL[type])} 첨삭 보기</h2>
+    <h2>${ICONS.chat} ${esc(TYPE_LABEL[type])} 피드백 보기</h2>
     <div id="feedbackListWrap"><p class="hint">불러오는 중…</p></div>`;
   app.appendChild(c);
   c.querySelector("#feedbackListBackBtn").onclick=()=>{ feedbackPage=null; render(); };
@@ -4674,7 +4674,7 @@ const GUIDE_SECTIONS=[
     <ul>
       <li>담당 교수님을 여러 명 등록했다면, 상단 툴바에서 제출할 교수(수업)를 먼저 선택하세요.</li>
       <li>각 작성 화면 상단의 <b>[제출]</b> 버튼으로 현재 내용을 교수님께 제출합니다.</li>
-      <li><b>[첨삭 보기]</b>에서 교수님이 남긴 항목별 피드백과 메모를 확인할 수 있습니다.</li>
+      <li><b>[피드백 보기]</b>에서 교수님이 남긴 항목별 피드백과 메모를 확인할 수 있습니다.</li>
       <li>"반영" 버튼을 누르면 첨삭 내용이 내 작업물에 자동으로 채워지고, 교수님 메모는 별도 카드로 표시됩니다(필요 없으면 카드의 ✕로 삭제 가능).</li>
     </ul>`},
   {title:"교수 계정 기능", html:`
