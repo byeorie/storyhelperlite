@@ -517,6 +517,7 @@ document.querySelectorAll(".tab").forEach(t=>{
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
     t.classList.add("active"); activeTab=t.dataset.tab; localStorage.setItem(TAB_KEY, activeTab); render();
     window.scrollTo(0,0);
+    document.body.classList.remove("mobile-nav-open"); /* 모바일: 메뉴 선택 시 서랍 자동 닫힘 */
   };
 });
 
@@ -4828,8 +4829,15 @@ function openUsageGuide(){
 }
 document.getElementById("usageGuideLink").onclick=e=>{ e.preventDefault(); openUsageGuide(); };
 
-/* 왼쪽 메뉴 접기/펼치기 버튼 + 저장된 접힘 상태 적용 */
-document.getElementById("sbToggleBtn").onclick=()=>{ UICOL.sb=!UICOL.sb; saveUiCollapse(); applyUiCollapse(); };
+/* 왼쪽 메뉴 접기/펼치기 버튼 + 저장된 접힘 상태 적용
+   모바일(폭 768px 이하)에서는 같은 버튼이 햄버거 메뉴로 동작 — 데스크톱의
+   sb-collapsed 저장 상태와는 별개로 mobile-nav-open 클래스만 그때그때 토글한다 */
+const MOBILE_NAV_MQ = window.matchMedia("(max-width:768px)");
+document.getElementById("sbToggleBtn").onclick=()=>{
+  if(MOBILE_NAV_MQ.matches){ document.body.classList.toggle("mobile-nav-open"); return; }
+  UICOL.sb=!UICOL.sb; saveUiCollapse(); applyUiCollapse();
+};
+document.getElementById("mobileNavBackdrop").onclick=()=>{ document.body.classList.remove("mobile-nav-open"); };
 applyUiCollapse();
 /* 상단바 실제 높이를 재서 --topbar-h에 반영 — 사이드바·접기 버튼이 툴바에 딱 붙도록 */
 (function syncTopbarHeight(){
