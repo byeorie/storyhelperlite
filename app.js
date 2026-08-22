@@ -502,7 +502,11 @@ document.getElementById("topExportDialogue").onclick=()=>{ topExportMenu.hidden=
 document.getElementById("topExportStoryboard").onclick=()=>{ topExportMenu.hidden=true; exportStoryboardPdf(); };
 document.getElementById("topExportStoryboardJpg").onclick=(e)=>{ topExportMenu.hidden=true; exportStoryboardJpg(e.currentTarget); };
 document.getElementById("topExportStory").onclick=()=>{ topExportMenu.hidden=true; exportStory(); };
-document.addEventListener("click", ()=>{ toggleExportMenu(true); });
+
+/* 모바일 전용 "더보기" 롤링 메뉴 — 새 작품/저장/불러오기/내보내기를 하나로 묶음.
+   버튼 자체는 그대로 두고(mb-more-group 안으로 이동), 모바일 폭에서만 CSS로 드롭다운처럼 보이게 함 */
+document.getElementById("mbMoreBtn").onclick=e=>{ e.stopPropagation(); document.body.classList.toggle("mb-more-open"); };
+document.addEventListener("click", ()=>{ toggleExportMenu(true); document.body.classList.remove("mb-more-open"); });
 
 /* ===== 탭 ===== */
 const TAB_KEY = "storyhelper_activeTab";
@@ -558,6 +562,9 @@ function render(){
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
       profStudents:rProfStudents, profAssignments:rProfAssignments, sampleData:rSampleData, learn:rLearn};
     (renderers[activeTab]||rIdea)();
+    /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
+       숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
+    app.querySelectorAll("textarea").forEach(ta=>{ if(ta.offsetParent!==null) autoGrowTextarea(ta); });
   }catch(e){
     console.error("렌더링 오류:", e);
     app.innerHTML='<div class="card"><h2>문제가 발생했습니다</h2>'
@@ -746,7 +753,7 @@ function rIdea(){
 
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
-    <input type="text" id="ideaNewInput" placeholder="아이디어를 작성해보세요">
+    <textarea id="ideaNewInput" class="ta-line" rows="1" placeholder="아이디어를 작성해보세요"></textarea>
     <div class="idea-compose-row idea-add-row">
       <input type="text" id="ideaNewTagInput" placeholder="태그 입력 후 Enter">
       <button type="button" id="ideaAddBtn" class="btn">등록</button>
@@ -1185,16 +1192,16 @@ function charDetailPage(ch){
     <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
     <div class="row"><div><label>나이</label><input type="text" data-k="age" placeholder="예: 17세, 20대 초반"></div>
     <div><label>성별</label><input type="text" data-k="gender" placeholder="예: 여성, 남성, 논바이너리 등"></div></div>
-    <div class="row"><div><label>직업/신분</label><input type="text" data-k="job" placeholder="예: 고등학생, 헌터 길드 마스터"></div>
-    <div><label>소속/세력</label><input type="text" data-k="affiliation" placeholder="예: OO가문, OO길드, 무소속"></div></div>
+    <div class="row"><div><label>직업/신분</label><textarea data-k="job" class="ta-line" rows="1" placeholder="예: 고등학생, 헌터 길드 마스터"></textarea></div>
+    <div><label>소속/세력</label><textarea data-k="affiliation" class="ta-line" rows="1" placeholder="예: OO가문, OO길드, 무소속"></textarea></div></div>
 
     <h3 class="char-detail-sub">${ICONS.bolt} 인물 성격</h3>
     <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select><div class="type-desc-box" id="mbtiDescBox"></div></div>
     <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select><div class="type-desc-box" id="enneaDescBox"></div></div></div>
-    <div class="row"><div><label>목표 (원하는 것)</label><input type="text" data-k="goal"></div>
-    <div><label>결함 (약점·트라우마)</label><input type="text" data-k="flaw"></div></div>
-    <div class="row"><div><label>강점 (장점)</label><input type="text" data-k="strength"></div>
-    <div><label>비밀</label><input type="text" data-k="secret" placeholder="아직 밝혀지지 않은 것"></div></div>
+    <div class="row"><div><label>목표 (원하는 것)</label><textarea data-k="goal" class="ta-line" rows="1"></textarea></div>
+    <div><label>결함 (약점·트라우마)</label><textarea data-k="flaw" class="ta-line" rows="1"></textarea></div></div>
+    <div class="row"><div><label>강점 (장점)</label><textarea data-k="strength" class="ta-line" rows="1"></textarea></div>
+    <div><label>비밀</label><textarea data-k="secret" class="ta-line" rows="1" placeholder="아직 밝혀지지 않은 것"></textarea></div></div>
 
     <h3 class="char-detail-sub">${ICONS.building} 가족사</h3>
     <label>부모의 정보 및 관계</label><textarea data-k="parentsInfo" placeholder="부모님의 성격, 직업, 캐릭터와의 관계 등"></textarea>
@@ -1210,9 +1217,9 @@ function charDetailPage(ch){
     <h3 class="char-detail-sub">${ICONS.book} 외모 및 특징</h3>
     <label>외모 상세</label><textarea data-k="appearance" placeholder="키, 체형, 헤어스타일, 옷차림, 특징적 외형 등"></textarea>
     <label>말투 / 버릇</label><textarea data-k="speechHabit" placeholder="자주 쓰는 말, 어투, 습관적 행동 등"></textarea>
-    <label>매력 포인트 / 시그니처 소품</label><input type="text" data-k="charmPoint" placeholder="예: 왼쪽 눈 아래 흉터, 항상 들고 다니는 낡은 만년필">
-    <div class="row"><div><label>좋아하는 것</label><input type="text" data-k="likes"></div>
-    <div><label>싫어하는 것</label><input type="text" data-k="dislikes"></div></div>
+    <label>매력 포인트 / 시그니처 소품</label><textarea data-k="charmPoint" class="ta-line" rows="1" placeholder="예: 왼쪽 눈 아래 흉터, 항상 들고 다니는 낡은 만년필"></textarea>
+    <div class="row"><div><label>좋아하는 것</label><textarea data-k="likes" class="ta-line" rows="1"></textarea></div>
+    <div><label>싫어하는 것</label><textarea data-k="dislikes" class="ta-line" rows="1"></textarea></div></div>
     <label>대사 샘플</label><textarea data-k="dialogueSample" placeholder="이 캐릭터라면 할 법한 대사 예시"></textarea>
 
     <h3 class="char-detail-sub">기타 메모</h3>
@@ -1491,7 +1498,7 @@ function rBg(){
     <label>세계관 유형</label><select id="w_type"><option value="">선택 안 함</option>${optionsToHtml(worldTypeOpts)}</select>
     <label>시대</label><input type="text" id="w_era" placeholder="현대/중세/근미래…">
     <label>장소</label><input type="text" id="w_place" placeholder="도시/왕국/우주선…">
-    <label>전체 분위기/톤</label><input type="text" id="b_mood" placeholder="어둡고 진중한 / 밝고 코믹한…">
+    <label>전체 분위기/톤</label><textarea id="b_mood" class="ta-line" rows="1" placeholder="어둡고 진중한 / 밝고 코믹한…"></textarea>
 
     <div class="section-title">지리 · 역사 (선택)</div>
     <label>주요 지역/장소</label><textarea id="w_regions" placeholder="이야기의 주 무대가 되는 지역들과 각각의 특징"></textarea>
@@ -1561,7 +1568,7 @@ function rBg(){
           <input type="text" class="wv-term-name" placeholder="용어명 (예: 마력석, 붉은 여단…)" value="${esc(g.term||"")}">
           <button type="button" class="chip-x" title="삭제">${ICONS.close}</button>
         </div>
-        <label>한 줄 정의</label><input type="text" class="wv-term-def" value="${esc(g.definition||"")}">
+        <label>한 줄 정의</label><textarea class="wv-term-def ta-line" rows="1">${esc(g.definition||"")}</textarea>
         <div class="row">
           <div><label>첫 등장 회차</label><input type="text" class="wv-term-ep" placeholder="예: 12화" value="${esc(g.firstEpisode||"")}"></div>
           <div><label>독자 공개 범위</label><select class="wv-term-disc">
@@ -1614,7 +1621,7 @@ function rEvent(){
     "목표 → 갈등 → 결과 → 다음 사건"의 흐름으로 설계합니다. 굵은 항목만 채워도 충분합니다.</p>
 
     <div class="section-title">사건 개요</div>
-    <label>사건명</label><input type="text" id="e_name" placeholder="예: 왕궁 습격, 첫 만남…">
+    <label>사건명</label><textarea id="e_name" class="ta-line" rows="1" placeholder="예: 왕궁 습격, 첫 만남…"></textarea>
     <label>사건 설명 (무슨 일이 일어나는가)</label><textarea id="e_main" placeholder="이야기를 시작시키는 사건"></textarea>
     <label>관련 인물</label><textarea id="e_characters" placeholder="이 사건을 주도하는 인물 / 영향을 받는 인물"></textarea>
     <div class="row">
@@ -1671,10 +1678,10 @@ function rEvent(){
       const box=document.createElement("div"); box.className="plan-block wv-term";
       box.innerHTML=`
         <div class="wv-term-head">
-          <input type="text" class="ev-log-name" placeholder="사건명" value="${esc(g.name||"")}">
+          <textarea class="ev-log-name ta-line" rows="1" placeholder="사건명">${esc(g.name||"")}</textarea>
           <button type="button" class="chip-x" title="삭제">${ICONS.close}</button>
         </div>
-        <label>관련 인물</label><input type="text" class="ev-log-char" value="${esc(g.characters||"")}">
+        <label>관련 인물</label><textarea class="ev-log-char ta-line" rows="1">${esc(g.characters||"")}</textarea>
         <div class="row">
           <div><label>발생 회차</label><input type="text" class="ev-log-ep" placeholder="예: 12화" value="${esc(g.episode||"")}"></div>
           <div><label>클리프행어 여부</label><select class="ev-log-cliff">
@@ -1715,7 +1722,7 @@ function rEvent(){
    내보내기(.docx)는 exportPlan()에서 같은 양식(표) 그대로 출력한다. */
 const PLAN_FIELDS=[
   {k:"title", label:"제목", guide:"작품의 제목 또는 가제를 입력하세요.", type:"text"},
-  {k:"genre", label:"장르", guide:"로맨스·판타지·액션·스릴러 등 장르와 톤을 적어주세요.", type:"text"},
+  {k:"genre", label:"장르", guide:"로맨스·판타지·액션·스릴러 등 장르와 톤을 적어주세요.", type:"textarea"},
   {k:"logline", label:"로그라인", guide:"작품 전체를 한두 문장으로 요약하세요. (주인공이 무엇을 원하고, 무엇이 가로막는가)", type:"textarea"},
   {k:"mainReaders", label:"주요 독자", guide:"이 작품을 즐길 핵심 독자층(연령대·성별·취향)을 구체적으로 적어주세요.", type:"textarea"},
   {k:"length", label:"웹툰 분량", guide:"예상 총 화수, 연재 주기, 회당 컷 수 등을 적어주세요.", type:"textarea"},
@@ -2423,6 +2430,16 @@ function autoGrowTextarea(ta){
   ta.style.height="auto";
   ta.style.height=ta.scrollHeight+"px";
 }
+/* 앱 전체의 모든 textarea에 자동 높이 조절 적용 — 타이핑할 때마다(위임 리스너) 자동 실행됨.
+   화면이 새로 그려질 때(저장된 긴 글 표시)의 초기 크기 맞춤은 render()에서 별도로 처리 */
+document.addEventListener("input", e=>{
+  if(e.target.tagName==="TEXTAREA") autoGrowTextarea(e.target);
+});
+/* 원래 <input type=text>였다가 줄바꿈 가능한 textarea(.ta-line)로 바꾼 항목들은 한 줄 입력창처럼
+   동작해야 하므로, Enter 키로 줄바꿈이 생기지 않도록 막음 */
+document.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && e.target.classList && e.target.classList.contains("ta-line")) e.preventDefault();
+});
 
 /* 여러 본문 블록을 하나의 그룹 상자로 묶어 보여주는 래퍼 생성 */
 function blockGroupWrap(gid, list){
