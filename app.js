@@ -747,8 +747,9 @@ function rIdea(){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
     <input type="text" id="ideaNewInput" placeholder="아이디어를 작성해보세요">
-    <div class="idea-compose-row">
+    <div class="idea-compose-row idea-add-row">
       <input type="text" id="ideaNewTagInput" placeholder="태그 입력 후 Enter">
+      <button type="button" id="ideaAddBtn" class="btn">등록</button>
     </div>
     <div class="idea-tag-row" id="ideaPendingTagRow"></div>
     ${allTags.length?'<label>기존 태그에서 선택</label><div class="idea-tag-row" id="ideaExistingTagRow"></div>':""}
@@ -840,14 +841,15 @@ function rIdea(){
   });
 
   const input=c.querySelector("#ideaNewInput");
-  input.onkeydown=e=>{
-    if(e.key==="Enter" && input.value.trim()){
-      P.ideaBlocks.push({id:uid(), text:input.value.trim(), tags:[...ideaPendingTags]});
-      ideaPendingTags=[];
-      input.value="";
-      save(); render();
-    }
-  };
+  function submitNewIdea(){
+    if(!input.value.trim()) return;
+    P.ideaBlocks.push({id:uid(), text:input.value.trim(), tags:[...ideaPendingTags]});
+    ideaPendingTags=[];
+    input.value="";
+    save(); render();
+  }
+  input.onkeydown=e=>{ if(e.key==="Enter") submitNewIdea(); };
+  c.querySelector("#ideaAddBtn").onclick=submitNewIdea;
 }
 
 /* 아이디어 블록 순서를 화면(DOM) 순서대로 실제 저장 순서에 반영 */

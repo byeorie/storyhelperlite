@@ -162,6 +162,9 @@ textarea{resize:vertical;min-height:70px}
 .stage .filled-dot{margin-left:auto;color:var(--ok);font-size:12px}
 
 /* 아이디어 모음 */
+.idea-add-row{display:flex;gap:8px;align-items:stretch}
+.idea-add-row input{flex:1;min-width:0}
+.idea-add-row .btn{flex-shrink:0}
 .idea-compose-row{margin-top:10px}
 .idea-compose-row input{font-size:13px;padding:7px 10px}
 .idea-tag-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
