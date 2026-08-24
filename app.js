@@ -55,7 +55,7 @@ function onAuthChanged(){
   refreshProfNavVisibility();
   refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
-  if((activeTab==="profStudents"||activeTab==="profClasses"||activeTab==="sampleData") && !isProfessor()) forceTab("idea");
+  if((activeTab==="profClasses"||activeTab==="sampleData") && !isProfessor()) forceTab("idea");
   render();
   maybeShowWipeNotice();
 }
@@ -560,7 +560,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profStudents:rProfStudents, profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn};
+      profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn};
     (renderers[activeTab]||rIdea)();
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
@@ -3677,9 +3677,9 @@ async function doAdminReset(mode){
   else alert((res.body && res.body.error) || "초기화에 실패했습니다.");
 }
 
-/* ===== 🎓 교수 그룹 설정 — 학생-교수 연결 / 과제 관리 / 제출·첨삭 =====
+/* ===== 🎓 교수 그룹 설정 — 학생-교수 연결 / 수업 관리 / 제출·첨삭 =====
    학생: 설정에서 교수 코드 입력 → 가입 → 기획서/플롯/글쓰기 탭의 "제출" 버튼으로 과제 폴더 선택해 제출
-   교수: 학생 관리(내 코드로 가입한 학생 명단) / 과제 관리(등록·마감 스위치·제출함 열람·첨삭)
+   교수: 수업 관리(전체 학생 명단 · 수업 생성 · 수강 학생 배정 · 과제 등록·마감 스위치·제출함 열람·첨삭)
    제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
    "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
    professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
@@ -3990,13 +3990,12 @@ async function rFeedbackDetail(type, id, version){
 }
 
 /* ===== 교수 — 학생 관리 ===== */
-async function rProfStudents(){
-  const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.user} 학생 관리</h2>
-    <p class="hint">내 코드(<b>${esc((currentUser&&currentUser.profCode)||"-")}</b>)를 학생에게 알려주면, 학생이 설정에서 그 코드를 입력해 아래 명단에 나타납니다. 특정 수업의 수강생으로 배정하려면 <b>[수업 관리]</b>에서 수업을 만든 뒤 추가해주세요.</p>
-    <div id="profStudentsWrap"><p class="hint">불러오는 중…</p></div>
-  </div>`;
-  app.appendChild(c);
+/* 2026-08-24: 예전엔 독립된 "학생 관리" 탭이었으나, [수업 관리] 안의 "전체 학생 명단" 항목으로
+   흡수됨 — 내 코드로 가입한 전체 학생(수업 배정과 무관) 명단을 보여준다. container에 그려 넣는
+   형태로 바꿔 rProfClassDetail에서 재사용한다. */
+async function renderProfRosterView(container){
+  container.innerHTML=`<p class="hint">내 코드(<b>${esc((currentUser&&currentUser.profCode)||"-")}</b>)를 학생에게 알려주면, 학생이 설정에서 그 코드를 입력해 아래 명단에 나타납니다. 특정 수업의 수강생으로 배정하려면 수업을 만든 뒤 그 수업의 [수강 학생] 탭에서 추가해주세요.</p>
+    <div id="profStudentsWrap"><p class="hint">불러오는 중…</p></div>`;
   const res=await apiFetch("professor-students");
   const wrap=document.getElementById("profStudentsWrap"); if(!wrap) return;
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
@@ -4056,7 +4055,7 @@ function rProfClasses(){
   if(profClassId!=null){ rProfClassDetail(profClassId); return; }
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>${ICONS.book} 수업 관리</h2>
-    <p class="hint">과목별로 수업을 만들어 학생을 나누고, 수업마다 따로 과제를 낼 수 있습니다. 학생은 자신이 속한 수업의 과제만 보게 됩니다. 수업에 넣지 않은 과제는 "전체 학생" 항목에서 모든 등록 학생에게 공개됩니다.</p>
+    <p class="hint">과목별로 수업을 만들어 학생을 나누고, 수업마다 따로 과제를 낼 수 있습니다. 학생은 자신이 속한 수업의 과제만 보게 됩니다. 수업에 넣지 않은 과제는 "수업 미지정 과제" 항목에서 모든 등록 학생에게 공개됩니다. 내 코드로 가입한 전체 학생 명단은 아래 "전체 학생 명단" 항목에서 볼 수 있습니다.</p>
     <button class="btn" id="profNewClassBtn">${ICONS.plus} 수업 만들기</button>
     <div id="profClassWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>
   </div>`;
@@ -4070,8 +4069,12 @@ async function renderProfClassList(){
   if(!wrap.isConnected) return;
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const classes=res.body.classes||[], unassignedCount=res.body.unassignedCount||0;
-  let html=`<div class="assign-folder" data-class="none">
-    <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.book} 전체 학생 (수업 미지정)</span></div>
+  let html=`<div class="assign-folder" data-class="roster">
+    <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.user} 전체 학생 명단</span></div>
+    <div class="hint">내 코드로 가입한 전체 학생 조회</div>
+  </div>`;
+  html+=`<div class="assign-folder" data-class="none">
+    <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.book} 수업 미지정 과제</span></div>
     <div class="hint">과제 ${unassignedCount}건 · 모든 등록 학생에게 공개</div>
   </div>`;
   html+=classes.map(cl=>`<div class="assign-folder" data-class="${cl.id}">
@@ -4098,7 +4101,11 @@ async function renderProfClassList(){
     };
   });
   wrap.querySelectorAll(".assign-folder").forEach(el=>{
-    el.onclick=()=>{ profClassId=el.dataset.class==="none"?"none":Number(el.dataset.class); profClassTab="assignments"; render(); };
+    el.onclick=()=>{
+      const key=el.dataset.class;
+      profClassId=(key==="none"||key==="roster")?key:Number(key);
+      profClassTab="assignments"; render();
+    };
   });
 }
 function openNewClassModal(){
@@ -4122,15 +4129,19 @@ function openNewClassModal(){
     else alert((r.body&&r.body.error)||"만들기에 실패했습니다.");
   };
 }
-/* 수업 상세 화면 — "과제 관리"/"수강 학생" 두 탭. classId==="none"이면 수업 미지정 과제함(탭 없이 과제만) */
+/* 수업 상세 화면 — "과제 관리"/"수강 학생" 두 탭.
+   classId==="none"이면 수업 미지정 과제함(탭 없이 과제만), classId==="roster"이면 전체 학생 명단
+   (2026-08-24: 예전 독립 "학생 관리" 탭이 여기로 흡수됨, 탭 없이 명단만). */
 async function rProfClassDetail(classId){
   const c=document.createElement("div"); c.className="card";
   const isNone=classId==="none";
+  const isRoster=classId==="roster";
+  const plainTitle=isRoster?"전체 학생 명단":(isNone?"수업 미지정 과제":null);
   c.innerHTML=`<div class="assign-folder-actions">
       <button class="btn ghost sm" id="classBackBtn">${ICONS.close} 수업 목록으로</button>
     </div>
-    <h2 id="classDetailTitle">${ICONS.book} ${isNone?"전체 학생 (수업 미지정)":"불러오는 중…"}</h2>
-    ${isNone?"":`<div class="auth-tabs class-tabs">
+    <h2 id="classDetailTitle">${ICONS.book} ${plainTitle||"불러오는 중…"}</h2>
+    ${plainTitle?"":`<div class="auth-tabs class-tabs">
       <button type="button" class="auth-tab class-tab-btn" data-tab="assignments">${ICONS.book} 과제 관리</button>
       <button type="button" class="auth-tab class-tab-btn" data-tab="students">${ICONS.user} 수강 학생</button>
     </div>`}
@@ -4138,6 +4149,10 @@ async function rProfClassDetail(classId){
   app.appendChild(c);
   c.querySelector("#classBackBtn").onclick=()=>{ profClassId=null; render(); };
 
+  if(isRoster){
+    renderProfRosterView(document.getElementById("classDetailBody"));
+    return;
+  }
   if(isNone){
     renderClassAssignmentsTab(document.getElementById("classDetailBody"), "none");
     return;
@@ -4163,7 +4178,7 @@ async function rProfClassDetail(classId){
    수업엔 없는) 학생을 고르는 모달 */
 function renderClassStudentsTab(container, classId, data){
   const enrolled=data.enrolled||[], available=data.available||[];
-  container.innerHTML=`<p class="hint">이 수업에 추가된 학생만 이 수업의 과제를 볼 수 있습니다. 먼저 학생이 [학생 관리]에 나오도록(내 코드로 가입) 해야 여기서 고를 수 있습니다.</p>
+  container.innerHTML=`<p class="hint">이 수업에 추가된 학생만 이 수업의 과제를 볼 수 있습니다. 먼저 학생이 [전체 학생 명단]에 나오도록(내 코드로 가입) 해야 여기서 고를 수 있습니다.</p>
     <button class="btn" id="classAddStudentBtn" style="margin-bottom:8px">${ICONS.plus} 수강생 추가</button>
     <div id="classStudentListWrap">${enrolled.length?`<table class="admin-table"><thead><tr>
       <th>학교</th><th>이름</th><th>아이디</th><th>이메일</th><th></th>
@@ -4183,7 +4198,7 @@ function renderClassStudentsTab(container, classId, data){
   });
 }
 function openAddClassStudentModal(classId, available){
-  if(!available.length){ alert("추가할 수 있는 학생이 없습니다. 먼저 학생이 [학생 관리]에 나오도록(내 코드로 가입) 해주세요."); return; }
+  if(!available.length){ alert("추가할 수 있는 학생이 없습니다. 먼저 학생이 [전체 학생 명단]에 나오도록(내 코드로 가입) 해주세요."); return; }
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
   const box=document.createElement("div"); box.className="plot-modal";
@@ -4965,8 +4980,9 @@ const GUIDE_SECTIONS=[
     </ul>`},
   {title:"교수 계정 기능", html:`
     <ul>
-      <li><b>학생 관리</b>: 내 수업 코드로 등록한 학생 명단과 과제 제출 현황을 확인합니다.</li>
-      <li><b>과제 관리</b>: 과제 폴더를 만들고, 제출된 작업물에 항목별 첨삭과 메모를 남깁니다.</li>
+      <li><b>수업 관리</b>: 과목별로 수업을 만들고, 내 코드로 가입한 학생을 수업별 수강생으로 배정합니다.</li>
+      <li><b>전체 학생 명단</b>: [수업 관리] 안에서 내 코드로 등록한 전체 학생 명단을 확인합니다.</li>
+      <li><b>과제 관리</b>: [수업 관리]의 각 수업(또는 "수업 미지정 과제") 안에서 과제 폴더를 만들고, 제출된 작업물에 항목별 첨삭과 메모를 남깁니다.</li>
     </ul>`},
   {title:"관리자 계정 기능", html:`
     <ul>
