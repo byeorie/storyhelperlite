@@ -55,7 +55,7 @@ function onAuthChanged(){
   refreshProfNavVisibility();
   refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
-  if((activeTab==="profStudents"||activeTab==="profAssignments"||activeTab==="sampleData") && !isProfessor()) forceTab("idea");
+  if((activeTab==="profStudents"||activeTab==="profClasses"||activeTab==="sampleData") && !isProfessor()) forceTab("idea");
   render();
   maybeShowWipeNotice();
 }
@@ -560,7 +560,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profStudents:rProfStudents, profAssignments:rProfAssignments, sampleData:rSampleData, learn:rLearn};
+      profStudents:rProfStudents, profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn};
     (renderers[activeTab]||rIdea)();
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
@@ -3688,6 +3688,8 @@ const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:
 let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
 let profReviewVersion=null;  // 과제 관리 목록의 버전 드롭다운으로 옛 버전을 골랐을 때 그 버전 번호 — null이면 최신(=이어서 편집 가능)
+let profClassId=null;        // 2026-08-24: 열려있는 수업 id — null이면 수업 목록 화면, "none"이면 수업 미지정(전체 공개) 과제함
+let profClassTab="assignments"; // 수업 상세 화면에서 활성 탭: "assignments"(과제 관리) | "students"(수강 학생)
 let reviewSplitIds=new Set();// 첨삭 화면에서 "이전 버전 / 첨삭"으로 위아래 분리된 블록 id 모음
 /* 학생 계정의 [첨삭 보기] — 팝업 대신 그 탭(기획서/플롯/글쓰기) 안에서 페이지로 전환.
    null이면 평소 탭 화면, {type, mode:'list'}면 그 타입의 제출 목록, {type, mode:'detail', id}면 상세 */
@@ -3872,7 +3874,7 @@ async function openSubmitModal(type){
           ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":""}</span>`
           : "";
         return `<button type="button" class="submit-assign-item" data-id="${a.id}">
-          <b>${esc(a.title)}</b>
+          <b>${esc(a.title)}</b>${a.class_name?` <span class="assign-type-badge">${esc(a.class_name)}</span>`:""}
           <span class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"}</span>
           ${already}
         </button>`;
@@ -3991,7 +3993,7 @@ async function rFeedbackDetail(type, id, version){
 async function rProfStudents(){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>${ICONS.user} 학생 관리</h2>
-    <p class="hint">내 코드(<b>${esc((currentUser&&currentUser.profCode)||"-")}</b>)를 학생에게 알려주면, 학생이 설정에서 그 코드를 입력해 아래 명단에 나타납니다.</p>
+    <p class="hint">내 코드(<b>${esc((currentUser&&currentUser.profCode)||"-")}</b>)를 학생에게 알려주면, 학생이 설정에서 그 코드를 입력해 아래 명단에 나타납니다. 특정 수업의 수강생으로 배정하려면 <b>[수업 관리]</b>에서 수업을 만든 뒤 추가해주세요.</p>
     <div id="profStudentsWrap"><p class="hint">불러오는 중…</p></div>
   </div>`;
   app.appendChild(c);
@@ -4040,25 +4042,180 @@ function openSampleProject(sample){
   forceTab("idea"); render();
 }
 
-/* ===== 교수 — 과제 관리 =====
-   팝업이 아니라 이 탭 안에서 화면만 바뀐다: 과제 목록 → (폴더 클릭) 제출함 → (제출물 클릭) 첨삭 화면.
-   profAssignFolderId/profReviewId 상태값으로 어느 화면을 보여줄지 결정한다(뒤로가기 버튼이 각각 null로 리셋). */
-function rProfAssignments(){
+/* ===== 교수 — 수업 관리 (2026-08-24: 기존 "과제 관리" 페이지를 이 페이지가 흡수함) =====
+   팝업이 아니라 이 탭 안에서 화면만 바뀐다:
+   수업 목록 → (수업 클릭) 수업 상세(과제 관리/수강 학생 탭) → (과제 관리 탭에서 폴더 클릭) 제출함
+   → (제출물 클릭) 첨삭 화면.
+   profClassId/profAssignFolderId/profReviewId 상태값으로 어느 화면을 보여줄지 결정한다
+   (뒤로가기 버튼이 각각 null로 리셋). 교수가 여러 과목을 진행할 때 "수업"으로 학생을 나누고,
+   과제를 특정 수업에 연결해 그 수업 수강생에게만 공개할 수 있다. 수업에 연결하지 않은 과제(과거
+   과제 포함)는 "전체 학생 (수업 미지정)" 항목에서 예전처럼 모든 등록 학생에게 공개된다. */
+function rProfClasses(){
   if(profReviewId){ rProfSubmissionReview(profReviewId, profReviewVersion); return; }
   if(profAssignFolderId){ rProfAssignmentFolder(profAssignFolderId); return; }
+  if(profClassId!=null){ rProfClassDetail(profClassId); return; }
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.book} 과제 관리</h2>
-    <p class="hint">과제를 등록하면 아래에 폴더 형태로 표시됩니다. 폴더를 클릭하면 학생 제출함이 열립니다. 스위치를 끄면 학생이 더 이상 제출할 수 없습니다.</p>
-    <button class="btn" id="profNewAssignBtn">${ICONS.plus} 과제 등록</button>
-    <div id="profAssignWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>
+  c.innerHTML=`<div class="card"><h2>${ICONS.book} 수업 관리</h2>
+    <p class="hint">과목별로 수업을 만들어 학생을 나누고, 수업마다 따로 과제를 낼 수 있습니다. 학생은 자신이 속한 수업의 과제만 보게 됩니다. 수업에 넣지 않은 과제는 "전체 학생" 항목에서 모든 등록 학생에게 공개됩니다.</p>
+    <button class="btn" id="profNewClassBtn">${ICONS.plus} 수업 만들기</button>
+    <div id="profClassWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>
   </div>`;
   app.appendChild(c);
-  c.querySelector("#profNewAssignBtn").onclick=openNewAssignmentModal;
-  renderProfAssignList();
+  c.querySelector("#profNewClassBtn").onclick=openNewClassModal;
+  renderProfClassList();
 }
-async function renderProfAssignList(){
+async function renderProfClassList(){
+  const wrap=document.getElementById("profClassWrap"); if(!wrap) return;
+  const res=await apiFetch("professor-classes");
+  if(!wrap.isConnected) return;
+  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const classes=res.body.classes||[], unassignedCount=res.body.unassignedCount||0;
+  let html=`<div class="assign-folder" data-class="none">
+    <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.book} 전체 학생 (수업 미지정)</span></div>
+    <div class="hint">과제 ${unassignedCount}건 · 모든 등록 학생에게 공개</div>
+  </div>`;
+  html+=classes.map(cl=>`<div class="assign-folder" data-class="${cl.id}">
+    <div class="assign-folder-top">
+      <span class="assign-folder-title">${ICONS.book} ${esc(cl.name)}</span>
+      <div class="assign-folder-controls">
+        <button type="button" class="assign-folder-del" data-id="${cl.id}" title="수업 삭제">${ICONS.trash}</button>
+      </div>
+    </div>
+    <div class="hint">수강생 ${cl.student_count}명 · 과제 ${cl.assignment_count}건</div>
+  </div>`).join("");
+  wrap.innerHTML=html;
+  wrap.querySelectorAll(".assign-folder-del").forEach(btn=>{
+    btn.onclick=async (e)=>{
+      e.stopPropagation();
+      const id=Number(btn.dataset.id);
+      const item=classes.find(cl=>cl.id===id);
+      const warn=(item&&(item.assignment_count||item.student_count))?`\n\n등록된 수강생 배정과 과제(제출물 포함)도 모두 함께 영구 삭제됩니다.`:"";
+      if(!confirm(`'${(item&&item.name)||"이 수업"}'을 삭제할까요?${warn}`)) return;
+      btn.disabled=true;
+      const r=await apiFetch("professor-class?id="+id, {method:"DELETE"});
+      if(!r.ok){ alert((r.body&&r.body.error)||"삭제에 실패했습니다."); btn.disabled=false; return; }
+      renderProfClassList();
+    };
+  });
+  wrap.querySelectorAll(".assign-folder").forEach(el=>{
+    el.onclick=()=>{ profClassId=el.dataset.class==="none"?"none":Number(el.dataset.class); profClassTab="assignments"; render(); };
+  });
+}
+function openNewClassModal(){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="수업 만들기";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  box.insertAdjacentHTML("beforeend",
+    `<label>수업명</label><input type="text" id="newClassName" placeholder="예: 스토리텔링 기초 2026-2">
+     <button class="btn" id="newClassSaveBtn" style="margin-top:14px;width:100%">만들기</button>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const input=box.querySelector("#newClassName"); input.focus();
+  box.querySelector("#newClassSaveBtn").onclick=async ()=>{
+    const name=input.value.trim();
+    if(!name){ alert("수업명을 입력해주세요."); return; }
+    const r=await apiFetch("professor-classes", {method:"POST", body:JSON.stringify({name})});
+    if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfClassList(); }
+    else alert((r.body&&r.body.error)||"만들기에 실패했습니다.");
+  };
+}
+/* 수업 상세 화면 — "과제 관리"/"수강 학생" 두 탭. classId==="none"이면 수업 미지정 과제함(탭 없이 과제만) */
+async function rProfClassDetail(classId){
+  const c=document.createElement("div"); c.className="card";
+  const isNone=classId==="none";
+  c.innerHTML=`<div class="assign-folder-actions">
+      <button class="btn ghost sm" id="classBackBtn">${ICONS.close} 수업 목록으로</button>
+    </div>
+    <h2 id="classDetailTitle">${ICONS.book} ${isNone?"전체 학생 (수업 미지정)":"불러오는 중…"}</h2>
+    ${isNone?"":`<div class="auth-tabs class-tabs">
+      <button type="button" class="auth-tab class-tab-btn" data-tab="assignments">${ICONS.book} 과제 관리</button>
+      <button type="button" class="auth-tab class-tab-btn" data-tab="students">${ICONS.user} 수강 학생</button>
+    </div>`}
+    <div id="classDetailBody"></div>`;
+  app.appendChild(c);
+  c.querySelector("#classBackBtn").onclick=()=>{ profClassId=null; render(); };
+
+  if(isNone){
+    renderClassAssignmentsTab(document.getElementById("classDetailBody"), "none");
+    return;
+  }
+
+  const res=await apiFetch("professor-class?id="+classId);
+  if(!c.isConnected) return;
+  const titleEl=document.getElementById("classDetailTitle");
+  if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
+  const cls=res.body.class;
+  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(cls.name)}`;
+
+  c.querySelectorAll(".class-tab-btn").forEach(btn=>{
+    btn.classList.toggle("active", btn.dataset.tab===profClassTab);
+    btn.onclick=()=>{ profClassTab=btn.dataset.tab; render(); };
+  });
+
+  const body=document.getElementById("classDetailBody"); if(!body) return;
+  if(profClassTab==="students") renderClassStudentsTab(body, classId, res.body);
+  else renderClassAssignmentsTab(body, classId);
+}
+/* 수업 상세 — "수강 학생" 탭: 현재 수강생 명단(제외 가능) + 추가 가능한(내 코드로 등록됐지만 이
+   수업엔 없는) 학생을 고르는 모달 */
+function renderClassStudentsTab(container, classId, data){
+  const enrolled=data.enrolled||[], available=data.available||[];
+  container.innerHTML=`<p class="hint">이 수업에 추가된 학생만 이 수업의 과제를 볼 수 있습니다. 먼저 학생이 [학생 관리]에 나오도록(내 코드로 가입) 해야 여기서 고를 수 있습니다.</p>
+    <button class="btn" id="classAddStudentBtn" style="margin-bottom:8px">${ICONS.plus} 수강생 추가</button>
+    <div id="classStudentListWrap">${enrolled.length?`<table class="admin-table"><thead><tr>
+      <th>학교</th><th>이름</th><th>아이디</th><th>이메일</th><th></th>
+    </tr></thead><tbody>${enrolled.map(s=>`<tr>
+      <td>${esc(s.school)}</td><td>${esc(s.name)}</td><td>${esc(s.username)}</td><td>${esc(s.email)}</td>
+      <td><button type="button" class="btn ghost sm class-student-remove" data-id="${s.id}">제외</button></td>
+    </tr>`).join("")}</tbody></table><p class="hint">총 ${enrolled.length}명</p>`:`<p class="hint">아직 수강생이 없습니다.</p>`}</div>`;
+  container.querySelector("#classAddStudentBtn").onclick=()=>openAddClassStudentModal(classId, available);
+  container.querySelectorAll(".class-student-remove").forEach(btn=>{
+    btn.onclick=async ()=>{
+      if(!confirm("이 학생을 수업에서 제외할까요? (학생 계정 자체는 삭제되지 않습니다)")) return;
+      btn.disabled=true;
+      const r=await apiFetch("professor-class-students?classId="+classId+"&studentId="+btn.dataset.id, {method:"DELETE"});
+      if(!r.ok){ alert((r.body&&r.body.error)||"제외에 실패했습니다."); btn.disabled=false; return; }
+      render();
+    };
+  });
+}
+function openAddClassStudentModal(classId, available){
+  if(!available.length){ alert("추가할 수 있는 학생이 없습니다. 먼저 학생이 [학생 관리]에 나오도록(내 코드로 가입) 해주세요."); return; }
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="수강생 추가";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  box.insertAdjacentHTML("beforeend", `<div class="class-add-list">${available.map(s=>`
+    <label class="class-add-row"><input type="checkbox" value="${s.id}"> ${esc(s.name)} <span class="hint">(${esc(s.username)})</span></label>
+  `).join("")}</div>
+  <button class="btn" id="classAddSaveBtn" style="margin-top:14px;width:100%">추가</button>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  box.querySelector("#classAddSaveBtn").onclick=async ()=>{
+    const ids=[...box.querySelectorAll('input[type="checkbox"]:checked')].map(i=>Number(i.value));
+    if(!ids.length){ alert("추가할 학생을 선택해주세요."); return; }
+    const r=await apiFetch("professor-class-students", {method:"POST", body:JSON.stringify({classId, studentIds:ids})});
+    if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); render(); }
+    else alert((r.body&&r.body.error)||"추가에 실패했습니다.");
+  };
+}
+/* 수업 상세 — "과제 관리" 탭: 기존 과제 관리 페이지와 동일하되 classId로 스코프가 좁혀진다
+   (classId==="none"이면 수업 미지정 과제만) */
+function renderClassAssignmentsTab(container, classId){
+  container.innerHTML=`<p class="hint">과제를 등록하면 아래에 폴더 형태로 표시됩니다. 폴더를 클릭하면 학생 제출함이 열립니다. 스위치를 끄면 학생이 더 이상 제출할 수 없습니다.</p>
+    <button class="btn" id="profNewAssignBtn">${ICONS.plus} 과제 등록</button>
+    <div id="profAssignWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>`;
+  container.querySelector("#profNewAssignBtn").onclick=()=>openNewAssignmentModal(classId);
+  renderProfAssignList(classId);
+}
+async function renderProfAssignList(classId){
   const wrap=document.getElementById("profAssignWrap"); if(!wrap) return;
-  const res=await apiFetch("professor-assignments");
+  const res=await apiFetch("professor-assignments?classId="+encodeURIComponent(classId));
   if(!wrap.isConnected) return;
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const list=res.body.assignments||[];
@@ -4086,7 +4243,7 @@ async function renderProfAssignList(){
     inp.onchange=async ()=>{
       const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:Number(inp.dataset.id), open:inp.checked})});
       if(!r.ok){ alert((r.body&&r.body.error)||"변경에 실패했습니다."); inp.checked=!inp.checked; return; }
-      renderProfAssignList();
+      renderProfAssignList(classId);
     };
   });
   wrap.querySelectorAll(".assign-folder-del").forEach(btn=>{
@@ -4100,14 +4257,14 @@ async function renderProfAssignList(){
       btn.disabled=true;
       const r=await apiFetch("professor-assignment?id="+id, {method:"DELETE"});
       if(!r.ok){ alert((r.body&&r.body.error)||"삭제에 실패했습니다."); btn.disabled=false; return; }
-      renderProfAssignList();
+      renderProfAssignList(classId);
     };
   });
   wrap.querySelectorAll(".assign-folder").forEach(el=>{
     el.onclick=()=>{ profAssignFolderId=Number(el.dataset.id); render(); };
   });
 }
-function openNewAssignmentModal(){
+function openNewAssignmentModal(classId){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
   const box=document.createElement("div"); box.className="plot-modal";
@@ -4125,8 +4282,8 @@ function openNewAssignmentModal(){
     if(!title){ alert("과제명을 입력해주세요."); return; }
     const dueStr=box.querySelector("#newAssignDue").value;
     const dueAt=dueStr ? Math.floor(new Date(dueStr+"T23:59:59").getTime()/1000) : null;
-    const r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt})});
-    if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(); }
+    const r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt, classId: classId==="none"?null:classId})});
+    if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(classId); }
     else alert((r.body&&r.body.error)||"등록에 실패했습니다.");
   };
 }

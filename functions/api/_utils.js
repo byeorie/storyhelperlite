@@ -47,7 +47,8 @@ export async function wipeIfDue(env) {
 
   const tables = [
     "assignments", "submissions", "submission_feedback_versions",
-    "user_data", "student_professors", "sessions", "password_resets", "rate_limits",
+    "user_data", "student_professors", "classes", "class_students",
+    "sessions", "password_resets", "rate_limits",
   ];
   for (const t of tables) {
     await env.DB.prepare(`DELETE FROM ${t}`).run();

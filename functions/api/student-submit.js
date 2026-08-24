@@ -19,7 +19,7 @@ export async function onRequestPost({ request, env }) {
   if (typeof body.data === "undefined") return jsonResponse({ error: "제출할 내용이 없습니다." }, 400);
 
   const assignment = await env.DB.prepare(
-    "SELECT id, open, prof_id FROM assignments WHERE id = ?"
+    "SELECT id, open, prof_id, class_id FROM assignments WHERE id = ?"
   ).bind(assignmentId).first();
   if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
@@ -27,6 +27,14 @@ export async function onRequestPost({ request, env }) {
     "SELECT id FROM student_professors WHERE student_id = ? AND prof_id = ?"
   ).bind(auth.user.id, assignment.prof_id).first();
   if (!member) return jsonResponse({ error: "가입한 교수 그룹이 없습니다. 설정에서 교수 코드를 먼저 입력해주세요." }, 400);
+
+  // 2026-08-24: 과제가 특정 수업에 속해있다면(class_id) 그 수업의 수강생만 제출할 수 있다.
+  if (assignment.class_id) {
+    const inClass = await env.DB.prepare(
+      "SELECT id FROM class_students WHERE class_id = ? AND student_id = ?"
+    ).bind(assignment.class_id, auth.user.id).first();
+    if (!inClass) return jsonResponse({ error: "이 과제가 속한 수업의 수강생이 아닙니다." }, 403);
+  }
   if (!assignment.open) return jsonResponse({ error: "제출이 마감된 과제입니다." }, 403);
 
   const now = nowSec();

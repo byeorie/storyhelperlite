@@ -26,9 +26,14 @@ export async function onRequestGet({ request, env }) {
 
   const prof = professors.find((p) => p.id === profId) || null;
 
+  /* 2026-08-24: 수업(class) 도입 — class_id가 없는(수업 미지정) 과제는 예전처럼 전체 공개,
+     class_id가 있으면 그 수업의 수강생(class_students)에게만 보인다. */
   const { results } = await env.DB.prepare(
-    "SELECT id, title, due_at, open, created_at FROM assignments WHERE prof_id = ? ORDER BY created_at DESC"
-  ).bind(profId).all();
+    "SELECT a.id, a.title, a.due_at, a.open, a.created_at, c.name AS class_name " +
+    "FROM assignments a LEFT JOIN classes c ON c.id = a.class_id " +
+    "WHERE a.prof_id = ? AND (a.class_id IS NULL OR a.class_id IN (SELECT class_id FROM class_students WHERE student_id = ?)) " +
+    "ORDER BY a.created_at DESC"
+  ).bind(profId, auth.user.id).all();
 
   const { results: mine } = await env.DB.prepare(
     "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at " +

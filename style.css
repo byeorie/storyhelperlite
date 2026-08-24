@@ -584,6 +584,13 @@ body.logged-in .login-overlay { display: none; }
 .assign-folder-del .icon { width: 14px; height: 14px; vertical-align: middle; }
 .assign-folder-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 
+/* 수업 관리 — 수업 상세 화면의 과제 관리/수강 학생 탭 (2026-08-24) */
+.class-tabs { max-width: 320px; margin-bottom: 14px; }
+.class-add-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 4px; margin-top: 8px; }
+.class-add-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.class-add-row:hover { background: var(--accent2); }
+.class-add-row input { flex-shrink: 0; }
+
 /* 제출 마감 스위치 */
 .assign-switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
 .assign-switch input { opacity: 0; width: 0; height: 0; }

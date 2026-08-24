@@ -173,3 +173,29 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   count INTEGER NOT NULL,
   window_start INTEGER NOT NULL
 );
+
+-- ===== 2026-08-24: 수업(강좌) 관리 — 교수가 여러 과목을 진행할 때 학생을 수업별로 나눔 =====
+-- 이미 DB를 만든 뒤라면 아래 내용을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+-- (기존 과제(assignments)는 class_id가 NULL로 남아 예전처럼 "수업 미지정 · 전체 공개" 과제로
+--  계속 동작합니다. 새로 만드는 과제만 특정 수업에 연결해 그 수업 수강생에게만 공개할 수 있습니다.
+--  학생 계정 자체나 student_professors(교수 등록) 관계에는 영향이 없습니다.)
+CREATE TABLE IF NOT EXISTS classes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  prof_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_classes_prof ON classes(prof_id);
+
+CREATE TABLE IF NOT EXISTS class_students (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  class_id INTEGER NOT NULL,
+  student_id INTEGER NOT NULL,
+  added_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_class_students_pair ON class_students(class_id, student_id);
+CREATE INDEX IF NOT EXISTS idx_class_students_class ON class_students(class_id);
+CREATE INDEX IF NOT EXISTS idx_class_students_student ON class_students(student_id);
+
+ALTER TABLE assignments ADD COLUMN class_id INTEGER;
+CREATE INDEX IF NOT EXISTS idx_assignments_class ON assignments(class_id);

@@ -2,6 +2,49 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-08-24 — 교수 계정: "수업 관리" 페이지 신설 (여러 과목/수업별로 학생 그룹 분리)
+
+**요청**: "교수 계정 기능 추가. 현재 교수 계정은 개별 코드로 학생들을 받고 있는데, 교수가 여러 과목을
+진행하는 경우 학생 그룹을 나눌 수 있어야 해. 수업관리 페이지를 만들어주고, 수업 생성/수강 학생/과제
+관리를 할 수 있도록 해줘. 기존의 과제관리 페이지를 수업 관리 페이지로 흡수하는 형태로 진행해줘."
+
+- **schema.sql** 수정 — `classes`(수업), `class_students`(수업-학생 배정, class_id+student_id 유니크)
+  표 신규, `assignments.class_id`(nullable) 컬럼 추가. 기존 과제는 class_id가 NULL로 남아 예전처럼
+  "수업 미지정 · 전체 학생 공개"로 계속 동작(하위 호환). 학생이 여러 교수를 등록하는 student_professors
+  구조는 그대로 유지 — "수업"은 그 안에서 한 번 더 나누는 하위 그룹 개념.
+- **functions/api/professor-classes.js** 신규 — GET(수업 목록+수강생 수·과제 수+수업미지정 과제 수),
+  POST(수업 생성)
+- **functions/api/professor-class.js** 신규 — GET(수업 상세: 수강생 명단 + 추가 가능한 학생 명단),
+  POST(수업 이름 변경), DELETE(수업 삭제 — 과제·제출물·수강생 배정 모두 cascade 삭제, 학생 계정 자체는
+  유지)
+- **functions/api/professor-class-students.js** 신규 — POST(수강생 일괄 추가, 내 코드로 등록된 학생만
+  허용), DELETE(수강생 한 명 제외)
+- **functions/api/professor-assignments.js** 수정 — GET에 `?classId=` 필터 추가("none"=수업 미지정,
+  숫자=해당 수업), POST에 `classId` 저장 추가(수업 소유 검증 포함)
+- **functions/api/student-assignments.js** 수정 — 과제 조회 시 class_id가 있으면 그 수업의
+  class_students 등록 학생에게만 보이도록 WHERE 조건 추가(class_id NULL은 예전처럼 전체 공개)
+- **functions/api/student-submit.js** 수정 — 제출 시 과제에 class_id가 있으면 그 수업 수강생인지
+  추가 검증
+- **functions/api/admin.js** 수정 — 교수 계정 완전 삭제 시 그 교수의 수업·수강생 배정도 함께 정리,
+  회원(학생) 삭제 시 class_students 배정도 함께 정리
+- **functions/api/_utils.js** 수정 — 3/1·9/1 정기 전체 초기화(wipeIfDue) 대상 표에 classes,
+  class_students 추가
+- **app.js** 수정 — 기존 "과제 관리" 페이지(rProfAssignments)를 **"수업 관리"**(rProfClasses)로
+  교체·흡수: 수업 목록(+"전체 학생(수업 미지정)" 가상 항목) → 수업 클릭 시 상세 화면에서
+  **과제 관리**/**수강 학생** 두 탭으로 전환. 과제 등록·마감 스위치·삭제·제출함·첨삭 화면은 기존 로직을
+  그대로 재사용하되 classId로 스코프만 좁힘(뒤로가기 흐름도 기존과 동일하게 유지). 학생 쪽 과제
+  선택 화면에는 소속 수업명 배지를 추가로 표시(class_name).
+  - 학생 관리 페이지(rProfStudents)에는 "특정 수업 수강생으로 배정하려면 수업 관리에서 추가하라"는
+    안내 문구 한 줄 추가(페이지 자체는 그대로 유지 — 전체 등록 학생 명단 조회용).
+- **index.html** 수정 — 사이드바 교수 메뉴의 "과제 관리" 버튼을 "수업 관리"(data-tab="profClasses")로
+  교체.
+- **style.css** 수정 — 수업 상세 탭(.class-tabs, 기존 .auth-tab 스타일 재사용), 수강생 추가 모달 목록
+  (.class-add-list/.class-add-row) 스타일 추가.
+- node --check로 수정/신규 JS 파일 전부 구문 검증 완료.
+- ⚠️ **DB 마이그레이션 필요**: Cloudflare D1 Console에서 schema.sql의 "2026-08-24: 수업(강좌) 관리"
+  섹션(`CREATE TABLE classes...`부터 `CREATE INDEX idx_assignments_class...`까지)을 실행해야
+  "수업 관리" 페이지가 정상 동작함(실행 전에는 관련 API가 에러를 반환).
+
 ## 2026-08-22 (4) — 입력창: 긴 글이 좌우/상하로 스크롤되던 문제 수정 (자동 줄바꿈 + 자동 높이 늘어남)
 
 **요청**: "텍스트 입력창 안에 글이 길 경우, 입력창 안에서 좌우, 상하로 스크롤링을 해야 보이는 현상이 있어.

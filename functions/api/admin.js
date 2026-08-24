@@ -94,13 +94,17 @@ export async function onRequestPost({ request, env }) {
         await env.DB.prepare("DELETE FROM submissions WHERE assignment_id = ?").bind(a.id).run();
       }
       await env.DB.prepare("DELETE FROM assignments WHERE prof_id = ?").bind(userId).run();
+      // 2026-08-24: 이 교수가 만든 수업들의 수강생 배정·수업 자체도 함께 정리
+      await env.DB.prepare("DELETE FROM class_students WHERE class_id IN (SELECT id FROM classes WHERE prof_id = ?)").bind(userId).run();
+      await env.DB.prepare("DELETE FROM classes WHERE prof_id = ?").bind(userId).run();
       await env.DB.prepare(
         "UPDATE users SET prof_id = (SELECT prof_id FROM student_professors WHERE student_id = users.id AND prof_id != ? LIMIT 1) WHERE prof_id = ?"
       ).bind(userId, userId).run();
       await env.DB.prepare("DELETE FROM student_professors WHERE prof_id = ?").bind(userId).run();
     }
-    // 이 회원이 학생으로서 등록해둔 교수 목록도 정리
+    // 이 회원이 학생으로서 등록해둔 교수 목록·수업 수강 배정도 정리
     await env.DB.prepare("DELETE FROM student_professors WHERE student_id = ?").bind(userId).run();
+    await env.DB.prepare("DELETE FROM class_students WHERE student_id = ?").bind(userId).run();
     // 학생 계정이든(자신이 제출한 것) 교수 계정이든(교수 자신도 제출자로 남아있을 수 있음) 제출물 정리
     await env.DB.prepare("DELETE FROM submissions WHERE student_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM user_data WHERE user_id = ?").bind(userId).run();
