@@ -3228,12 +3228,14 @@ const SB_SIZES = {
 };
 
 function rStoryboard(){
+  if(feedbackPage && feedbackPage.type==="storyboard"){ rFeedbackPage(); return; }
   if(!P.writeDoc) P.writeDoc={blocks:[], groups:[]};
   const pd=P.plotDoc;
   const head=document.createElement("div"); head.className="card";
-  head.innerHTML=`<h2>${ICONS.image} 콘티제작</h2>`
+  head.innerHTML=`<div class="card-h2-row"><h2>${ICONS.image} 콘티제작</h2>${submitBtnHtml()}</div>`
     +'<p class="hint">글쓰기 탭에서 만든 장면 블록과 같은 행에 콘티를 배치합니다. 왼쪽은 글, 오른쪽은 콘티예요. 순서를 옮기면 글과 콘티가 함께 움직입니다.</p>';
   app.appendChild(head);
+  wireSubmitBtn(head,"storyboard");
 
   if(!pd || !pd.structure || !pd.sections.length || !(P.writeDoc.blocks||[]).length){
     const c2=document.createElement("div"); c2.className="card";
@@ -3439,6 +3441,17 @@ async function deleteStoryboardImage(key){
   if(!token || !key) return;
   try{ await fetch("/api/storyboard-image?key="+encodeURIComponent(key), {method:"DELETE", headers:{"Authorization":"Bearer "+token}}); }catch(e){}
 }
+/* 콘티 이미지를 R2에서 새 key로 복제(다시 업로드) — 과제 제출 시 스냅샷을 만들거나(원본이 이후
+   학생이 콘티를 다시 그려도 안 바뀌게), 교수 피드백 라운드에서 현재 이미지를 그대로 이어서
+   그리기 시작할 때 사용한다. 실패하면 null 반환. */
+async function duplicateStoryboardImage(key){
+  try{
+    const r=await fetch("/api/storyboard-image?key="+encodeURIComponent(key));
+    if(!r.ok) return null;
+    const blob=await r.blob();
+    return await uploadStoryboardBlob(blob);
+  }catch(e){ return null; }
+}
 async function saveStoryboardBlob(bl, blob, size){
   const oldKey=bl.storyboard && bl.storyboard.key;
   const key=await uploadStoryboardBlob(blob);
@@ -3579,6 +3592,116 @@ function openDrawModal(bl, sizeKey){
   document.body.appendChild(overlay);
 }
 
+/* 교수 첨삭용 그리기 팝업 — openDrawModal(학생용)과 거의 같은 그리기 도구이지만,
+   프로젝트 블록(bl)이 아니라 R2 key(refKey)를 기준으로 동작하고, 저장하면 콘티 블록에 직접
+   반영하는 대신 onSave(newKey)로 새로 만들어진 이미지 key만 돌려준다(이 key를 어떻게 쓸지는
+   호출한 쪽 — rProfSubmissionReview — 이 첨삭 버전으로 저장). 학생용과 달리 취소하고 닫을 수 있다
+   (첨삭은 저장 전까지 아무것도 바뀌지 않으므로 취소해도 안전). */
+function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
+  const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
+  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="draw-modal";
+
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="콘티 피드백 그리기 — "+(title||"");
+  top.append(ttl, iconBtn(ICONS.close, "취소", ()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+
+  const toolbar=document.createElement("div"); toolbar.className="draw-toolbar";
+  const COLORS=["#2c2a26","#c4654a","#4a7fc4","#5a8f6b","#c4a34a","#8a4ac4","#c44a91"];
+  let curColor=COLORS[0], curWidth=loadDrawWidth(), erasing=false;
+  const swatchWrap=document.createElement("div"); swatchWrap.className="draw-swatches";
+  const swatchEls=[];
+  COLORS.forEach((c,i)=>{
+    const sw=document.createElement("button"); sw.type="button"; sw.className="draw-color-swatch"+(i===0?" active":"");
+    sw.style.background=c; sw.title=c;
+    sw.onclick=()=>{ curColor=c; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); sw.classList.add("active"); eraserBtn.classList.remove("on"); };
+    swatchWrap.appendChild(sw); swatchEls.push(sw);
+  });
+  const customColor=document.createElement("input"); customColor.type="color"; customColor.className="draw-color-custom"; customColor.title="다른 색상";
+  customColor.value="#2c2a26";
+  customColor.oninput=()=>{ curColor=customColor.value; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); eraserBtn.classList.remove("on"); };
+  swatchWrap.appendChild(customColor);
+  toolbar.appendChild(swatchWrap);
+
+  const widthWrap=document.createElement("label"); widthWrap.className="draw-width-wrap"; widthWrap.textContent="굵기";
+  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="24"; widthInput.value=String(curWidth);
+  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); };
+  widthWrap.appendChild(widthInput);
+  toolbar.appendChild(widthWrap);
+
+  const eraserBtn=document.createElement("button"); eraserBtn.type="button"; eraserBtn.className="btn ghost sm icon-btn";
+  eraserBtn.innerHTML=ICONS.eraser+" 지우개";
+  eraserBtn.onclick=()=>{ erasing=!erasing; eraserBtn.classList.toggle("on", erasing); };
+  toolbar.appendChild(eraserBtn);
+
+  const clearBtn=document.createElement("button"); clearBtn.type="button"; clearBtn.className="btn ghost sm icon-btn";
+  clearBtn.innerHTML=ICONS.trash+" 전체 지우기";
+  toolbar.appendChild(clearBtn);
+  box.appendChild(toolbar);
+
+  const hint=document.createElement("p"); hint.className="hint"; hint.style.margin="0 0 8px";
+  hint.textContent="학생이 제출한(또는 지금까지의) 콘티 위에 바로 첨삭을 그립니다.";
+  box.appendChild(hint);
+
+  const canvasWrap=document.createElement("div"); canvasWrap.className="draw-canvas-wrap";
+  const canvas=document.createElement("canvas"); canvas.className="draw-canvas";
+  canvas.width=sz.w; canvas.height=sz.h;
+  canvas.style.width=sz.w+"px"; canvas.style.height=sz.h+"px";
+  const ctx=canvas.getContext("2d");
+  function resetCanvas(){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
+  resetCanvas();
+  clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")) resetCanvas(); };
+  const preload=new Image();
+  preload.onload=()=>{ ctx.drawImage(preload,0,0,canvas.width,canvas.height); };
+  preload.src="/api/storyboard-image?key="+encodeURIComponent(refKey);
+  canvasWrap.appendChild(canvas);
+  box.appendChild(canvasWrap);
+
+  let drawing=false, lastX=0, lastY=0;
+  function pos(e){
+    const r=canvas.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
+  }
+  canvas.addEventListener("pointerdown", e=>{
+    drawing=true; canvas.setPointerCapture(e.pointerId);
+    const p=pos(e); lastX=p.x; lastY=p.y;
+    ctx.beginPath(); ctx.arc(p.x,p.y,curWidth/2,0,Math.PI*2);
+    ctx.fillStyle=erasing?"#fff":curColor; ctx.fill();
+  });
+  canvas.addEventListener("pointermove", e=>{
+    if(!drawing) return;
+    const p=pos(e);
+    ctx.strokeStyle=erasing?"#fff":curColor; ctx.lineWidth=curWidth; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
+    lastX=p.x; lastY=p.y;
+  });
+  function endStroke(){ drawing=false; }
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointerleave", endStroke);
+  canvas.addEventListener("pointercancel", endStroke);
+
+  const actions=document.createElement("div"); actions.className="dlg-modal-actions";
+  const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
+  saveBtn.textContent="저장 후 종료";
+  saveBtn.onclick=()=>{
+    saveBtn.disabled=true; saveBtn.textContent="저장 중…";
+    compressCanvasToLimit(canvas, 300*1024, async blob=>{
+      if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
+      const key=await uploadStoryboardBlob(blob);
+      if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
+      document.body.removeChild(overlay);
+      onSave(key);
+    });
+  };
+  actions.appendChild(saveBtn);
+  box.appendChild(actions);
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
 /* ===== 🛠 관리자 — 회원 관리 · 서버 초기화 =====
    /api/admin (GET: 회원 명단, POST {mode:"data"|"all"}: 초기화) 를 사용한다.
    접근 자체는 사이드바에서 isAdmin()으로 이미 가려져 있지만, 서버(functions/api/admin.js)도
@@ -3683,7 +3806,7 @@ async function doAdminReset(mode){
    제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
    "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
    professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
-const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정"};
+const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정", storyboard:"콘티"};
 /* "과제 관리" 탭 안의 현재 화면 상태(팝업 대신 같은 탭 안에서 페이지처럼 전환) */
 let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
@@ -3788,7 +3911,16 @@ function parseCharFeedbackText(text){
 }
 
 /* 현재 프로젝트에서 제출용 스냅샷을 만든다 (탭 종류별로 모양이 다름, 서버는 그대로 JSON 저장만 함) */
-function buildSubmissionData(type){
+async function buildSubmissionData(type){
+  if(type==="storyboard"){
+    const blocks=allWriteBlocksOrdered().filter(bl=>bl.storyboard && bl.storyboard.key);
+    const out=[];
+    for(const bl of blocks){
+      const key=await duplicateStoryboardImage(bl.storyboard.key);
+      if(key) out.push({id:bl.id, title:bl.title||"", key, size:(bl.storyboard.size||"medium")});
+    }
+    return out;
+  }
   if(type==="plan") return P.planDoc || blankPlanDoc();
   if(type==="plot"){
     const sections=(P.plotDoc.sections||[]).map(s=>({
@@ -3889,7 +4021,8 @@ async function openSubmitModal(type){
   body.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=async ()=>{
       btn.disabled=true; btn.textContent="제출 중…";
-      const data=buildSubmissionData(type);
+      const data=await buildSubmissionData(type);
+      if(type==="storyboard" && (!data || !data.length)){ alert("아직 만든 콘티가 없습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; return; }
       const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
         assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
       })});
@@ -3954,6 +4087,19 @@ async function rFeedbackDetail(type, id, version){
   const sub=res.body.submission;
   if(titleEl) titleEl.innerHTML=`${ICONS.chat} ${esc(TYPE_LABEL[sub.type])} — ${esc(sub.assignmentTitle)}`;
   if(!sub.feedback){ wrap.innerHTML=`<p class="hint">아직 첨삭 전입니다.</p>`; return; }
+  if(sub.type==="storyboard"){
+    const versionPicker=(sub.versions && sub.versions.length>1)
+      ? `<label class="hint" style="display:inline-flex;align-items:center;gap:5px;margin:0 0 10px">버전
+          <select id="feedbackVersionSelect" style="font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px">
+            ${sub.versions.slice().reverse().map(v=>`<option value="${v.version}"${v.version===sub.viewingVersion?" selected":""}>버전 ${v.version}${v.version===sub.latestVersion?" (최신)":""}</option>`).join("")}
+          </select></label>`
+      : "";
+    wrap.innerHTML=`${versionPicker}<div id="feedbackPairs"></div>`;
+    const verSel=document.getElementById("feedbackVersionSelect");
+    if(verSel) verSel.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(verSel.value)}; render(); };
+    renderSbFeedbackBlocks(document.getElementById("feedbackPairs"), Array.isArray(sub.data)?sub.data:[], sub.feedback, {editable:false, submittedLabel:"내가 제출한 콘티"});
+    return;
+  }
   const caveat={
     plan:"",
     plot:" 섹션 설명(예시 설명)에 첨삭 내용 전체가 반영되고, 배치된 아이디어 카드는 그대로 유지됩니다.",
@@ -4084,7 +4230,7 @@ async function renderProfClassList(){
         <button type="button" class="assign-folder-del" data-id="${cl.id}" title="수업 삭제">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="hint">수강생 ${cl.student_count}명 · 과제 ${cl.assignment_count}건</div>
+    <div class="hint">수강생 ${cl.student_count}명 · 과제 ${cl.assignment_count}건${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
   </div>`).join("");
   wrap.innerHTML=html;
   wrap.querySelectorAll(".assign-folder-del").forEach(btn=>{
@@ -4163,7 +4309,7 @@ async function rProfClassDetail(classId){
   const titleEl=document.getElementById("classDetailTitle");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const cls=res.body.class;
-  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(cls.name)}`;
+  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(cls.name)}${cls.code?` <span class="hint" style="font-weight:400">· 등록 코드 ${esc(cls.code)}</span>`:""}`;
 
   c.querySelectorAll(".class-tab-btn").forEach(btn=>{
     btn.classList.toggle("active", btn.dataset.tab===profClassTab);
@@ -4455,7 +4601,7 @@ async function rProfSubmissionReview(id, version){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} 제출함으로</button>
     <h2 id="reviewTitle">${ICONS.edit} 불러오는 중…</h2>
-    <p class="hint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>(위/아래로 분리) 또는 <b>메모</b>(텍스트를 드래그해 선택한 채 우클릭하면 그 범위에 각주로, 그냥 우클릭하면 블록 전체에 표시)를 달 수 있습니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
+    <p class="hint" id="reviewHint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>(위/아래로 분리) 또는 <b>메모</b>(텍스트를 드래그해 선택한 채 우클릭하면 그 범위에 각주로, 그냥 우클릭하면 블록 전체에 표시)를 달 수 있습니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
     <div id="reviewVersionBanner"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
     <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
@@ -4472,16 +4618,32 @@ async function rProfSubmissionReview(id, version){
   const sub=res.body.submission;
   const isLatest = !sub.latestVersion || sub.viewingVersion===sub.latestVersion;
   if(titleEl) titleEl.innerHTML=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}`;
+  const hintEl=document.getElementById("reviewHint");
+  if(hintEl && sub.type==="storyboard") hintEl.textContent="각 그림의 [피드백 그리기]를 눌러 그 이미지 위에 직접 그려서 첨삭할 수 있습니다.";
   if(bannerEl){
     if(!isLatest){
       bannerEl.innerHTML=`<p class="hint" style="color:var(--accent)">버전 ${sub.viewingVersion} / ${sub.latestVersion} 을 보고 있습니다 (과거 기록, 읽기 전용). <button type="button" class="btn ghost sm" id="reviewGoLatestBtn" style="margin-left:6px">최신 버전에서 계속 편집</button></p>`;
       const goBtn=document.getElementById("reviewGoLatestBtn");
       if(goBtn) goBtn.onclick=()=>{ profReviewVersion=null; render(); };
+    }else if(sub.type==="storyboard"){
+      bannerEl.innerHTML = sub.latestVersion ? `<p class="hint">현재 버전 ${sub.latestVersion}입니다. 이미지의 [피드백 그리기]를 누르면 그 즉시 새 버전으로 저장됩니다.</p>` : "";
     }else if(sub.latestVersion){
       bannerEl.innerHTML=`<p class="hint">현재 버전 ${sub.latestVersion}을 이어서 편집하는 중입니다. "피드백 전달"을 누르면 버전 ${sub.latestVersion+1}로 새로 저장됩니다.</p>`;
     }else{
       bannerEl.innerHTML="";
     }
+  }
+  if(sub.type==="storyboard"){
+    if(saveBtn) saveBtn.style.display="none";
+    renderSbFeedbackBlocks(pairsEl, Array.isArray(sub.data)?sub.data:[], sub.feedback, {
+      editable:isLatest,
+      onFeedback: async (blockId, baseKey, newKey)=>{
+        const r=await submitStoryboardFeedback(id, Array.isArray(sub.data)?sub.data:[], sub.feedback, blockId, baseKey, newKey);
+        if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewVersion=null; render(); }
+        return r;
+      },
+    });
+    return;
   }
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
   reviewSplitIds=new Set(pairs.filter(p=>p.after!==p.before).map(p=>p.id));
@@ -4556,6 +4718,68 @@ function buildReviewPairs(type, data, feedback){
     });
   }
   return [];
+}
+
+/* ===== 🖼 콘티 피드백(이미지) =====
+   텍스트 타입들과 달리 buildReviewPairs/renderReviewPairs(단어 diff 방식)를 쓰지 않고 별도로 처리한다.
+   feedback JSON 모양: {blocks:[{id, beforeKey, afterKey}, ...]} — 라운드(버전)마다 그 라운드에서
+   "시작한 이미지"(beforeKey)와 "그 라운드에 새로 그린 이미지"(afterKey)를 블록별로 그대로 저장해서,
+   각 버전 스스로 자기 전후 비교 쌍을 담고 있다(과거 버전을 봐도 그 때의 전후를 그대로 보여줄 수 있음).
+   한 라운드에서 손대지 않은 블록은 beforeKey===afterKey로 이어서 저장된다(요구사항: 다음 라운드에서
+   "기존 수정버전"이 새 원본이 되도록). */
+function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
+  opts=opts||{};
+  container.innerHTML="";
+  if(!dataBlocks.length){ container.innerHTML=`<p class="hint">제출된 콘티가 없습니다.</p>`; return; }
+  const fbMap={};
+  ((feedback && feedback.blocks)||[]).forEach(b=>{ fbMap[b.id]=b; });
+  dataBlocks.forEach(b=>{
+    const sz=SB_SIZES[b.size]||SB_SIZES.medium;
+    const fb=fbMap[b.id];
+    const row=document.createElement("div"); row.className="sb-fb-row";
+    const lbl=document.createElement("div"); lbl.className="sb-fb-label"; lbl.textContent=b.title||"(제목 없음)";
+    row.appendChild(lbl);
+    const imgsWrap=document.createElement("div"); imgsWrap.className="sb-fb-images";
+    const mk=(key,label)=>{
+      const box=document.createElement("div"); box.className="sb-fb-imgbox";
+      const cap=document.createElement("span"); cap.className="sb-fb-imglabel"; cap.textContent=label;
+      const img=document.createElement("img");
+      img.src="/api/storyboard-image?key="+encodeURIComponent(key);
+      img.style.width=sz.w+"px"; img.style.height=sz.h+"px"; img.alt=label;
+      box.append(cap,img);
+      return box;
+    };
+    if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전"), mk(fb.afterKey,"피드백")); }
+    else if(fb){ imgsWrap.appendChild(mk(fb.afterKey,"현재")); }
+    else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티")); }
+    row.appendChild(imgsWrap);
+    if(opts.editable){
+      const fbBtn=document.createElement("button"); fbBtn.type="button"; fbBtn.className="btn ghost sm icon-btn";
+      fbBtn.innerHTML=ICONS.chat+" 피드백 그리기";
+      fbBtn.onclick=()=>{
+        const baseKey = fb ? fb.afterKey : b.key;
+        openStoryboardFeedbackDrawModal(b.title||"", b.size||"medium", baseKey, async (newKey)=>{
+          const r=await opts.onFeedback(b.id, baseKey, newKey);
+          if(!r || !r.ok) alert((r&&r.body&&r.body.error)||"저장에 실패했습니다.");
+        });
+      };
+      row.appendChild(fbBtn);
+    }
+    container.appendChild(row);
+  });
+}
+/* 첨삭 버전 저장(=새 라운드) — 지금 손댄 블록(blockId)만 {beforeKey,afterKey}를 새로 채우고,
+   나머지 블록은 지금까지의 상태를 그대로 이어붙여서(처음 손대는 블록이면 beforeKey=afterKey=원본 key)
+   professor-submission에 새 버전으로 저장한다. */
+async function submitStoryboardFeedback(id, dataBlocks, currentFeedback, blockId, baseKey, newKey){
+  const fbMap={};
+  ((currentFeedback && currentFeedback.blocks)||[]).forEach(b=>{ fbMap[b.id]={beforeKey:b.beforeKey, afterKey:b.afterKey}; });
+  fbMap[blockId]={beforeKey:baseKey, afterKey:newKey};
+  const blocks=dataBlocks.map(b=>{
+    const e=fbMap[b.id];
+    return e ? {id:b.id, beforeKey:e.beforeKey, afterKey:e.afterKey} : {id:b.id, beforeKey:b.key, afterKey:b.key};
+  });
+  return apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback:{blocks}, memos:[]})});
 }
 
 /* ===== 첨삭 화면 — 메모(첨삭과는 별도로 학생 원본 텍스트에 다는 메모) =====

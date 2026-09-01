@@ -11,7 +11,7 @@ export async function onRequestGet({ request, env }) {
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
 
   const cls = await env.DB.prepare(
-    "SELECT id, name, created_at FROM classes WHERE id = ? AND prof_id = ?"
+    "SELECT id, name, code, created_at FROM classes WHERE id = ? AND prof_id = ?"
   ).bind(id, auth.user.id).first();
   if (!cls) return jsonResponse({ error: "수업을 찾을 수 없습니다." }, 404);
 

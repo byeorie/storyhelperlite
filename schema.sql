@@ -199,3 +199,17 @@ CREATE INDEX IF NOT EXISTS idx_class_students_student ON class_students(student_
 
 ALTER TABLE assignments ADD COLUMN class_id INTEGER;
 CREATE INDEX IF NOT EXISTS idx_assignments_class ON assignments(class_id);
+
+-- ===== 2026-09-01: 수업별 등록 코드 — 학생이 교수 전체 코드 대신, 수업마다 발급되는 코드로
+--  그 수업에 바로 등록(가입 + class_students 배정까지 한 번에)할 수 있게 함.
+--  기존 교수 코드(users.prof_code) 등록 방식은 그대로 유지(하위 호환) — 학생-join 화면에서
+--  입력한 코드가 classes.code와 먼저 일치하는지 보고, 아니면 기존 방식(users.prof_code)으로 처리.
+CREATE TABLE IF NOT EXISTS classes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  prof_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+ALTER TABLE classes ADD COLUMN code TEXT;
+UPDATE classes SET code = printf('%06d', (ABS(RANDOM()) % 900000) + 100000) WHERE code IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_code ON classes(code);

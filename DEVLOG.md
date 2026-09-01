@@ -1840,3 +1840,25 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
 - **.gitignore** 생성
 - 검증: data.js(MBTI16·에니어9·12단계·장르15) 및 gemini 프롬프트 빌더 동작 확인 완료
 - 참고: OneDrive 동기화 폴더라 샌드박스에서 git 푸시 불가 → 사용자 PC에서 푸시 필요
+
+## 2026-09-01 · 콘티제작 제출/피드백 기능 추가
+- **app.js**: 콘티제작 탭에 [제출]/[피드백 보기] 버튼 추가(다른 탭과 동일한 방식). TYPE_LABEL에 storyboard:"콘티" 추가.
+- **buildSubmissionData("storyboard")**: 제출 시 각 블록의 콘티 이미지를 R2에 새 key로 복제(duplicateStoryboardImage)해서 독립적인 스냅샷으로 저장 — 이후 학생이 원본 콘티를 다시 그려도 이미 제출한 내용은 안 바뀜.
+- **교수 첨삭(이미지)**: 제출함 → 첨삭 화면에서 각 콘티 이미지에 [피드백 그리기] 버튼 추가. 누르면 그림판 팝업(openStoryboardFeedbackDrawModal, 학생용 그리기 도구와 동일한 UI)이 뜨고, 현재 이미지를 복제해 그 위에 바로 그려서 저장 → 즉시 새 버전으로 professor-submission에 저장됨(별도의 "피드백 전달" 버튼 없이 이미지별로 바로 저장).
+- **버전 체인**: feedback JSON을 `{blocks:[{id, beforeKey, afterKey}]}` 형태로 저장해서, 각 버전이 자기 라운드의 "이전 이미지"와 "새 이미지"를 스스로 담고 있음. 다음 라운드에서 [피드백 그리기]를 다시 누르면 직전 afterKey가 새 beforeKey가 되어(요구사항: "기존 수정버전을 원본으로") 자동으로 이어짐. 손 안 댄 블록은 beforeKey=afterKey로 그대로 이어붙임.
+- **학생 화면**: [첨삭 보기] → 콘티 상세에서 각 그림의 "원본"/"피드백" 이미지를 나란히 확인(renderSbFeedbackBlocks 공용 함수, 교수 화면과 공유). 버전 드롭다운으로 과거 라운드도 다시 볼 수 있음.
+- **functions/api/student-submit.js**: VALID_TYPES에 "storyboard" 추가.
+- **functions/api/professor-assignment.js**: TYPE_LABEL에 storyboard: "콘티" 추가(제출함 목록의 타입 배지용).
+- **style.css**: .sb-fb-row/.sb-fb-images/.sb-fb-imgbox 등 콘티 피드백 나란히 보기 스타일 추가.
+- DB 스키마 변경 없음 — submissions.feedback/data는 기존처럼 자유 JSON이라 이미지 key만 담으면 됨.
+
+## 2026-09-01 (2) · 수업별 등록 코드 추가 (교수 전체 코드는 그대로 유지)
+- 8/24에 이미 배포된 "수업 관리"(classes/class_students, 교수가 학생을 수업에 수동 배정)는 그대로 두고, 학생이 특정 수업에 직접 코드로 등록할 수 있는 기능만 추가.
+- **schema.sql**: classes 테이블에 `code`(6자리, UNIQUE) 컬럼 추가.
+- **professor-classes.js**: 수업 생성 시 겹치지 않는 6자리 코드를 자동 발급(generateClassCode), 목록 조회에 code 포함.
+- **professor-class.js**: 수업 상세 조회에 code 포함.
+- **student-join.js**: 입력한 코드를 classes.code에서 먼저 찾고(일치하면 그 교수를 student_professors에 등록 + 해당 수업 class_students에 바로 배정), 없으면 기존처럼 users.prof_code(교수 전체 코드)로 처리 — 완전히 하위 호환.
+- **auth.js**: 학생 쪽 코드 입력 라벨을 "수업 코드 또는 교수 코드 등록"으로, 모달 제목을 "등록 코드"로 변경. 등록 성공 메시지에 수업명 표시(수업 코드로 등록한 경우).
+- **app.js**: 교수의 "수업 관리" 목록/상세 화면에 각 수업의 등록 코드를 표시.
+- **index.html**: 계정 메뉴 버튼 라벨 "교수 코드" → "등록 코드".
+- 참고: 운영 DB에는 이미 콘솔에서 classes.code 컬럼 추가 + 기존 수업에 코드 채우기(8/24 수업 데이터가 일부 유실되어 "기본 수업"으로 재생성됨, 학생 재배정은 교수가 직접 진행)까지 반영된 상태라 이 배포에서 추가로 실행할 SQL은 없음.

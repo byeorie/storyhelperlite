@@ -865,6 +865,14 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--accent);margin:0 1px}
 .sb-thumb-actions{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .15s}
 .sb-thumb-wrap:hover .sb-thumb-actions{opacity:1}
 .sb-thumb-actions .plot-icon-btn{background:rgba(255,255,255,.92);border:1px solid var(--line)}
+
+/* 콘티 피드백(이미지) — 원본/피드백 이미지를 나란히 보여주는 블록 */
+.sb-fb-row{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
+.sb-fb-label{font-weight:600;margin-bottom:8px}
+.sb-fb-images{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.sb-fb-imgbox{display:flex;flex-direction:column;gap:4px}
+.sb-fb-imglabel{font-size:12px;color:var(--muted)}
+.sb-fb-imgbox img{display:block;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px;max-width:100%}
 .sb-size-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;min-width:240px}
 .sb-size-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px}
 .sb-size-btn .hint{margin:0}

@@ -8,7 +8,7 @@ export async function onRequestGet({ request, env }) {
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
 
   const { results } = await env.DB.prepare(
-    "SELECT cl.id, cl.name, cl.created_at, " +
+    "SELECT cl.id, cl.name, cl.code, cl.created_at, " +
     "  (SELECT COUNT(*) FROM class_students cs WHERE cs.class_id = cl.id) AS student_count, " +
     "  (SELECT COUNT(*) FROM assignments a WHERE a.class_id = cl.id) AS assignment_count " +
     "FROM classes cl WHERE cl.prof_id = ? ORDER BY cl.created_at DESC"
@@ -21,7 +21,19 @@ export async function onRequestGet({ request, env }) {
   return jsonResponse({ classes: results || [], unassignedCount: (unassigned && unassigned.c) || 0 });
 }
 
-/* POST /api/professor-classes — 새 수업 만들기  body: { name } */
+/* 6자리 숫자 수업 코드를 생성 — classes.code는 UNIQUE라서 겹치면 다시 뽑는다(최대 20회). */
+async function generateClassCode(env) {
+  for (let i = 0; i < 20; i++) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const dup = await env.DB.prepare("SELECT id FROM classes WHERE code = ?").bind(code).first();
+    if (!dup) return code;
+  }
+  return String(Date.now()).slice(-6);
+}
+
+/* POST /api/professor-classes — 새 수업 만들기  body: { name }
+   2026-09-01: 학생이 이 수업에 바로 등록할 수 있도록 수업마다 6자리 코드를 함께 발급한다
+   (기존 교수 전체 코드(users.prof_code)는 그대로 두고, 수업 코드는 추가 등록 경로). */
 export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
@@ -32,9 +44,10 @@ export async function onRequestPost({ request, env }) {
   if (!name) return jsonResponse({ error: "수업명을 입력해주세요." }, 400);
 
   const created = nowSec();
+  const code = await generateClassCode(env);
   const result = await env.DB.prepare(
-    "INSERT INTO classes (prof_id, name, created_at) VALUES (?, ?, ?)"
-  ).bind(auth.user.id, name, created).run();
+    "INSERT INTO classes (prof_id, name, code, created_at) VALUES (?, ?, ?, ?)"
+  ).bind(auth.user.id, name, code, created).run();
 
-  return jsonResponse({ ok: true, class: { id: result.meta.last_row_id, name, created_at: created } });
+  return jsonResponse({ ok: true, class: { id: result.meta.last_row_id, name, code, created_at: created } });
 }

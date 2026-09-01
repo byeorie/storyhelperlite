@@ -184,14 +184,14 @@ function openProfCodeManager() {
     html = `
       <div id="settingsProfList"><p class="hint">등록된 교수 목록을 불러오는 중…</p></div>
       <div class="plan-block">
-        <label>교수 코드 추가 등록</label>
+        <label>수업 코드 또는 교수 코드 등록</label>
         <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 123456" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
       </div>
       <p id="profJoinMsg" class="hint" style="min-height:18px"></p>
       <button class="btn" id="profJoinBtn" style="width:100%">등록하기</button>
     `;
   }
-  openAccountModal("교수 코드", html, () => {
+  openAccountModal("등록 코드", html, () => {
     if (currentUser && currentUser.role !== "professor") {
       loadSettingsProfList();
       const joinBtn = document.getElementById("profJoinBtn");
@@ -209,7 +209,10 @@ function openProfCodeManager() {
             const prof = res.body.prof || {};
             if (!currentUser.profId) currentUser.profId = prof.id;
             saveAuth(getToken(), currentUser);
-            msgEl.textContent = `${prof.school || ""} ${prof.name || ""} 교수님을 등록했습니다.`;
+            const cls = res.body.class;
+            msgEl.textContent = cls
+              ? `${prof.school || ""} ${prof.name || ""} 교수님의 '${cls.name}' 수업에 등록했습니다.`
+              : `${prof.school || ""} ${prof.name || ""} 교수님을 등록했습니다.`;
             input.value = "";
             loadSettingsProfList();
             if (typeof onAuthChanged === "function") onAuthChanged();
