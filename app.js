@@ -4227,12 +4227,16 @@ async function renderProfClassList(){
     <div class="assign-folder-top">
       <span class="assign-folder-title">${ICONS.book} ${esc(cl.name)}</span>
       <div class="assign-folder-controls">
+        ${cl.code?`<button type="button" class="assign-folder-code-big" data-name="${esc(cl.name)}" data-code="${esc(cl.code)}" title="등록 코드 크게 보기">${ICONS.search}</button>`:""}
         <button type="button" class="assign-folder-del" data-id="${cl.id}" title="수업 삭제">${ICONS.trash}</button>
       </div>
     </div>
     <div class="hint">수강생 ${cl.student_count}명 · 과제 ${cl.assignment_count}건${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
   </div>`).join("");
   wrap.innerHTML=html;
+  wrap.querySelectorAll(".assign-folder-code-big").forEach(btn=>{
+    btn.onclick=(e)=>{ e.stopPropagation(); openClassCodeBigModal(btn.dataset.name, btn.dataset.code); };
+  });
   wrap.querySelectorAll(".assign-folder-del").forEach(btn=>{
     btn.onclick=async (e)=>{
       e.stopPropagation();
@@ -4275,6 +4279,22 @@ function openNewClassModal(){
     else alert((r.body&&r.body.error)||"만들기에 실패했습니다.");
   };
 }
+/* 수업 등록 코드를 화면 가득 크게 띄우는 팝업 — 강의실에서 학생들에게 보여줄 때 사용.
+   ESC/바깥 클릭/닫기 버튼으로 닫을 수 있다. */
+function openClassCodeBigModal(name, code){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay class-code-big-overlay";
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); document.removeEventListener("keydown", onKey); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  const box=document.createElement("div"); box.className="class-code-big-box";
+  box.innerHTML=`<button type="button" class="btn ghost sm class-code-big-close">${ICONS.close} 닫기</button>
+    <div class="class-code-big-name">${esc(name||"")}</div>
+    <div class="class-code-big-code">${esc(code||"")}</div>
+    <div class="class-code-big-hint">이 코드로 [계정] → [등록 코드]에서 등록하세요</div>`;
+  box.querySelector(".class-code-big-close").onclick=close;
+  overlay.appendChild(box); document.body.appendChild(overlay);
+}
 /* 수업 상세 화면 — "과제 관리"/"수강 학생" 두 탭.
    classId==="none"이면 수업 미지정 과제함(탭 없이 과제만), classId==="roster"이면 전체 학생 명단
    (2026-08-24: 예전 독립 "학생 관리" 탭이 여기로 흡수됨, 탭 없이 명단만). */
@@ -4309,7 +4329,9 @@ async function rProfClassDetail(classId){
   const titleEl=document.getElementById("classDetailTitle");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const cls=res.body.class;
-  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(cls.name)}${cls.code?` <span class="hint" style="font-weight:400">· 등록 코드 ${esc(cls.code)}</span>`:""}`;
+  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(cls.name)}${cls.code?` <span class="hint" style="font-weight:400">· 등록 코드 ${esc(cls.code)}</span> <button type="button" class="btn ghost sm" id="classCodeBigBtn">코드 크게 보기</button>`:""}`;
+  const bigBtn=document.getElementById("classCodeBigBtn");
+  if(bigBtn) bigBtn.onclick=()=>openClassCodeBigModal(cls.name, cls.code);
 
   c.querySelectorAll(".class-tab-btn").forEach(btn=>{
     btn.classList.toggle("active", btn.dataset.tab===profClassTab);

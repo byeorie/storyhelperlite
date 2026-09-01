@@ -968,3 +968,11 @@ canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
   /* ---- 모달: 화면 폭에 맞춤 ---- */
   .plot-modal,.guide-modal{width:100%}
 }
+
+/* 수업 등록 코드를 강의실에서 크게 보여줄 때(openClassCodeBigModal) */
+.class-code-big-overlay{background:rgba(20,18,15,.92)}
+.class-code-big-box{position:relative;background:transparent;text-align:center;color:#fff;padding:20px}
+.class-code-big-close{position:absolute;top:-10px;right:0;color:#fff;border-color:rgba(255,255,255,.4)}
+.class-code-big-name{font-size:clamp(20px,4vw,34px);margin-bottom:18px;opacity:.9}
+.class-code-big-code{font-size:clamp(72px,18vw,220px);font-weight:800;letter-spacing:.08em;line-height:1}
+.class-code-big-hint{font-size:clamp(14px,2vw,20px);margin-top:22px;opacity:.7}
