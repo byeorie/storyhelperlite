@@ -4228,13 +4228,17 @@ async function renderProfClassList(){
     <div class="assign-folder-top">
       <span class="assign-folder-title">${ICONS.book} ${esc(cl.name)}</span>
       <div class="assign-folder-controls">
+        <button type="button" class="assign-folder-edit" data-id="${cl.id}" title="수업 정보 수정">${ICONS.edit}</button>
         ${cl.code?`<button type="button" class="assign-folder-code-big" data-name="${esc(cl.name)}" data-code="${esc(cl.code)}" title="등록 코드 크게 보기">${ICONS.search}</button>`:""}
         <button type="button" class="assign-folder-del" data-id="${cl.id}" title="수업 삭제">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="hint">수강생 ${cl.student_count}명 · 과제 ${cl.assignment_count}건${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
+    <div class="hint">${[classMetaLine(cl),`수강생 ${cl.student_count}명`,`과제 ${cl.assignment_count}건`].filter(Boolean).join(" · ")}${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
   </div>`).join("");
   wrap.innerHTML=html;
+  wrap.querySelectorAll(".assign-folder-edit").forEach(btn=>{
+    btn.onclick=(e)=>{ e.stopPropagation(); openEditClassModal(classes.find(cl=>cl.id===Number(btn.dataset.id))); };
+  });
   wrap.querySelectorAll(".assign-folder-code-big").forEach(btn=>{
     btn.onclick=(e)=>{ e.stopPropagation(); openClassCodeBigModal(btn.dataset.name, btn.dataset.code); };
   });
@@ -4259,6 +4263,31 @@ async function renderProfClassList(){
     };
   });
 }
+/* 수업 목록/상세에 보여줄 "OO대학교 · 2분반 · 화요일 14:00~16:50" 형태의 부가정보 한 줄
+   (2026-09-01 (2): 수업명과 별개로 학교이름/분반/요일/시간을 입력할 수 있게 하며 추가) */
+function classMetaLine(cl){
+  if(!cl) return "";
+  const day=cl.class_day?`${cl.class_day}요일`:"";
+  const dayTime=[day, cl.class_time].filter(Boolean).join(" ");
+  return [cl.school_name, cl.section?`${cl.section}분반`:"", dayTime].filter(Boolean).map(esc).join(" · ");
+}
+const CLASS_DAY_OPTS=["월","화","수","목","금","토","일"];
+/* 수업 만들기/수정 모달에 공통으로 쓰는 학교이름·분반·요일·시간 입력 필드 (수업명과 별개 항목) */
+function classDetailFieldsHtml(v){
+  v=v||{};
+  return `<label>학교이름</label><input type="text" id="classFieldSchool" placeholder="예: OO대학교" value="${esc(v.school_name||"")}">
+    <div class="row"><div><label>분반</label><input type="text" id="classFieldSection" placeholder="예: 2분반" value="${esc(v.section||"")}"></div>
+    <div><label>수업 요일</label><select id="classFieldDay"><option value="">선택 안 함</option>${CLASS_DAY_OPTS.map(d=>`<option value="${d}" ${v.class_day===d?"selected":""}>${d}요일</option>`).join("")}</select></div></div>
+    <label>수업 시간</label><input type="text" id="classFieldTime" placeholder="예: 14:00~16:50" value="${esc(v.class_time||"")}">`;
+}
+function readClassDetailFields(box){
+  return {
+    school: box.querySelector("#classFieldSchool").value.trim(),
+    section: box.querySelector("#classFieldSection").value.trim(),
+    day: box.querySelector("#classFieldDay").value,
+    time: box.querySelector("#classFieldTime").value.trim(),
+  };
+}
 function openNewClassModal(){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
@@ -4269,15 +4298,45 @@ function openNewClassModal(){
   box.appendChild(top);
   box.insertAdjacentHTML("beforeend",
     `<label>수업명</label><input type="text" id="newClassName" placeholder="예: 스토리텔링 기초 2026-2">
+     ${classDetailFieldsHtml()}
      <button class="btn" id="newClassSaveBtn" style="margin-top:14px;width:100%">만들기</button>`);
   overlay.appendChild(box); document.body.appendChild(overlay);
   const input=box.querySelector("#newClassName"); input.focus();
   box.querySelector("#newClassSaveBtn").onclick=async ()=>{
     const name=input.value.trim();
     if(!name){ alert("수업명을 입력해주세요."); return; }
-    const r=await apiFetch("professor-classes", {method:"POST", body:JSON.stringify({name})});
+    const fields=readClassDetailFields(box);
+    const r=await apiFetch("professor-classes", {method:"POST", body:JSON.stringify({name, ...fields})});
     if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfClassList(); }
     else alert((r.body&&r.body.error)||"만들기에 실패했습니다.");
+  };
+}
+/* 수업 이름·학교이름·분반·요일·시간을 함께 수정하는 모달 (수업 목록의 연필 아이콘, 수업 상세 제목 옆에서 연다) */
+function openEditClassModal(cls){
+  if(!cls) return;
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="수업 정보 수정";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  box.insertAdjacentHTML("beforeend",
+    `<label>수업명</label><input type="text" id="newClassName" value="${esc(cls.name||"")}">
+     ${classDetailFieldsHtml(cls)}
+     <button class="btn" id="newClassSaveBtn" style="margin-top:14px;width:100%">저장</button>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const input=box.querySelector("#newClassName"); input.focus();
+  box.querySelector("#newClassSaveBtn").onclick=async ()=>{
+    const name=input.value.trim();
+    if(!name){ alert("수업명을 입력해주세요."); return; }
+    const fields=readClassDetailFields(box);
+    const r=await apiFetch("professor-class", {method:"POST", body:JSON.stringify({id:cls.id, name, ...fields})});
+    if(r.ok){
+      if(overlay.isConnected) document.body.removeChild(overlay);
+      renderProfClassList();
+      if(profClassId===cls.id) render();
+    } else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
   };
 }
 /* 수업 등록 코드를 화면 가득 크게 띄우는 팝업 — 강의실에서 학생들에게 보여줄 때 사용.
@@ -4330,9 +4389,12 @@ async function rProfClassDetail(classId){
   const titleEl=document.getElementById("classDetailTitle");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const cls=res.body.class;
-  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(cls.name)}${cls.code?` <span class="hint" style="font-weight:400">· 등록 코드 ${esc(cls.code)}</span> <button type="button" class="btn ghost sm" id="classCodeBigBtn">코드 크게 보기</button>`:""}`;
+  const metaLine=classMetaLine(cls);
+  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(cls.name)}${metaLine?` <span class="hint" style="font-weight:400">· ${metaLine}</span>`:""}${cls.code?` <span class="hint" style="font-weight:400">· 등록 코드 ${esc(cls.code)}</span> <button type="button" class="btn ghost sm" id="classCodeBigBtn">코드 크게 보기</button>`:""} <button type="button" class="btn ghost sm" id="classEditBtn">${ICONS.edit} 정보 수정</button>`;
   const bigBtn=document.getElementById("classCodeBigBtn");
   if(bigBtn) bigBtn.onclick=()=>openClassCodeBigModal(cls.name, cls.code);
+  const editBtn=document.getElementById("classEditBtn");
+  if(editBtn) editBtn.onclick=()=>openEditClassModal(cls);
 
   c.querySelectorAll(".class-tab-btn").forEach(btn=>{
     btn.classList.toggle("active", btn.dataset.tab===profClassTab);

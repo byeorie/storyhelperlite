@@ -213,3 +213,10 @@ CREATE TABLE IF NOT EXISTS classes (
 ALTER TABLE classes ADD COLUMN code TEXT;
 UPDATE classes SET code = printf('%06d', (ABS(RANDOM()) % 900000) + 100000) WHERE code IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_code ON classes(code);
+
+-- ===== 2026-09-01 (2): 수업 상세 정보 — 수업명과 별개로 학교이름/분반/요일/시간을 입력·수정할 수 있게 함.
+--  이미 DB를 만든 뒤라면 아래 4줄을 Cloudflare D1 Console에 붙여넣고 한 번만 실행하세요.
+ALTER TABLE classes ADD COLUMN school_name TEXT;
+ALTER TABLE classes ADD COLUMN section TEXT;
+ALTER TABLE classes ADD COLUMN class_day TEXT;
+ALTER TABLE classes ADD COLUMN class_time TEXT;

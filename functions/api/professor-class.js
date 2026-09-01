@@ -11,7 +11,7 @@ export async function onRequestGet({ request, env }) {
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
 
   const cls = await env.DB.prepare(
-    "SELECT id, name, code, created_at FROM classes WHERE id = ? AND prof_id = ?"
+    "SELECT id, name, code, created_at, school_name, section, class_day, class_time FROM classes WHERE id = ? AND prof_id = ?"
   ).bind(id, auth.user.id).first();
   if (!cls) return jsonResponse({ error: "수업을 찾을 수 없습니다." }, 404);
 
@@ -31,7 +31,9 @@ export async function onRequestGet({ request, env }) {
   return jsonResponse({ class: cls, enrolled: enrolled || [], available: available || [] });
 }
 
-/* POST /api/professor-class — 수업 이름 변경  body: { id, name } */
+/* POST /api/professor-class — 수업 정보 수정  body: { id, name, school, section, day, time }
+   2026-09-01 (2): 수업명 변경뿐 아니라 학교이름/분반/요일/시간도 함께 수정할 수 있게 함
+   (모두 선택 입력 — 비워두면 빈 값으로 저장됨, 수업명만은 필수). */
 export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
@@ -41,13 +43,17 @@ export async function onRequestPost({ request, env }) {
   const id = Number(body && body.id);
   const name = ((body && body.name) || "").trim().slice(0, 100);
   if (!id || !name) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+  const school = ((body && body.school) || "").trim().slice(0, 100) || null;
+  const section = ((body && body.section) || "").trim().slice(0, 50) || null;
+  const day = ((body && body.day) || "").trim().slice(0, 20) || null;
+  const time = ((body && body.time) || "").trim().slice(0, 50) || null;
 
   const result = await env.DB.prepare(
-    "UPDATE classes SET name = ? WHERE id = ? AND prof_id = ?"
-  ).bind(name, id, auth.user.id).run();
+    "UPDATE classes SET name = ?, school_name = ?, section = ?, class_day = ?, class_time = ? WHERE id = ? AND prof_id = ?"
+  ).bind(name, school, section, day, time, id, auth.user.id).run();
   if (!result.meta.changes) return jsonResponse({ error: "수업을 찾을 수 없습니다." }, 404);
 
-  return jsonResponse({ ok: true, id, name });
+  return jsonResponse({ ok: true, id, name, school_name: school, section, class_day: day, class_time: time });
 }
 
 /* DELETE /api/professor-class?id=123 — 수업 삭제 (수강생 배정·과제·제출물도 함께 영구 삭제,

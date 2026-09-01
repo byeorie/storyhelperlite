@@ -8,7 +8,7 @@ export async function onRequestGet({ request, env }) {
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
 
   const { results } = await env.DB.prepare(
-    "SELECT cl.id, cl.name, cl.code, cl.created_at, " +
+    "SELECT cl.id, cl.name, cl.code, cl.created_at, cl.school_name, cl.section, cl.class_day, cl.class_time, " +
     "  (SELECT COUNT(*) FROM class_students cs WHERE cs.class_id = cl.id) AS student_count, " +
     "  (SELECT COUNT(*) FROM assignments a WHERE a.class_id = cl.id) AS assignment_count " +
     "FROM classes cl WHERE cl.prof_id = ? ORDER BY cl.created_at DESC"
@@ -31,9 +31,10 @@ async function generateClassCode(env) {
   return String(Date.now()).slice(-6);
 }
 
-/* POST /api/professor-classes — 새 수업 만들기  body: { name }
+/* POST /api/professor-classes — 새 수업 만들기  body: { name, school, section, day, time }
    2026-09-01: 학생이 이 수업에 바로 등록할 수 있도록 수업마다 6자리 코드를 함께 발급한다.
-   (같은 날 추가) 교수 전체 코드(users.prof_code) 등록은 폐지 — 학생 등록은 이제 이 수업 코드로만 받는다. */
+   (같은 날 추가) 교수 전체 코드(users.prof_code) 등록은 폐지 — 학생 등록은 이제 이 수업 코드로만 받는다.
+   2026-09-01 (2): 수업명과 별개로 학교이름/분반/요일/시간을 함께 입력할 수 있게 함(모두 선택 입력). */
 export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
@@ -42,12 +43,16 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
   const name = ((body && body.name) || "").trim().slice(0, 100);
   if (!name) return jsonResponse({ error: "수업명을 입력해주세요." }, 400);
+  const school = ((body && body.school) || "").trim().slice(0, 100) || null;
+  const section = ((body && body.section) || "").trim().slice(0, 50) || null;
+  const day = ((body && body.day) || "").trim().slice(0, 20) || null;
+  const time = ((body && body.time) || "").trim().slice(0, 50) || null;
 
   const created = nowSec();
   const code = await generateClassCode(env);
   const result = await env.DB.prepare(
-    "INSERT INTO classes (prof_id, name, code, created_at) VALUES (?, ?, ?, ?)"
-  ).bind(auth.user.id, name, code, created).run();
+    "INSERT INTO classes (prof_id, name, code, created_at, school_name, section, class_day, class_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(auth.user.id, name, code, created, school, section, day, time).run();
 
-  return jsonResponse({ ok: true, class: { id: result.meta.last_row_id, name, code, created_at: created } });
+  return jsonResponse({ ok: true, class: { id: result.meta.last_row_id, name, code, created_at: created, school_name: school, section, class_day: day, class_time: time } });
 }
