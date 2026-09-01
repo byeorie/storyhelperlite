@@ -168,23 +168,21 @@ function openProfileEdit() {
   });
 }
 
-// 교수 코드 — 교수 계정은 자기 코드 확인, 학생 계정은 등록된 교수 목록 확인 + 코드로 추가 등록.
+// 등록 코드 — 2026-09-01: 교수 전체 코드는 폐지, 수업(강의)마다 발급되는 코드만 사용.
+// 교수 계정은 [수업 관리]에서 각 수업의 코드를 확인/공유하고, 학생 계정은 등록된 강의 목록 확인 + 코드로 추가 등록.
 function openProfCodeManager() {
   const esc2 = typeof esc==="function" ? esc : (s=>String(s==null?"":s));
   let html;
   if (currentUser && currentUser.role === "professor") {
-    html = `
-      <p class="hint">학생들에게 아래 코드를 알려주면, 학생이 [계정] → [교수 코드]에서 이 코드를 입력해 내 그룹에 등록할 수 있습니다.</p>
-      <div class="prof-code-display">${esc2(currentUser.profCode || "코드 없음")}</div>
-    `;
+    html = `<p class="hint">학생 등록은 이제 수업마다 발급되는 코드로 받습니다. [수업 관리] 탭에서 수업을 만들면 코드가 자동으로 생기고, 목록/상세 화면의 "코드 크게 보기"로 학생들에게 바로 보여줄 수 있습니다.</p>`;
   } else {
     // 2026-08-20: 학생 1명이 여러 교수를 등록할 수 있도록 변경 — 코드를 입력하면 기존 등록을
     // 대체하지 않고 목록에 추가된다. 실제 어느 교수의 과제를 볼지는 상단 툴바의 교수 표시/
     // 드롭다운(app.js refreshProfBar)에서 고른다.
     html = `
-      <div id="settingsProfList"><p class="hint">등록된 교수 목록을 불러오는 중…</p></div>
+      <div id="settingsProfList"><p class="hint">등록된 강의 목록을 불러오는 중…</p></div>
       <div class="plan-block">
-        <label>수업 코드 또는 교수 코드 등록</label>
+        <label>강의 코드 등록</label>
         <input type="text" id="profCodeInput" maxlength="6" placeholder="예: 123456" inputmode="numeric" style="letter-spacing:2px;font-size:16px">
       </div>
       <p id="profJoinMsg" class="hint" style="min-height:18px"></p>
@@ -207,12 +205,10 @@ function openProfCodeManager() {
           joinBtn.disabled = false;
           if (res.ok && res.body && res.body.ok) {
             const prof = res.body.prof || {};
+            const cls = res.body.class || {};
             if (!currentUser.profId) currentUser.profId = prof.id;
             saveAuth(getToken(), currentUser);
-            const cls = res.body.class;
-            msgEl.textContent = cls
-              ? `${prof.school || ""} ${prof.name || ""} 교수님의 '${cls.name}' 수업에 등록했습니다.`
-              : `${prof.school || ""} ${prof.name || ""} 교수님을 등록했습니다.`;
+            msgEl.textContent = `${prof.school || ""} ${prof.name || ""} 교수님의 '${cls.name || ""}' 수업에 등록했습니다.`;
             input.value = "";
             loadSettingsProfList();
             if (typeof onAuthChanged === "function") onAuthChanged();
@@ -248,7 +244,8 @@ function openPasswordChange() {
   });
 }
 
-/* [설정]의 학생용 "등록된 교수 목록" — 여러 명 등록 가능해진 뒤(2026-08-20) 추가 */
+/* [설정]의 학생용 "등록된 강의 목록" — 여러 명 등록 가능해진 뒤(2026-08-20) 추가.
+   2026-09-01: 각 항목에 강의명도 함께 표시(className, 여러 강의면 쉼표로 나열). */
 async function loadSettingsProfList() {
   const wrap = document.getElementById("settingsProfList");
   if (!wrap) return;
@@ -257,9 +254,9 @@ async function loadSettingsProfList() {
   if (!wrap.isConnected) return;
   const professors = (res.ok && res.body && res.body.professors) || [];
   wrap.innerHTML = professors.length
-    ? `<p class="hint">등록된 교수 (${professors.length}명) — 과제 제출/첨삭 화면의 드롭다운에서 고를 수 있습니다.</p>
-       <ul class="settings-prof-list">${professors.map(p => `<li>${esc2(p.school || "")} · ${esc2(p.name || "")}</li>`).join("")}</ul>`
-    : `<p class="hint">아직 등록된 교수가 없습니다. 교수님께 받은 6자리 코드를 아래에 입력해 등록하세요.</p>`;
+    ? `<p class="hint">등록된 강의 (${professors.length}건) — 과제 제출/첨삭 화면의 드롭다운에서 고를 수 있습니다.</p>
+       <ul class="settings-prof-list">${professors.map(p => `<li>${p.className ? `${esc2(p.className)} · ` : ""}${esc2(p.school || "")} ${esc2(p.name || "")}</li>`).join("")}</ul>`
+    : `<p class="hint">아직 등록된 강의가 없습니다. 교수님께 받은 6자리 강의 코드를 아래에 입력해 등록하세요.</p>`;
 }
 
 async function signOut() {

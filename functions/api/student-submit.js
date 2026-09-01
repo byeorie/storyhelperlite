@@ -26,7 +26,7 @@ export async function onRequestPost({ request, env }) {
   const member = await env.DB.prepare(
     "SELECT id FROM student_professors WHERE student_id = ? AND prof_id = ?"
   ).bind(auth.user.id, assignment.prof_id).first();
-  if (!member) return jsonResponse({ error: "가입한 교수 그룹이 없습니다. 설정에서 교수 코드를 먼저 입력해주세요." }, 400);
+  if (!member) return jsonResponse({ error: "가입한 강의가 없습니다. 설정에서 강의 코드를 먼저 입력해주세요." }, 400);
 
   // 2026-08-24: 과제가 특정 수업에 속해있다면(class_id) 그 수업의 수강생만 제출할 수 있다.
   if (assignment.class_id) {

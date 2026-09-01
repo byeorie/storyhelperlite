@@ -123,12 +123,13 @@ async function refreshProfBar(){
     : ((defaultId && profBarList.some(p=>p.id===defaultId)) ? defaultId : profBarList[0].id);
   rememberSelectedProf(profBarId);
   wrap.hidden=false;
+  const profBarLabel=p=>(p.className?`${p.className}-${p.name||""}`:(p.name||""));
   if(profBarList.length<2){
     const p=profBarList[0];
-    wrap.innerHTML=`${ICONS.user}<span>${esc(p.name||"")}</span>`;
+    wrap.innerHTML=`${ICONS.user}<span>${esc(profBarLabel(p))}</span>`;
   }else{
     wrap.innerHTML=`${ICONS.user}<select id="profBarSelect" title="과제를 제출/열람할 교수(수업)">
-      ${profBarList.map(p=>`<option value="${p.id}"${p.id===profBarId?" selected":""}>${esc(p.name||"")}</option>`).join("")}
+      ${profBarList.map(p=>`<option value="${p.id}"${p.id===profBarId?" selected":""}>${esc(profBarLabel(p))}</option>`).join("")}
     </select>`;
     wrap.querySelector("#profBarSelect").onchange=e=>{ profBarId=Number(e.target.value); rememberSelectedProf(profBarId); };
   }
@@ -3801,7 +3802,7 @@ async function doAdminReset(mode){
 }
 
 /* ===== 🎓 교수 그룹 설정 — 학생-교수 연결 / 수업 관리 / 제출·첨삭 =====
-   학생: 설정에서 교수 코드 입력 → 가입 → 기획서/플롯/글쓰기 탭의 "제출" 버튼으로 과제 폴더 선택해 제출
+   학생: 설정에서 강의 코드 입력 → 등록 → 기획서/플롯/글쓰기 탭의 "제출" 버튼으로 과제 폴더 선택해 제출
    교수: 수업 관리(전체 학생 명단 · 수업 생성 · 수강 학생 배정 · 과제 등록·마감 스위치·제출함 열람·첨삭)
    제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
    "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
@@ -3989,7 +3990,7 @@ async function openSubmitModal(type){
   overlay.appendChild(box); document.body.appendChild(overlay);
 
   if(!profBarId){
-    body.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`;
+    body.innerHTML=`<p class="hint">아직 등록한 강의가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 강의 코드를 먼저 입력해주세요.</p>`;
     return;
   }
   const res=await apiFetch("student-assignments?profId="+profBarId);
@@ -4048,7 +4049,7 @@ async function rFeedbackList(type){
   c.querySelector("#feedbackListBackBtn").onclick=()=>{ feedbackPage=null; render(); };
 
   const wrap=document.getElementById("feedbackListWrap");
-  if(!profBarId){ wrap.innerHTML=`<p class="hint">아직 등록한 교수가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 교수 코드를 먼저 입력해주세요.</p>`; return; }
+  if(!profBarId){ wrap.innerHTML=`<p class="hint">아직 등록한 강의가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 강의 코드를 먼저 입력해주세요.</p>`; return; }
   const res=await apiFetch("student-assignments?profId="+profBarId);
   if(!c.isConnected) return;
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
@@ -4140,7 +4141,7 @@ async function rFeedbackDetail(type, id, version){
    흡수됨 — 내 코드로 가입한 전체 학생(수업 배정과 무관) 명단을 보여준다. container에 그려 넣는
    형태로 바꿔 rProfClassDetail에서 재사용한다. */
 async function renderProfRosterView(container){
-  container.innerHTML=`<p class="hint">내 코드(<b>${esc((currentUser&&currentUser.profCode)||"-")}</b>)를 학생에게 알려주면, 학생이 설정에서 그 코드를 입력해 아래 명단에 나타납니다. 특정 수업의 수강생으로 배정하려면 수업을 만든 뒤 그 수업의 [수강 학생] 탭에서 추가해주세요.</p>
+  container.innerHTML=`<p class="hint">학생이 [수업 관리]의 어느 수업이든 그 등록 코드로 가입하면 아래 전체 명단에 함께 나타납니다.</p>
     <div id="profStudentsWrap"><p class="hint">불러오는 중…</p></div>`;
   const res=await apiFetch("professor-students");
   const wrap=document.getElementById("profStudentsWrap"); if(!wrap) return;
@@ -5236,9 +5237,9 @@ const GUIDE_SECTIONS=[
     </ul>`},
   {title:"계정 설정", html:`
     <ul>
-      <li>우측 상단 프로필 아이콘을 누르면 <b>개인정보 수정 · 교수 코드 · 비밀번호 변경</b> 3개 메뉴가 나옵니다.</li>
+      <li>우측 상단 프로필 아이콘을 누르면 <b>개인정보 수정 · 등록 코드 · 비밀번호 변경</b> 3개 메뉴가 나옵니다.</li>
       <li><b>개인정보 수정</b>에서 소속 학교 · 이름 · 이메일을 수정할 수 있습니다.</li>
-      <li><b>교수 코드</b>에서 학생은 교수님께 받은 코드를 등록하고(여러 명 가능), 교수는 자신의 코드를 확인합니다.</li>
+      <li><b>등록 코드</b>에서 학생은 교수님께 받은 강의 코드를 등록하고(여러 강의 가능), 교수는 [수업 관리]에서 각 수업의 코드를 확인합니다.</li>
       <li><b>비밀번호 변경</b>에서 "비밀번호 변경 메일 보내기"를 누르면 가입 이메일로 변경 링크가 발송됩니다.</li>
     </ul>`},
   {title:"데이터 보관 안내", html:`

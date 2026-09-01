@@ -32,8 +32,8 @@ async function generateClassCode(env) {
 }
 
 /* POST /api/professor-classes — 새 수업 만들기  body: { name }
-   2026-09-01: 학생이 이 수업에 바로 등록할 수 있도록 수업마다 6자리 코드를 함께 발급한다
-   (기존 교수 전체 코드(users.prof_code)는 그대로 두고, 수업 코드는 추가 등록 경로). */
+   2026-09-01: 학생이 이 수업에 바로 등록할 수 있도록 수업마다 6자리 코드를 함께 발급한다.
+   (같은 날 추가) 교수 전체 코드(users.prof_code) 등록은 폐지 — 학생 등록은 이제 이 수업 코드로만 받는다. */
 export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
