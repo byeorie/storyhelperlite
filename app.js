@@ -55,7 +55,7 @@ function onAuthChanged(){
   refreshProfNavVisibility();
   refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
-  if((activeTab==="profClasses"||activeTab==="sampleData") && !isProfessor()) forceTab("idea");
+  if(activeTab==="profClasses" && !isProfessor()) forceTab("idea");
   render();
   maybeShowWipeNotice();
 }
@@ -227,6 +227,26 @@ function fillOpenIds(d){
   if(!d.openIds.includes(d.current)) d.openIds.push(d.current);
   return d.openIds;
 }
+/* 예전 버전(작품별 ideaBlocks)에서 계정 단위(DB.ideaBlocks)로 1회 이전 — 2026-09-02: 아이디어
+   수집이 작품이 아니라 계정 기준으로 바뀌면서, 새 작품을 만들어도 기존 아이디어를 그대로 쓸 수 있게
+   됨. 모든 작품의 아이디어를 id 기준 중복 없이 합치고, 작품에 남아있던 옛 필드는 지운다.
+   단, 샘플 작품(p.isSampleProject)은 계정 아이디어와 분리해서 독립적으로 동작해야 하므로 병합·삭제
+   대상에서 제외한다(2026-09-02 후속 요청). 이미 이전된 계정(d.ideaBlocks가 배열)은 건드리지 않는다. */
+function migrateIdeaBlocksToAccount(d){
+  if(!Array.isArray(d.ideaBlocks)){
+    const merged=[], seen=new Set();
+    (d.projects||[]).forEach(p=>{
+      if(p.isSampleProject) return;
+      (Array.isArray(p.ideaBlocks)?p.ideaBlocks:[]).forEach(x=>{
+        const b=Object.assign({id:uid(),text:"",tags:[]},x);
+        if(!seen.has(b.id)){ seen.add(b.id); merged.push(b); }
+      });
+    });
+    d.ideaBlocks=merged;
+  }
+  (d.projects||[]).forEach(p=>{ if(!p.isSampleProject) delete p.ideaBlocks; });
+  return d;
+}
 function load(){
   try{
     const d=JSON.parse(localStorage.getItem(LS_KEY));
@@ -234,11 +254,12 @@ function load(){
       d.projects=d.projects.map(fillProject);
       if(!d.projects.some(p=>p.id===d.current)) d.current=d.projects[0].id;
       fillOpenIds(d);
+      migrateIdeaBlocksToAccount(d);
       return d;
     }
   }catch(e){}
   const id=uid();
-  return {current:id, projects:[blankProject(id,"내 첫 작품")], openIds:[id]};
+  return {current:id, projects:[blankProject(id,"내 첫 작품")], openIds:[id], ideaBlocks:[]};
 }
 function blankExplore(){
   const o={}; STORY_GUIDE_SLOTS.forEach(s=>o[s.key]=""); return o;
@@ -252,20 +273,23 @@ function fillProject(p){
   const event=Object.assign({}, b.event, p.event||{});
   event.log=Array.isArray(event.log)?event.log.map(g=>Object.assign(
     {id:uid(), name:"", characters:"", episode:"", impact:"", nextLink:"", cliffhanger:""}, g)):[];
+  event.customFields=Array.isArray(event.customFields)?event.customFields.map(x=>Object.assign({id:uid(),label:"",value:""},x)):[];
+  const background=Object.assign({}, b.background, p.background||{});
+  background.customFields=Array.isArray(background.customFields)?background.customFields.map(x=>Object.assign({id:uid(),label:"",value:""},x)):[];
   return Object.assign({}, b, p, {
     idea: Object.assign({}, b.idea, p.idea||{}),
     world,
-    background: Object.assign({}, b.background, p.background||{}),
+    background,
     event,
     characters: (Array.isArray(p.characters)&&p.characters.length)?p.characters.map(c=>{
       const m=Object.assign({},blankChar(),c);
       /* 예전 "인물 변화(아크)" 단일 필드에 값이 있고 전/후 필드가 비어 있으면 "변화 전"으로 이전 */
       if(m.arc && !m.arcBefore && !m.arcAfter) m.arcBefore=m.arc;
+      m.customFields=Array.isArray(m.customFields)?m.customFields.map(x=>Object.assign({id:uid(),label:"",value:""},x)):[];
       return m;
     }):b.characters,
     plot: Array.isArray(p.plot)?Object.assign([...b.plot],p.plot):b.plot,
     genres: Array.isArray(p.genres)?p.genres:b.genres,
-    ideaBlocks: Array.isArray(p.ideaBlocks)?p.ideaBlocks.map(x=>Object.assign({id:uid(),text:"",tags:[]},x)):b.ideaBlocks,
     tagColors: Object.assign({}, b.tagColors, p.tagColors||{}),
     plotDoc: fillPlotDoc(p.plotDoc),
     writeDoc: fillWriteDoc(p.writeDoc),
@@ -319,11 +343,10 @@ function blankProject(id,name){
     characters:[blankChar()],
     world:{summary:"",rules:"",era:"",place:"",type:"",regions:"",timeline:"",politics:"",
       factions:"",economy:"",taboo:"",culture:"",language:"",conflict:"",glossary:[]},
-    background:{social:"",mood:"",detail:""},
+    background:{social:"",mood:"",detail:"",customFields:[]},
     event:{main:"",conflict:"",ending:"",name:"",characters:"",agency:"",conflictType:"",
-      goal:"",disaster:"",reaction:"",decision:"",transform:"",nextLink:"",log:[]},
+      goal:"",disaster:"",reaction:"",decision:"",transform:"",nextLink:"",log:[],customFields:[]},
     plot:Array(12).fill(""),
-    ideaBlocks:[],
     tagColors:{},
     plotDoc:{structure:"", sections:[], ideaOverrides:{}},
     writeDoc:{blocks:[], groups:[]},
@@ -379,7 +402,7 @@ function fillPlotDoc(pd){
 function blankChar(){
   return {id:uid(), name:"",role:"영웅",age:"",gender:"",job:"",mbti:"",enneagram:"",goal:"",flaw:"",strength:"",arc:"",arcType:"",desc:"", relationships:[], image:"",
     parentsInfo:"", familyRelations:"", affiliation:"", arcBefore:"", arcAfter:"",
-    appearance:"", speechHabit:"", charmPoint:"", secret:"", backstory:"", likes:"", dislikes:"", dialogueSample:""};
+    appearance:"", speechHabit:"", charmPoint:"", secret:"", backstory:"", likes:"", dislikes:"", dialogueSample:"", customFields:[]};
 }
 function currentProject(){
   return DB.projects.find(p=>p.id===DB.current)||DB.projects[0];
@@ -532,6 +555,44 @@ function bind(el,obj,key){
   el.oninput=()=>{ obj[key]=el.value; save(); };
 }
 
+/* 사용자 정의 항목(커스텀 필드) — 캐릭터/배경/사건 설정 페이지 공통.
+   target.customFields = [{id,label,value}] 배열을 용어사전(설정 관리)과 같은 카드 UI로 보여준다. */
+function renderCustomFieldList(listEl, target){
+  listEl.innerHTML="";
+  if(!Array.isArray(target.customFields)) target.customFields=[];
+  if(!target.customFields.length){
+    listEl.innerHTML='<p class="hint" style="margin:0 0 10px">아직 추가한 항목이 없습니다.</p>';
+    return;
+  }
+  target.customFields.forEach((f,i)=>{
+    const box=document.createElement("div"); box.className="plan-block wv-term";
+    box.innerHTML=`<div class="wv-term-head">
+        <input type="text" class="wv-term-name custom-field-label" placeholder="항목 이름 (예: 취미)" value="${esc(f.label||"")}">
+        <button type="button" class="chip-x" title="삭제">${ICONS.close}</button>
+      </div>
+      <textarea class="custom-field-value" placeholder="내용">${esc(f.value||"")}</textarea>`;
+    const labelEl=box.querySelector(".custom-field-label");
+    const valueEl=box.querySelector(".custom-field-value");
+    labelEl.oninput=()=>{ f.label=labelEl.value; save(); };
+    valueEl.oninput=()=>{ f.value=valueEl.value; save(); };
+    box.querySelector(".chip-x").onclick=()=>{
+      if(!confirm("이 항목을 삭제할까요?")) return;
+      target.customFields.splice(i,1); save(); renderCustomFieldList(listEl, target);
+    };
+    listEl.appendChild(box);
+  });
+}
+/* 위 렌더러 + "항목 추가" 버튼을 한 번에 연결 */
+function wireCustomFields(container, listSelector, addBtnSelector, target){
+  if(!Array.isArray(target.customFields)) target.customFields=[];
+  const listEl=container.querySelector(listSelector);
+  renderCustomFieldList(listEl, target);
+  container.querySelector(addBtnSelector).onclick=()=>{
+    target.customFields.push({id:uid(), label:"", value:""});
+    save(); renderCustomFieldList(listEl, target);
+  };
+}
+
 /* 옵션 버튼 그룹 (단일선택) */
 function optGroup(container, options, obj, key){
   options.forEach(v=>{
@@ -556,6 +617,7 @@ function render(){
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
     app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character");
     if(!P) P=currentProject();
+    if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
     if(!P.planDoc) P.planDoc=blankPlanDoc();
@@ -735,22 +797,34 @@ function getDragAfterElement(container, y){
     return closest;
   }, {offset:-Infinity, element:null}).element;
 }
-/* 드롭 후 화면에 보이던 순서를 실제 저장 순서(P.ideaBlocks)에 반영 */
+/* 아이디어 저장소 — 보통은 계정 전체 공유(DB.ideaBlocks). 단, 샘플 작품(교수용 예시, P.isSampleProject)은
+   따로 동작해야 하므로(2026-09-02 요청) 계정 아이디어 수집에 섞이지 않도록 작품 자신의 ideaBlocks를
+   독립적으로 쓴다. 현재 열려 있는 작품(P) 기준으로 어느 저장소를 쓸지 고른다. */
+function ideaStore(){
+  if(P && P.isSampleProject){
+    if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
+    return P;
+  }
+  if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[];
+  return DB;
+}
+/* 드롭 후 화면에 보이던 순서를 실제 저장 순서(ideaStore().ideaBlocks)에 반영 */
 function reorderIdeaBlocks(orderedIdsTopToBottom){
+  const store=ideaStore();
   const idToBlock={};
-  P.ideaBlocks.forEach(b=>idToBlock[b.id]=b);
+  store.ideaBlocks.forEach(b=>idToBlock[b.id]=b);
   const shownIds=new Set(orderedIdsTopToBottom);
   const newShownStorageOrder=orderedIdsTopToBottom.slice().reverse();
   let si=0;
-  P.ideaBlocks=P.ideaBlocks.map(b=> shownIds.has(b.id) ? idToBlock[newShownStorageOrder[si++]] : b);
+  store.ideaBlocks=store.ideaBlocks.map(b=> shownIds.has(b.id) ? idToBlock[newShownStorageOrder[si++]] : b);
 }
 document.addEventListener("mouseup", ()=>{
   document.querySelectorAll(".idea-block[draggable=true], .plot-idea[draggable=true], .plot-section[draggable=true], .scene-block[draggable=true], .sub-block[draggable=true], .sub-branch[draggable=true]").forEach(el=>el.draggable=false);
 });
 
 function rIdea(){
-  if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
-  const allTags=[...new Set(P.ideaBlocks.flatMap(b=>b.tags||[]))];
+  const ideaStoreObj=ideaStore();
+  const allTags=[...new Set(ideaStoreObj.ideaBlocks.flatMap(b=>b.tags||[]))];
 
   const c=document.createElement("div");
   c.innerHTML=`<div class="card">
@@ -825,10 +899,10 @@ function rIdea(){
 
   const list=document.createElement("div"); list.className="idea-block-list";
   app.appendChild(list);
-  const shown=P.ideaBlocks.filter(b=>ideaFilterTags.length===0||ideaFilterTags.some(t=>(b.tags||[]).includes(t)));
+  const shown=ideaStoreObj.ideaBlocks.filter(b=>ideaFilterTags.length===0||ideaFilterTags.some(t=>(b.tags||[]).includes(t)));
   if(!shown.length){
     const e=document.createElement("p"); e.className="hint";
-    e.textContent=P.ideaBlocks.length?"이 태그에 해당하는 아이디어가 없습니다.":"위 입력창에 첫 아이디어를 적어보세요.";
+    e.textContent=ideaStoreObj.ideaBlocks.length?"이 태그에 해당하는 아이디어가 없습니다.":"위 입력창에 첫 아이디어를 적어보세요.";
     list.appendChild(e);
   }
   shown.slice().reverse().forEach(b=>list.appendChild(ideaBlockCard(b, allTags, list)));
@@ -851,7 +925,7 @@ function rIdea(){
   const input=c.querySelector("#ideaNewInput");
   function submitNewIdea(){
     if(!input.value.trim()) return;
-    P.ideaBlocks.push({id:uid(), text:input.value.trim(), tags:[...ideaPendingTags]});
+    ideaStoreObj.ideaBlocks.push({id:uid(), text:input.value.trim(), tags:[...ideaPendingTags]});
     ideaPendingTags=[];
     input.value="";
     save(); render();
@@ -900,7 +974,8 @@ function ideaBlockCard(b, allTags, list){
   const del=document.createElement("button"); del.className="idea-del"; del.innerHTML=ICONS.close; del.title="삭제";
   del.onclick=()=>{
     if(!confirm("이 아이디어를 삭제할까요?"))return;
-    P.ideaBlocks=P.ideaBlocks.filter(x=>x.id!==b.id); save(); render();
+    const store=ideaStore();
+    store.ideaBlocks=store.ideaBlocks.filter(x=>x.id!==b.id); save(); render();
   };
   const tagsWrap=document.createElement("div"); tagsWrap.className="idea-block-tags";
   (b.tags||[]).forEach(t=>{
@@ -1020,8 +1095,7 @@ function rExplore(){
   updatePreview();
   slotsCard.querySelector("#saveAsIdea").onclick=()=>{
     const text=slotsCard.querySelector("#loglinePreview").textContent;
-    if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
-    P.ideaBlocks.push({id:uid(), text, tags:["탐색"]});
+    ideaStore().ideaBlocks.push({id:uid(), text, tags:["탐색"]});
     save(); alert("아이디어 수집에 저장했습니다.");
   };
 
@@ -1226,6 +1300,11 @@ function charDetailPage(ch){
     <h3 class="char-detail-sub">기타 메모</h3>
     <textarea data-k="desc" placeholder="위 항목에 넣기 애매한 특이사항"></textarea>
 
+    <h3 class="char-detail-sub">사용자 추가 항목</h3>
+    <p class="hint" style="margin:0 0 10px">위 항목만으로 부족하다면 이 캐릭터만의 항목을 직접 추가해보세요.</p>
+    <div class="wv-glossary-list" id="chCustomList"></div>
+    <button type="button" class="btn ghost sm" id="chCustomAdd">${ICONS.plus} 항목 추가</button>
+
     <label>다른 캐릭터와의 관계</label>
     <div class="char-rel-list" id="charRelList"></div>
     <div class="char-rel-add" id="charRelAdd"></div>`;
@@ -1296,6 +1375,7 @@ function charDetailPage(ch){
   }else{
     addWrap.innerHTML='<p class="hint" style="margin:4px 0">관계를 맺으려면 캐릭터가 2명 이상 있어야 합니다.</p>';
   }
+  wireCustomFields(body, "#chCustomList", "#chCustomAdd", ch);
 
   wrap.appendChild(body);
   return wrap;
@@ -1527,6 +1607,11 @@ function rBg(){
     <p class="hint" style="margin:0 0 10px">연재 중 설정 실수를 막기 위한 항목입니다. 새로운 세계관 용어(장소·조직·아이템·규칙 등)가 등장할 때마다 카드를 추가해 관리하세요.</p>
     <div class="wv-glossary-list" id="wvGlossaryList"></div>
     <button type="button" class="btn ghost sm" id="wvGlossaryAdd">${ICONS.plus} 용어 추가</button>
+
+    <div class="section-title">사용자 추가 항목</div>
+    <p class="hint" style="margin:0 0 10px">위 항목만으로 부족하다면 직접 이름을 붙여 항목을 추가해보세요.</p>
+    <div class="wv-glossary-list" id="bgCustomList"></div>
+    <button type="button" class="btn ghost sm" id="bgCustomAdd">${ICONS.plus} 항목 추가</button>
   </div>`;
   mountWithPlanViewer(c);
   wireSubmitBtn(c,"background");
@@ -1608,6 +1693,7 @@ function rBg(){
     P.world.glossary.push({id:uid(), term:"", definition:"", firstEpisode:"", absoluteRule:"", disclosure:"", resolved:""});
     save(); renderGlossary();
   };
+  wireCustomFields(c, "#bgCustomList", "#bgCustomAdd", P.background);
 }
 
 /* 사건 */
@@ -1648,6 +1734,11 @@ function rEvent(){
     <p class="hint" style="margin:0 0 10px">여러 사건이 얽히는 장편 연재에서 인과 사슬을 놓치지 않기 위한 항목입니다. 사건이 하나씩 확정될 때마다 카드를 추가하세요.</p>
     <div class="wv-glossary-list" id="evLogList"></div>
     <button type="button" class="btn ghost sm" id="evLogAdd">${ICONS.plus} 사건 추가</button>
+
+    <div class="section-title">사용자 추가 항목</div>
+    <p class="hint" style="margin:0 0 10px">위 항목만으로 부족하다면 직접 이름을 붙여 항목을 추가해보세요.</p>
+    <div class="wv-glossary-list" id="evCustomList"></div>
+    <button type="button" class="btn ghost sm" id="evCustomAdd">${ICONS.plus} 항목 추가</button>
   </div>`;
   mountWithPlanViewer(c);
   wireSubmitBtn(c,"event");
@@ -1715,6 +1806,7 @@ function rEvent(){
     P.event.log.push({id:uid(), name:"", characters:"", episode:"", impact:"", nextLink:"", cliffhanger:""});
     save(); renderLog();
   };
+  wireCustomFields(c, "#evCustomList", "#evCustomAdd", P.event);
 }
 
 /* ===== 📋 기획서 작성 =====
@@ -1766,7 +1858,7 @@ let plotPickerFor=null;       // 현재 아이디어 피커가 열린 섹션 id
 let plotPickerFilter=[];      // 피커 내 태그 필터
 const plotCollapsed=new Set();// 접힌 섹션 id (화면 상태, 저장 안 함)
 /* 아이디어 id로 블록 찾기 */
-function findIdea(id){ return (P.ideaBlocks||[]).find(b=>b.id===id); }
+function findIdea(id){ return (ideaStore().ideaBlocks||[]).find(b=>b.id===id); }
 /* 플롯에서 표시할 아이디어 텍스트 — 오버라이드가 있으면 그것(아이디어 수집과 독립), 없으면 원본 */
 function plotIdeaText(id){
   const ov=P.plotDoc.ideaOverrides||{};
@@ -1783,11 +1875,11 @@ function getSectionColor(secId){ return TAG_PALETTE[hashStr(secId)%TAG_PALETTE.l
 function unplacedIdeas(){
   const placed=new Set();
   (P.plotDoc.sections||[]).forEach(s=>(s.ideaIds||[]).forEach(id=>placed.add(id)));
-  return (P.ideaBlocks||[]).filter(b=>!placed.has(b.id));
+  return (ideaStore().ideaBlocks||[]).filter(b=>!placed.has(b.id));
 }
 /* 존재하지 않는 아이디어 참조 정리 */
 function cleanPlotRefs(){
-  const exist=new Set((P.ideaBlocks||[]).map(b=>b.id));
+  const exist=new Set((ideaStore().ideaBlocks||[]).map(b=>b.id));
   (P.plotDoc.sections||[]).forEach(s=>{ s.ideaIds=(s.ideaIds||[]).filter(id=>exist.has(id)); });
 }
 
@@ -1991,7 +2083,7 @@ function togglePicker(sec){
   render();
 }
 /* 플롯 생성 페이지에서 바로 새 아이디어 블록을 만들어 이 섹션에 배치
-   (아이디어 수집과 같은 저장소(P.ideaBlocks)를 쓰므로 아이디어 수집 목록에도 자동으로 나타난다) */
+   (아이디어 수집과 같은 저장소(ideaStore())를 쓰므로 아이디어 수집 목록에도 자동으로 나타난다) */
 function createIdeaInSection(sec){
   /* 브라우저 기본 prompt() 창은 화면 상단에 고정으로 뜨고 CSS로 위치를 바꿀 수 없어서,
      다른 팝업들과 같은 모양(.plot-modal-overlay/.plot-modal, 작업 영역 가운데 정렬)으로 대체 */
@@ -2010,9 +2102,8 @@ function createIdeaInSection(sec){
   const doSave=()=>{
     const trimmed=ta.value.trim();
     if(!trimmed) return;
-    if(!Array.isArray(P.ideaBlocks)) P.ideaBlocks=[];
     const id=uid();
-    P.ideaBlocks.push({id, text:trimmed, tags:[]});
+    ideaStore().ideaBlocks.push({id, text:trimmed, tags:[]});
     sec.ideaIds=sec.ideaIds||[];
     sec.ideaIds.push(id);
     save();
@@ -3208,6 +3299,20 @@ function importStory(e){
       const obj=JSON.parse(rd.result);
       if(!obj.plot||!obj.characters)throw 0;
       obj.id=uid(); obj.name=obj.name||"가져온 작품"; // 2026-08-20: 불러온 이름 그대로 사용(예전엔 " (복원)"을 자동으로 붙였음)
+      // 예전 파일(작품별 ideaBlocks 저장 방식)을 불러올 때 그 안의 아이디어도 계정 단위(DB.ideaBlocks)로 합쳐준다.
+      // 단, 샘플 작품을 내보냈다가 다시 불러온 경우(obj.isSampleProject)는 계정 아이디어와 분리된 채로
+      // 유지해야 하므로 병합하지 않고 작품 자신의 ideaBlocks를 그대로 둔다.
+      if(!obj.isSampleProject){
+        const importedIdeas=Array.isArray(obj.ideaBlocks)?obj.ideaBlocks:[];
+        delete obj.ideaBlocks;
+        if(importedIdeas.length){
+          if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[];
+          const existingIds=new Set(DB.ideaBlocks.map(b=>b.id));
+          importedIdeas.forEach(b=>{ if(b&&b.id&&!existingIds.has(b.id)){ DB.ideaBlocks.push(b); existingIds.add(b.id); } });
+        }
+      }else if(!Array.isArray(obj.ideaBlocks)){
+        obj.ideaBlocks=[];
+      }
       DB.projects.push(obj); DB.openIds.push(obj.id); DB.current=obj.id; P=currentProject();
       resetUndoHistory(); save(); refreshProjSelect(); render();
       alert("불러오기 완료!");
@@ -3757,12 +3862,11 @@ async function renderAdminUsers(){
       <option value="student" ${u.role==="professor"?"":"selected"}>학생</option>
       <option value="professor" ${u.role==="professor"?"selected":""}>교수</option>
     </select></td>
-    <td>${u.role==="professor"?esc(u.prof_code||"-"):"-"}</td>
     <td>${esc(u.email)}</td><td>${fmtDate(u.created_at)}</td>
     <td>${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
   </tr>`).join("");
   wrap.innerHTML=`<table class="admin-table"><thead><tr>
-    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th>교수 코드</th><th>이메일</th><th>가입일</th><th></th>
+    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th>이메일</th><th>가입일</th><th></th>
   </tr></thead><tbody>${rows}</tbody></table>
   <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.</p>`;
   wrap.querySelectorAll(".admin-role-select").forEach(sel=>{
@@ -4183,6 +4287,11 @@ function rSampleData(){
 function openSampleProject(sample){
   const obj=JSON.parse(JSON.stringify(sample.data));
   obj.id=uid();
+  // 2026-09-02: 샘플 작품은 계정 아이디어 수집과 완전히 분리해서 별도로 동작해야 하므로, 이 작품
+  // 자신의 ideaBlocks를 그대로 유지한다(계정 단위 DB.ideaBlocks로 합치지 않음) — isSampleProject 플래그로
+  // ideaStore()가 이 작품이 열려 있는 동안은 계정 저장소 대신 이 작품 자신의 목록을 쓰도록 한다.
+  obj.isSampleProject=true;
+  if(!Array.isArray(obj.ideaBlocks)) obj.ideaBlocks=[];
   DB.projects.push(obj);
   openProjectTab(obj.id); // openIds에 추가 + 전환 + 저장 + refreshProjSelect + render
   forceTab("idea"); render();

@@ -105,6 +105,8 @@ document.addEventListener("click", (e) => {
 // 계정 관련 모달 공통 뼈대 — 2026-08-20: 예전에는 [설정] 버튼 하나가 개인정보/교수 코드/비밀번호
 // 변경을 전부 한 모달에 몰아넣어 내용이 길어지면 화면 아래로 잘리는 문제가 있었음. 계정 드롭다운
 // 메뉴 자체를 3개 항목으로 나누고, 각 항목은 이 헬퍼로 자기 내용만 담은 작은 모달을 띄운다.
+// 2026-09-02: "등록 코드"(수업 코드 입력) 버튼은 왼쪽 사이드 메뉴(#classCodeMenuBtn)로 옮겨졌지만
+// 모달 자체는 그대로 이 헬퍼를 재사용한다.
 function openAccountModal(title, bodyHtml, onMount) {
   toggleUserMenu(true);
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
@@ -287,6 +289,7 @@ async function loadFromServer() {
       if (!data.projects.some((p) => p.id === data.current)) data.current = data.projects[0].id;
       if (typeof fillWorkDB === "function") data.workDB = fillWorkDB(data.workDB);
       if (typeof fillOpenIds === "function") fillOpenIds(data);
+      if (typeof migrateIdeaBlocksToAccount === "function") migrateIdeaBlocksToAccount(data);
       DB = data;
       P = currentProject();
       if (typeof resetUndoHistory === "function") resetUndoHistory();
@@ -299,7 +302,7 @@ async function loadFromServer() {
       // 발견된 버그), 서버에 데이터가 없을 땐 항상 빈 작품 하나로 새로 시작한다.
       if (typeof blankProject === "function" && typeof uid === "function") {
         const id = uid();
-        DB = { current: id, projects: [blankProject(id, "내 첫 작품")], openIds: [id] };
+        DB = { current: id, projects: [blankProject(id, "내 첫 작품")], openIds: [id], ideaBlocks: [] };
         P = currentProject();
         if (typeof resetUndoHistory === "function") resetUndoHistory();
         render();
@@ -405,7 +408,7 @@ function bindAuthForms() {
 
   const profileBtn = document.getElementById("menuProfileBtn");
   if (profileBtn) profileBtn.onclick = openProfileEdit;
-  const profCodeBtn = document.getElementById("menuProfCodeBtn");
+  const profCodeBtn = document.getElementById("classCodeMenuBtn");
   if (profCodeBtn) profCodeBtn.onclick = openProfCodeManager;
   const pwMenuBtn = document.getElementById("menuPwBtn");
   if (pwMenuBtn) pwMenuBtn.onclick = openPasswordChange;

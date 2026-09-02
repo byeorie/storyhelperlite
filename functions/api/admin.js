@@ -6,22 +6,10 @@ export async function onRequestGet({ request, env }) {
   if (!auth) return jsonResponse({ error: "관리자만 접근할 수 있습니다." }, 403);
 
   const { results } = await env.DB.prepare(
-    "SELECT id, school, name, username, email, role, prof_code, created_at FROM users ORDER BY created_at DESC"
+    "SELECT id, school, name, username, email, role, created_at FROM users ORDER BY created_at DESC"
   ).all();
 
   return jsonResponse({ users: results || [] });
-}
-
-/* 교수 계정에 부여할 6자리 숫자 코드 — DB 전체에서 겹치지 않을 때까지 새로 뽑는다(최대 20회 시도).
-   functions/api/signup.js의 generateProfCode()와 동일 로직 (등급을 교수로 바꿀 때도 코드가 필요해서
-   여기서도 필요) */
-async function generateProfCode(env) {
-  for (let i = 0; i < 20; i++) {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const dup = await env.DB.prepare("SELECT id FROM users WHERE prof_code = ?").bind(code).first();
-    if (!dup) return code;
-  }
-  throw new Error("교수 코드 생성에 실패했습니다.");
 }
 
 /* POST /api/admin — 서버 초기화 · 회원 등급 변경 (관리자 전용)
@@ -29,7 +17,8 @@ async function generateProfCode(env) {
    - "data"   : 모든 회원의 작품 데이터(user_data)만 삭제. 계정은 유지.
    - "all"    : 위 데이터 삭제 + 관리자 본인을 제외한 모든 계정·세션 삭제.
    - "setRole": { userId, role: "student"|"professor" } — 회원 관리 표에서 등급을 바꿀 때 사용.
-                교수로 바꾸는데 기존 코드가 없으면 새 6자리 코드를 발급하고, 학생으로 바꾸면 코드를 지운다. */
+                2026-09-02: 교수 전체 코드(prof_code) 제도는 폐지되어 등급만 바꾸면 된다(수업별
+                코드는 professor-classes.js에서 수업 생성 시 별도로 발급됨). */
 export async function onRequestPost({ request, env }) {
   const auth = await requireAdmin(request, env);
   if (!auth) return jsonResponse({ error: "관리자만 접근할 수 있습니다." }, 403);
@@ -55,12 +44,8 @@ export async function onRequestPost({ request, env }) {
     const role = body.role === "professor" ? "professor" : "student";
     if (!userId) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
 
-    const target = await env.DB.prepare("SELECT id, role, prof_code FROM users WHERE id = ?").bind(userId).first();
+    const target = await env.DB.prepare("SELECT id, role FROM users WHERE id = ?").bind(userId).first();
     if (!target) return jsonResponse({ error: "회원을 찾을 수 없습니다." }, 404);
-
-    let profCode = target.prof_code;
-    if (role === "professor" && !profCode) profCode = await generateProfCode(env);
-    if (role === "student") profCode = null;
 
     // 교수 → 학생으로 강등: 이 교수를 등록해뒀던 학생들의 연결을 정리(다른 등록 교수가 있으면
     // 그 교수를 기본 선택으로 넘기고, 없으면 기본 선택을 비움), student_professors 등록도 삭제
@@ -71,10 +56,10 @@ export async function onRequestPost({ request, env }) {
       await env.DB.prepare("DELETE FROM student_professors WHERE prof_id = ?").bind(userId).run();
     }
 
-    await env.DB.prepare("UPDATE users SET role = ?, prof_code = ? WHERE id = ?")
-      .bind(role, profCode, userId).run();
+    await env.DB.prepare("UPDATE users SET role = ? WHERE id = ?")
+      .bind(role, userId).run();
 
-    return jsonResponse({ ok: true, mode: "setRole", userId, role, profCode });
+    return jsonResponse({ ok: true, mode: "setRole", userId, role });
   }
 
   if (mode === "deleteUser") {

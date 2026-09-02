@@ -41,8 +41,8 @@ export async function onRequestPost({ request, env }) {
   const { hash, salt } = await hashPassword(password);
   const created = nowSec();
   const result = await env.DB.prepare(
-    "INSERT INTO users (school, name, username, password_hash, password_salt, email, created_at, role, prof_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind(school, name, username, hash, salt, email, created, role, null).run();
+    "INSERT INTO users (school, name, username, password_hash, password_salt, email, created_at, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(school, name, username, hash, salt, email, created, role).run();
 
   const userId = result.meta.last_row_id;
   const token = await makeToken();
@@ -51,5 +51,5 @@ export async function onRequestPost({ request, env }) {
     "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)"
   ).bind(token, userId, created, expires).run();
 
-  return jsonResponse({ token, user: { username, name, school, email, role, profCode: "", profId: null } });
+  return jsonResponse({ token, user: { username, name, school, email, role, profId: null } });
 }

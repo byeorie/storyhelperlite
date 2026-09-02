@@ -22,7 +22,7 @@ export async function onRequestPost({ request, env }) {
     ok: true,
     user: {
       username: auth.user.username, name, school, email,
-      role: auth.user.role, profCode: auth.user.profCode, profId: auth.user.profId,
+      role: auth.user.role, profId: auth.user.profId,
     },
   });
 }
