@@ -3389,8 +3389,9 @@ function storyboardRow(bl, no){
   const title=document.createElement("div"); title.className="sb-text-title"; title.textContent=bl.title||"(제목 없음)";
   textCell.appendChild(title);
   const body=document.createElement("div"); body.className="sb-text-body";
-  const texts=(bl.items||[]).map(it=>(it.text||"").trim()).filter(Boolean);
-  body.textContent=texts.length?texts.join(" / "):"(내용 없음)";
+  const texts=(bl.items||[]).filter(it=>(it.text||"").trim().length)
+    .map(it=> it.type==="line" ? ((it.char||"(미지정)")+": "+it.text.trim()) : it.text.trim());
+  body.textContent=texts.length?texts.join("\n"):"(내용 없음)";
   textCell.appendChild(body);
   row.appendChild(textCell);
 
