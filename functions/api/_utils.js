@@ -173,6 +173,50 @@ export async function requireProfessor(request, env) {
   return auth;
 }
 
+/* 2026-09-03: 학생 상단 툴바의 "수업 선택" 드롭다운 + student-assignments 기본값 계산에서 공용으로
+   쓰는 "내가 등록한 수업 목록" 조회. 기존엔 student_professors(교수 단위)만 보고 목록을 만들어서,
+   같은 교수님의 수업을 2개 이상 등록한 학생은 드롭다운에 교수 1명으로만 뭉뚱그려져 보이고 실제로는
+   수업을 구분해 고를 수 없었다(버그 원인). class_students(수업 단위 등록) 기준으로 다시 만들되,
+   수업 코드 도입 이전에 교수 단위로만 등록되어 class_students에 아무 행도 없는 옛 학생은
+   classId=null(수업 미지정) 항목으로 그대로 포함시켜 이전처럼 동작하게 둔다. */
+export async function listStudentClasses(env, studentId) {
+  const { results: classRows } = await env.DB.prepare(
+    "SELECT cl.id AS class_id, cl.name AS class_name, u.id AS prof_id, u.name AS prof_name, u.school AS prof_school " +
+    "FROM class_students cs JOIN classes cl ON cl.id = cs.class_id JOIN users u ON u.id = cl.prof_id " +
+    "WHERE cs.student_id = ? ORDER BY u.name, cl.name"
+  ).bind(studentId).all();
+
+  const { results: profRows } = await env.DB.prepare(
+    "SELECT u.id AS prof_id, u.name AS prof_name, u.school AS prof_school " +
+    "FROM student_professors sp JOIN users u ON u.id = sp.prof_id WHERE sp.student_id = ?"
+  ).bind(studentId).all();
+
+  const list = (classRows || []).map((r) => ({
+    classId: r.class_id, profId: r.prof_id, profName: r.prof_name, profSchool: r.prof_school, className: r.class_name,
+  }));
+  const coveredProfIds = new Set(list.map((c) => c.profId));
+  (profRows || []).forEach((p) => {
+    if (!coveredProfIds.has(p.prof_id)) {
+      list.push({ classId: null, profId: p.prof_id, profName: p.prof_name, profSchool: p.prof_school, className: null });
+      coveredProfIds.add(p.prof_id);
+    }
+  });
+  list.sort((a, b) => (a.profName || "").localeCompare(b.profName) || (a.className || "").localeCompare(b.className || ""));
+  return list;
+}
+
+/* key(문자열, 프론트엔드의 상단 툴바 선택값과 같은 형식: 수업 있으면 "c"+classId, 없으면 "p"+profId) */
+export function classEntryKey(entry) {
+  return entry.classId != null ? "c" + entry.classId : "p" + entry.profId;
+}
+
+/* listStudentClasses() 결과에서 기본 선택 항목 고르기 — users.prof_id(기본 선택 교수)와 일치하는
+   항목을 우선하고, 없으면 첫 번째 항목을 쓴다. */
+export function pickDefaultClassEntry(list, preferredProfId) {
+  if (!list.length) return null;
+  return list.find((c) => c.profId === preferredProfId) || list[0];
+}
+
 /* ===== 이메일 발송 (Gmail SMTP, 465/TLS) =====
    Cloudflare Pages 프로젝트의 환경변수(Settings → Environment variables)에
    GMAIL_USER(보내는 사람 gmail 주소), GMAIL_APP_PASSWORD(구글 계정의 "앱 비밀번호")를

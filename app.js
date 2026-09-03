@@ -111,33 +111,40 @@ function maybeShowWipeNotice(){
 /* 상단 툴바 — 학생 계정이 등록한 교수(수업) 표시/선택 (2026-08-20 추가).
    과제 제출·첨삭 보기는 항상 여기서 고른 교수를 기준으로 동작하며, 모달 안에서 다시 고르지 않는다.
    1명만 등록했으면 이름만 보여주고, 2명 이상이면 드롭다운으로 바꿔서 고를 수 있게 한다. */
-let profBarList=[];  // 내가 등록한 교수 목록 [{id,name,school}]
-let profBarId=null;  // 지금 선택된 교수 id — student-assignments/student-submit 호출에 그대로 씀
+let profBarList=[];  // 내가 등록한 수업 목록 [{key,classId,profId,profName,profSchool,className}]
+let profBarSel=null;  // 지금 선택된 항목(수업) — student-assignments 호출에 그대로 씀
+/* 2026-09-03: 예전엔 교수 단위(student-professors)로 목록을 만들어서, 같은 교수님의 수업을
+   2개 이상 등록한 학생은 드롭다운이 교수 1명으로만 뭉쳐 보이고 실제로는 수업을 구분해 고를 수
+   없었다(버그 원인). student-classes로 바꿔서 수업 단위로 목록을 만든다. */
 async function refreshProfBar(){
   const wrap=document.getElementById("profBarWrap");
   if(!wrap) return;
   if(!currentUser || isProfessor() || isAdmin()){
-    wrap.hidden=true; profBarList=[]; profBarId=null; return;
+    wrap.hidden=true; profBarList=[]; profBarSel=null; return;
   }
-  const res=await apiFetch("student-professors");
+  const res=await apiFetch("student-classes");
   if(!document.body.contains(wrap)) return;
-  profBarList=(res.ok && res.body && res.body.professors) || [];
-  if(!profBarList.length){ wrap.hidden=true; profBarId=null; return; }
+  profBarList=(res.ok && res.body && res.body.classes) || [];
+  if(!profBarList.length){ wrap.hidden=true; profBarSel=null; return; }
   const recalled=recalledSelectedProf();
-  const defaultId=res.body.defaultProfId;
-  profBarId = (recalled && profBarList.some(p=>p.id===recalled)) ? recalled
-    : ((defaultId && profBarList.some(p=>p.id===defaultId)) ? defaultId : profBarList[0].id);
-  rememberSelectedProf(profBarId);
+  const defaultKey=res.body.defaultKey;
+  const selKey = (recalled && profBarList.some(p=>p.key===recalled)) ? recalled
+    : ((defaultKey && profBarList.some(p=>p.key===defaultKey)) ? defaultKey : profBarList[0].key);
+  profBarSel=profBarList.find(p=>p.key===selKey)||profBarList[0];
+  rememberSelectedProf(profBarSel.key);
   wrap.hidden=false;
-  const profBarLabel=p=>(p.className?`${p.className}-${p.name||""}`:(p.name||""));
+  const profBarLabel=p=>(p.className?`${p.className}-${p.profName||""}`:(p.profName||""));
   if(profBarList.length<2){
     const p=profBarList[0];
     wrap.innerHTML=`${ICONS.user}<span>${esc(profBarLabel(p))}</span>`;
   }else{
-    wrap.innerHTML=`${ICONS.user}<select id="profBarSelect" title="과제를 제출/열람할 교수(수업)">
-      ${profBarList.map(p=>`<option value="${p.id}"${p.id===profBarId?" selected":""}>${esc(profBarLabel(p))}</option>`).join("")}
+    wrap.innerHTML=`${ICONS.user}<select id="profBarSelect" title="과제를 제출/열람할 수업">
+      ${profBarList.map(p=>`<option value="${esc(p.key)}"${p.key===profBarSel.key?" selected":""}>${esc(profBarLabel(p))}</option>`).join("")}
     </select>`;
-    wrap.querySelector("#profBarSelect").onchange=e=>{ profBarId=Number(e.target.value); rememberSelectedProf(profBarId); };
+    wrap.querySelector("#profBarSelect").onchange=e=>{
+      profBarSel=profBarList.find(p=>p.key===e.target.value)||profBarSel;
+      rememberSelectedProf(profBarSel.key);
+    };
   }
 }
 /* ===== 왼쪽 메뉴·플롯 목록·미리보기 접기/펼치기 (곰국을끼리오너라 프로젝트 참고) =====
@@ -4087,12 +4094,12 @@ function wireSubmitBtn(container, type){
 function showFeedbackPage(type){ feedbackPage={type, mode:"list"}; render(); }
 
 /* 상단 툴바에서 고른 교수를 localStorage에 기억해뒀다가 다음에 열 때도 그대로 쓴다
-   (제출/첨삭 화면에서 다시 고르지 않고 refreshProfBar가 정한 profBarId를 그대로 사용). */
-const SELECTED_PROF_KEY="shl_selected_prof";
-function rememberSelectedProf(profId){ try{ localStorage.setItem(SELECTED_PROF_KEY, String(profId||"")); }catch(e){} }
-function recalledSelectedProf(){ try{ return Number(localStorage.getItem(SELECTED_PROF_KEY))||null; }catch(e){ return null; } }
+   (제출/첨삭 화면에서 다시 고르지 않고 refreshProfBar가 정한 profBarSel을 그대로 사용). */
+const SELECTED_PROF_KEY="shl_selected_class"; // 2026-09-03: 교수 단위→수업 단위 선택으로 바뀌며 이름 변경(옛 값은 자동 무시됨)
+function rememberSelectedProf(key){ try{ localStorage.setItem(SELECTED_PROF_KEY, key||""); }catch(e){} }
+function recalledSelectedProf(){ try{ return localStorage.getItem(SELECTED_PROF_KEY)||null; }catch(e){ return null; } }
 
-/* 제출 대상 과제 선택 모달 (학생) — 대상 교수는 상단 툴바에서 고른 profBarId 고정 */
+/* 제출 대상 과제 선택 모달 (학생) — 대상 수업은 상단 툴바에서 고른 profBarSel 고정 */
 async function openSubmitModal(type){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
@@ -4105,11 +4112,11 @@ async function openSubmitModal(type){
   box.appendChild(body);
   overlay.appendChild(box); document.body.appendChild(overlay);
 
-  if(!profBarId){
+  if(!profBarSel){
     body.innerHTML=`<p class="hint">아직 등록한 강의가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 강의 코드를 먼저 입력해주세요.</p>`;
     return;
   }
-  const res=await apiFetch("student-assignments?profId="+profBarId);
+  const res=await apiFetch("student-assignments?"+(profBarSel.classId!=null?("classId="+profBarSel.classId):("profId="+profBarSel.profId)));
   if(!overlay.isConnected) return;
   if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const prof=res.body.prof, assignments=res.body.assignments||[];
@@ -4165,8 +4172,8 @@ async function rFeedbackList(type){
   c.querySelector("#feedbackListBackBtn").onclick=()=>{ feedbackPage=null; render(); };
 
   const wrap=document.getElementById("feedbackListWrap");
-  if(!profBarId){ wrap.innerHTML=`<p class="hint">아직 등록한 강의가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 강의 코드를 먼저 입력해주세요.</p>`; return; }
-  const res=await apiFetch("student-assignments?profId="+profBarId);
+  if(!profBarSel){ wrap.innerHTML=`<p class="hint">아직 등록한 강의가 없습니다. 오른쪽 위 사용자 메뉴 → 설정에서 강의 코드를 먼저 입력해주세요.</p>`; return; }
+  const res=await apiFetch("student-assignments?"+(profBarSel.classId!=null?("classId="+profBarSel.classId):("profId="+profBarSel.profId)));
   if(!c.isConnected) return;
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const assignments=res.body.assignments||[];
