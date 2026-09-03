@@ -296,11 +296,30 @@ async function loadFromServer() {
       render();
       if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
     } else {
-      // 서버에 저장된 데이터가 없는 계정(신규 가입 등) — 이 시점에 메모리의 DB는 로그인 화면이 뜨기 전
-      // localStorage에서 미리 읽어들인 값이라, 같은 브라우저에서 다른 계정으로 테스트했던 내용이 그대로
-      // 남아있을 수 있다. 그걸 그대로 서버에 올리면 새 계정에 다른 계정 내용이 넘어가 버리므로(2026-08-18
-      // 발견된 버그), 서버에 데이터가 없을 땐 항상 빈 작품 하나로 새로 시작한다.
-      if (typeof blankProject === "function" && typeof uid === "function") {
+      // 서버에 저장된 데이터가 없는 경우 — 이 시점에 메모리의 DB는 로그인 화면이 뜨기 전 localStorage에서
+      // 미리 읽어들인 값이다. 예전엔 이럴 때 무조건 빈 작품으로 새로 시작하며 그 빈 내용을 로컬 저장소에도
+      // 덮어썼는데(2026-08-18 "다른 계정 테스트 데이터가 새 계정에 섞이는 문제"의 수정), 이 로직이 같은
+      // 계정 자신의 데이터까지 지워버리는 부작용이 있었다 — 예를 들어 방금 이 계정으로 편집한 내용이 아직
+      // 서버 동기화 전(0.6초 디바운스 중 창을 닫는 등)이라 서버엔 없지만 이 브라우저 로컬엔 남아있는 경우.
+      // (2026-09-03) app.js save()가 로그인 중 저장할 때마다 LS_OWNER_KEY에 계정 아이디를 남겨두므로, 그
+      // 태그가 지금 로그인한 계정과 일치하면 "이 계정 자신의 아직 동기화 안 된 데이터"로 보고 지우지 않고
+      // 그대로 서버에 복구 업로드한다. 태그가 없거나 다른 계정이면(예: 같은 브라우저에서 다른 계정을
+      // 테스트했던 경우) 예전처럼 빈 작품으로 새로 시작한다.
+      let localOwner = null;
+      try { localOwner = localStorage.getItem(typeof LS_OWNER_KEY !== "undefined" ? LS_OWNER_KEY : "__none__"); } catch (e) {}
+      const hasLocalData = DB && Array.isArray(DB.projects) && DB.projects.length > 0;
+      const localIsMine = hasLocalData && localOwner && currentUser && localOwner === currentUser.username;
+
+      if (localIsMine) {
+        if (typeof fillProject === "function") DB.projects = DB.projects.map(fillProject);
+        if (!DB.projects.some((p) => p.id === DB.current)) DB.current = DB.projects[0].id;
+        if (typeof fillOpenIds === "function") fillOpenIds(DB);
+        if (typeof migrateIdeaBlocksToAccount === "function") migrateIdeaBlocksToAccount(DB);
+        P = currentProject();
+        if (typeof resetUndoHistory === "function") resetUndoHistory();
+        render();
+        if (st) st.innerHTML = CLOUD_ICON + " 로컬 데이터를 서버로 복구 중…";
+      } else if (typeof blankProject === "function" && typeof uid === "function") {
         const id = uid();
         DB = { current: id, projects: [blankProject(id, "내 첫 작품")], openIds: [id], ideaBlocks: [] };
         P = currentProject();
@@ -308,7 +327,7 @@ async function loadFromServer() {
         render();
       }
       if (typeof save === "function") save(); else saveToServer();
-      if (st) st.innerHTML = CLOUD_ICON + " 서버 연결됨";
+      if (!localIsMine && st) st.innerHTML = CLOUD_ICON + " 서버 연결됨";
     }
   } else if (st) {
     st.innerHTML = CLOUD_ICON + " 서버 오류";
@@ -329,14 +348,47 @@ function saveToServer() {
   if (!getToken()) return;
   const pid = DB.current;
   clearTimeout(saveToServerTimer);
-  saveToServerTimer = setTimeout(() => doServerSave(pid), 600);
+  // (2026-09-03) 타이머가 실제로 발동해 저장을 시작하는 순간 saveToServerTimer를 null로 되돌려서,
+  // flushPendingServerSave()가 "지금 대기 중인 저장이 있는지"를 정확히 판단할 수 있게 한다.
+  saveToServerTimer = setTimeout(() => { saveToServerTimer = null; doServerSave(pid); }, 600);
 }
 /* Ctrl+S 등 즉시저장 — 디바운스를 건너뛰고 바로 서버에 저장 */
 function forceSaveToServer() {
   if (!getToken()) return;
   clearTimeout(saveToServerTimer);
+  saveToServerTimer = null;
   doServerSave(DB.current);
 }
+
+/* 2026-09-03: 디바운스(0.6초) 중이던 서버 저장이 창을 닫거나 다른 화면으로 넘어가면서 그대로 취소돼
+   버리는 문제 수정 — 마지막 편집 후 0.6초 안에 탭을 닫거나 컴퓨터를 바꾸면 그 편집 내용이 서버에
+   전혀 반영되지 않은 채 유실될 수 있었다(로컬에는 남지만 다른 컴퓨터에서 보면 사라진 것처럼 보임).
+   visibilitychange("hidden")는 탭 전환·창 최소화처럼 페이지가 아직 살아있는 대부분의 경우를 잡아내고,
+   pagehide는 실제로 탭이 닫히는 순간의 보조 안전장치다. pagehide 시점엔 일반 fetch가 취소될 수 있어
+   keepalive:true를 준다(브라우저마다 다르지만 대략 64KB까지 보장 — 아주 큰 작품은 못 실릴 수 있음,
+   알려진 한계). */
+function flushPendingServerSave(useKeepalive) {
+  if (!getToken()) return;
+  if (saveToServerTimer == null) return;
+  clearTimeout(saveToServerTimer);
+  saveToServerTimer = null;
+  if (useKeepalive) {
+    try {
+      fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + getToken() },
+        body: JSON.stringify({ data: DB }),
+        keepalive: true,
+      });
+    } catch (e) {}
+  } else {
+    doServerSave(DB.current);
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushPendingServerSave(false);
+});
+window.addEventListener("pagehide", () => flushPendingServerSave(true));
 
 /* ===== 폼 바인딩 ===== */
 function bindAuthForms() {

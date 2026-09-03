@@ -1,5 +1,11 @@
 /* ===== 상태 & 저장 ===== */
 const LS_KEY = "storyhelper_v1";
+/* 2026-09-03: 로컬(localStorage)에 남아있는 DB가 "지금 로그인된 계정 자신"의 것인지 표시해두는 태그.
+   save()가 로그인 상태에서 저장할 때마다 현재 계정 아이디로 갱신한다. 다른 컴퓨터에서 로그인했을 때
+   서버에 아직 아무 데이터도 없는 상황(예: 방금 편집한 내용이 서버 동기화 전이거나, 이 계정으로 처음
+   로그인한 경우)과 "이 브라우저에 남아있던 다른 계정의 예전 테스트 데이터"(2026-08-18에 발견된 문제)를
+   구분하는 데 쓴다 — auth.js loadFromServer() 참고. */
+const LS_OWNER_KEY = LS_KEY + "_owner";
 const ADMIN_USERNAME = "byeorie";
 
 /* ===== 심플라인 아이콘 (24x24 stroke, currentColor) ===== */
@@ -325,6 +331,11 @@ function showSaveToast(state){
 }
 function save(){
   localStorage.setItem(LS_KEY, JSON.stringify(DB));
+  try{
+    if(typeof getToken==="function" && getToken() && typeof currentUser!=="undefined" && currentUser && currentUser.username){
+      localStorage.setItem(LS_OWNER_KEY, currentUser.username);
+    }
+  }catch(e){}
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
   if(typeof getToken==="function" && getToken()){
