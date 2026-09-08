@@ -6,6 +6,15 @@ const CLOUD_ICON = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="cu
 
 let authToken = null;
 let currentUser = null; // {username, name, school, email}
+/* (2026-09-08) "서버에서 내 데이터를 확실히 불러온 뒤에만 서버에 저장한다"는 안전장치.
+   서버 조회(GET /api/data)가 실패했거나 아직 끝나지 않은 상태에서 로컬 데이터를 서버로 올리면,
+   빈 화면/예전 내용이 서버의 정상 데이터를 덮어써 작품이 통째로 사라질 수 있다.
+   불러오기가 성공(또는 "서버에 데이터 없음"을 확인)하기 전까지는 서버 저장을 보류한다. */
+let serverDataLoaded = false;
+let serverLoadRetryTimer = null;
+let serverLoadRetries = 0;
+let serverLoadAlerted = false;
+function serverSaveReady() { return !!getToken() && serverDataLoaded; }
 
 function getToken() {
   if (authToken) return authToken;
@@ -23,6 +32,10 @@ function saveAuth(token, user) {
 function clearAuth() {
   authToken = null;
   currentUser = null;
+  serverDataLoaded = false;
+  serverLoadRetries = 0;
+  serverLoadAlerted = false;
+  clearTimeout(serverLoadRetryTimer);
   try {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USERINFO_KEY);
@@ -278,13 +291,16 @@ function showAuthPanel(name) {
 /* ===== 서버 데이터 저장/불러오기 ===== */
 async function loadFromServer() {
   if (!getToken()) return;
+  clearTimeout(serverLoadRetryTimer);
   const st = document.getElementById("serverStatus");
   if (st) st.innerHTML = CLOUD_ICON + " 불러오는 중…";
   const res = await apiFetch("data");
   if (res.status === 401) { signOut(); return; }
   if (res.ok && res.body) {
+    serverLoadRetries = 0;
     const data = res.body.data;
     if (data && Array.isArray(data.projects) && data.projects.length && typeof fillProject === "function") {
+      serverDataLoaded = true;
       data.projects = data.projects.map(fillProject);
       if (!data.projects.some((p) => p.id === data.current)) data.current = data.projects[0].id;
       if (typeof fillWorkDB === "function") data.workDB = fillWorkDB(data.workDB);
@@ -305,6 +321,7 @@ async function loadFromServer() {
       // 태그가 지금 로그인한 계정과 일치하면 "이 계정 자신의 아직 동기화 안 된 데이터"로 보고 지우지 않고
       // 그대로 서버에 복구 업로드한다. 태그가 없거나 다른 계정이면(예: 같은 브라우저에서 다른 계정을
       // 테스트했던 경우) 예전처럼 빈 작품으로 새로 시작한다.
+      serverDataLoaded = true; // 서버 응답을 정상적으로 확인했으므로 이제부터 서버 저장 허용
       let localOwner = null;
       try { localOwner = localStorage.getItem(typeof LS_OWNER_KEY !== "undefined" ? LS_OWNER_KEY : "__none__"); } catch (e) {}
       const hasLocalData = DB && Array.isArray(DB.projects) && DB.projects.length > 0;
@@ -326,26 +343,55 @@ async function loadFromServer() {
         if (typeof resetUndoHistory === "function") resetUndoHistory();
         render();
       }
-      if (typeof save === "function") save(); else saveToServer();
+      /* (2026-09-08) 새 계정의 기본 작품("내 첫 작품")과 로컬 복구분은 디바운스 없이 즉시 서버로 올린다 */
+      if (typeof forceSaveNow === "function") forceSaveNow();
+      else if (typeof save === "function") save();
+      else saveToServer();
       if (!localIsMine && st) st.innerHTML = CLOUD_ICON + " 서버 연결됨";
     }
-  } else if (st) {
-    st.innerHTML = CLOUD_ICON + " 서버 오류";
+  } else {
+    /* (2026-09-08) 서버에서 못 불러온 경우 — 예전에는 상태 표시만 바꾸고 그대로 두었기 때문에,
+       화면에는 (이 브라우저에 남아있던) 로컬 데이터가 보이고 사용자는 정상인 줄 알았다.
+       기록 삭제 등으로 로컬이 비어 있으면 "작품이 사라진" 것처럼 보였다.
+       이제 자동으로 다시 시도하고, 계속 실패하면 한 번 분명히 알려준다.
+       이 상태에서는 serverDataLoaded가 false이므로 서버 저장(덮어쓰기)도 하지 않는다. */
+    serverDataLoaded = false;
+    if (serverLoadRetries < 4) {
+      serverLoadRetries++;
+      if (st) st.innerHTML = CLOUD_ICON + " 서버 연결 실패 — 다시 시도 중…";
+      clearTimeout(serverLoadRetryTimer);
+      serverLoadRetryTimer = setTimeout(loadFromServer, 3000);
+    } else {
+      if (st) st.innerHTML = CLOUD_ICON + " 서버 연결 실패";
+      if (!serverLoadAlerted) {
+        serverLoadAlerted = true;
+        alert("서버에서 작품을 불러오지 못했습니다.\n\n지금 작업한 내용은 이 브라우저에만 저장되고 서버에는 올라가지 않습니다.\n페이지를 새로고침(F5)해 보시고, 계속 같은 메시지가 나오면 담당 교수님께 알려주세요.");
+      }
+    }
   }
 }
 
 let saveToServerTimer = null;
-async function doServerSave(pid) {
+let serverSaveRetryTimer = null;
+async function doServerSave(pid, isRetry) {
   const st = document.getElementById("serverStatus");
   const res = await apiFetch("data", { method: "POST", body: JSON.stringify({ data: DB }) });
   if (res.status === 401) { signOut(); return; }
+  /* (2026-09-08) 일시적인 통신 오류로 저장이 실패하면 2초 뒤 한 번 자동 재시도한다.
+     재시도까지 실패했을 때만 "저장 실패"로 표시한다. */
+  if (!res.ok && !isRetry) {
+    if (st) st.innerHTML = CLOUD_ICON + " 저장 재시도 중…";
+    clearTimeout(serverSaveRetryTimer);
+    serverSaveRetryTimer = setTimeout(() => doServerSave(pid, true), 2000);
+    return;
+  }
   if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
   if (typeof projSaveState === "object") projSaveState[pid] = res.ok ? "saved" : "error";
   if (typeof updateTabDot === "function") updateTabDot(pid);
   if (typeof showSaveToast === "function") showSaveToast(res.ok ? "saved" : "error");
 }
 function saveToServer() {
-  if (!getToken()) return;
+  if (!serverSaveReady()) return; // 서버에서 아직 못 불러왔으면 덮어쓰지 않는다(2026-09-08)
   const pid = DB.current;
   clearTimeout(saveToServerTimer);
   // (2026-09-03) 타이머가 실제로 발동해 저장을 시작하는 순간 saveToServerTimer를 null로 되돌려서,
@@ -354,7 +400,7 @@ function saveToServer() {
 }
 /* Ctrl+S 등 즉시저장 — 디바운스를 건너뛰고 바로 서버에 저장 */
 function forceSaveToServer() {
-  if (!getToken()) return;
+  if (!serverSaveReady()) return; // 위와 같은 이유(2026-09-08)
   clearTimeout(saveToServerTimer);
   saveToServerTimer = null;
   doServerSave(DB.current);
@@ -368,7 +414,7 @@ function forceSaveToServer() {
    keepalive:true를 준다(브라우저마다 다르지만 대략 64KB까지 보장 — 아주 큰 작품은 못 실릴 수 있음,
    알려진 한계). */
 function flushPendingServerSave(useKeepalive) {
-  if (!getToken()) return;
+  if (!serverSaveReady()) return;
   if (saveToServerTimer == null) return;
   clearTimeout(saveToServerTimer);
   saveToServerTimer = null;

@@ -6,7 +6,9 @@ export async function onRequestGet({ request, env }) {
 
   // 매년 3/1, 9/1 기준일이 지나면 계정(users) 정보만 남기고 나머지 서버 데이터를 조회 시점에 정리
   // (요청이 들어올 때마다 확인 — wipeIfDue() 설명 참고, 같은 반기 동안은 한 번만 실행됨)
-  await wipeIfDue(env);
+  // (2026-09-08) 정리 작업이 실패해도 데이터 조회는 반드시 정상 응답하도록 감싼다 —
+  // 여기서 오류가 나면 로그인해도 작품을 못 불러오는 심각한 문제가 된다(_utils.js wipeIfDue 주석 참고)
+  try { await wipeIfDue(env); } catch (e) {}
 
   const row = await env.DB.prepare(
     "SELECT data, updated_at FROM user_data WHERE user_id = ?"

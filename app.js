@@ -345,9 +345,16 @@ function save(){
   }catch(e){}
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
-  if(typeof getToken==="function" && getToken()){
+  /* (2026-09-08) 로그인 상태라도 "서버에서 내 데이터를 불러오기 전"에는 서버에 저장하지 않는다
+     (auth.js serverSaveReady 참고 — 빈 화면이 서버 데이터를 덮어쓰는 사고 방지).
+     그 경우엔 실제로 서버에 안 올라가므로 정직하게 "저장 실패"로 표시한다. */
+  const canServer = typeof serverSaveReady==="function" ? serverSaveReady() : (typeof getToken==="function" && !!getToken());
+  if(canServer){
     projSaveState[DB.current]="pending"; updateTabDot(DB.current);
     showSaveToast("saving"); // 서버 저장이 끝나면 doServerSave(auth.js)가 "saved"/"error"로 바꾼다
+  }else if(typeof getToken==="function" && getToken()){
+    projSaveState[DB.current]="error"; updateTabDot(DB.current);
+    showSaveToast("error"); // 로그인은 했지만 서버 연결이 안 된 상태 — 로컬에만 저장됨
   }else{
     showSaveToast("saved"); // 로그인 전(로컬 전용)에는 저장이 즉시 끝나므로 바로 완료 표시
   }
@@ -478,11 +485,12 @@ document.getElementById("newProjBtn").onclick=()=>{
   const name=prompt("새 작품 이름:","제목 없음"); if(name===null)return;
   const id=uid(); DB.projects.push(blankProject(id,name||"제목 없음"));
   DB.openIds.push(id);
-  DB.current=id; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
+  /* (2026-09-08) 작품 생성은 디바운스 없이 즉시 서버 저장 — 만든 직후 창을 닫아도 서버에 남도록 */
+  DB.current=id; P=currentProject(); resetUndoHistory(); forceSaveNow(); refreshProjSelect(); render();
 };
 document.getElementById("renameProjBtn").onclick=()=>{
   const name=prompt("작품 이름 변경:",P.name); if(name===null)return;
-  P.name=name||P.name; save(); refreshProjSelect();
+  P.name=name||P.name; forceSaveNow(); refreshProjSelect();
 };
 document.getElementById("delProjBtn").onclick=()=>{
   if(DB.projects.length<=1){alert("최소 1개의 작품은 있어야 합니다.");return;}
@@ -491,23 +499,18 @@ document.getElementById("delProjBtn").onclick=()=>{
   DB.projects=DB.projects.filter(p=>p.id!==wasId);
   DB.openIds=DB.openIds.filter(id=>id!==wasId);
   if(!DB.openIds.length) DB.openIds=[DB.projects[0].id];
-  DB.current=DB.openIds[0]; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
+  DB.current=DB.openIds[0]; P=currentProject(); resetUndoHistory(); forceSaveNow(); refreshProjSelect(); render();
 };
 
 /* ===== 실행취소/다시실행 버튼 + 단축키 (Ctrl/Cmd+S 즉시저장, +Z 실행취소, +Shift+Z 또는 +Y 다시실행) ===== */
 document.getElementById("undoBtn").onclick=doUndo;
 document.getElementById("redoBtn").onclick=doRedo;
+/* 즉시 저장 — 로컬 저장 + (가능하면) 0.6초 디바운스를 건너뛰고 바로 서버 저장.
+   (2026-09-08) 예전엔 save()와 따로 로컬 저장을 해서 계정 태그(LS_OWNER_KEY)가 빠졌었다.
+   이제 save()를 그대로 호출한 뒤 예약된 서버 저장만 앞당긴다. */
 function forceSaveNow(){
-  localStorage.setItem(LS_KEY, JSON.stringify(DB));
-  const el=document.getElementById("saveStatus");
-  if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
-  if(typeof getToken==="function" && getToken() && typeof forceSaveToServer==="function"){
-    projSaveState[DB.current]="pending"; updateTabDot(DB.current);
-    showSaveToast("saving");
-    forceSaveToServer();
-  }else{
-    showSaveToast("saved");
-  }
+  save();
+  if(typeof forceSaveToServer==="function") forceSaveToServer();
 }
 window.addEventListener("keydown", e=>{
   if(!(e.ctrlKey||e.metaKey)) return;

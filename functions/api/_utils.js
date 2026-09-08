@@ -39,11 +39,37 @@ export function latestWipeBoundarySec(nowSecVal) {
    동안 중복 실행되지 않게 한다. 실제로 삭제를 실행했으면 true, 이미 처리된 기준일이면 false. */
 export async function wipeIfDue(env) {
   const boundary = latestWipeBoundarySec(nowSec());
-  const row = await env.DB.prepare(
-    "SELECT value FROM server_meta WHERE key = 'last_wipe_boundary'"
-  ).first();
+
+  /* (2026-09-08) 이 정리 작업이 실패해도 데이터 조회(GET /api/data)까지 함께 실패하면 안 된다.
+     실제로 2026-09-01 기준일이 지난 뒤, 아래 표 목록 중 운영 DB에 아직 만들어지지 않은 표가 있으면
+     DELETE에서 오류가 나며 요청 전체가 500이 되었고, 그 결과 로그인해도 서버 데이터를 못 불러와
+     "저장은 됐는데 다시 들어오면 작품이 사라진 것처럼 보이는" 문제가 생겼다(저장 POST는 이 함수를
+     호출하지 않으므로 정상 동작했다 = 서버에는 데이터가 남아 있었다).
+     이제 모든 단계를 try/catch로 감싸 어떤 경우에도 예외를 밖으로 던지지 않는다. */
+  let row = null;
+  try {
+    row = await env.DB.prepare(
+      "SELECT value FROM server_meta WHERE key = 'last_wipe_boundary'"
+    ).first();
+  } catch (e) {
+    return false; // server_meta 표를 읽지 못하면(미생성 등) 함부로 지우지 않고 그냥 넘어간다
+  }
   const last = row ? parseInt(row.value, 10) : 0;
   if (last >= boundary) return false;
+
+  /* 기록이 아예 없는 경우(이 안전장치를 처음 켠 직후이거나, 그동안 기록 남기기가 계속 실패해온 경우)
+     에는 곧바로 전체 삭제를 하지 않고 "이번 기준일은 처리한 것으로" 기록만 남긴다. 학기 중에 배포하면서
+     사용 중인 학생 데이터가 예고 없이 지워지는 사고를 막기 위한 장치 — 다음 기준일부터 정상 동작한다. */
+  const firstRun = !row;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO server_meta (key, value) VALUES ('last_wipe_boundary', ?) " +
+      "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).bind(String(boundary)).run();
+  } catch (e) {
+    return false; // 기록을 남기지 못하면 삭제도 하지 않는다(요청마다 반복 삭제되는 것을 방지)
+  }
+  if (firstRun) return false;
 
   const tables = [
     "assignments", "submissions", "submission_feedback_versions",
@@ -51,12 +77,9 @@ export async function wipeIfDue(env) {
     "sessions", "password_resets", "rate_limits",
   ];
   for (const t of tables) {
-    await env.DB.prepare(`DELETE FROM ${t}`).run();
+    // 표가 없거나 삭제에 실패해도 나머지는 계속 진행하고, 요청 자체는 정상 응답한다
+    try { await env.DB.prepare(`DELETE FROM ${t}`).run(); } catch (e) {}
   }
-  await env.DB.prepare(
-    "INSERT INTO server_meta (key, value) VALUES ('last_wipe_boundary', ?) " +
-    "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-  ).bind(String(boundary)).run();
   return true;
 }
 
