@@ -583,9 +583,10 @@ body.logged-in .login-overlay { display: none; }
 .assign-folder-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
 .assign-folder-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 5px; }
 .assign-folder-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.assign-folder-del { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; }
+.assign-folder-del, .assign-folder-edit { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; }
 .assign-folder-del:hover { color: #b3503a; background: var(--accent2); }
-.assign-folder-del .icon { width: 14px; height: 14px; vertical-align: middle; }
+.assign-folder-edit:hover { color: var(--accent); background: var(--accent2); }
+.assign-folder-del .icon, .assign-folder-edit .icon { width: 14px; height: 14px; vertical-align: middle; }
 .assign-folder-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 
 /* 수업 관리 — 수업 상세 화면의 과제 관리/수강 학생 탭 (2026-08-24) */
