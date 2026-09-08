@@ -1,4 +1,4 @@
-import { requireAuth, jsonResponse, nowSec } from "./_utils.js";
+import { requireAuth, jsonResponse, nowSec, ensureEnrollmentSchema } from "./_utils.js";
 
 /* POST /api/student-join — 학생이 6자리 수업 코드를 입력해 그 수업(및 교수)에 등록(여러 개 가능).
    2026-08-20: 기존엔 코드를 입력하면 기존 그룹을 대체했지만, 이제는 student_professors 표에
@@ -10,6 +10,7 @@ import { requireAuth, jsonResponse, nowSec } from "./_utils.js";
 export async function onRequestPost({ request, env }) {
   const auth = await requireAuth(request, env);
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+  await ensureEnrollmentSchema(env);
 
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }

@@ -260,18 +260,57 @@ function openPasswordChange() {
 }
 
 /* [설정]의 학생용 "등록된 강의 목록" — 여러 명 등록 가능해진 뒤(2026-08-20) 추가.
-   2026-09-01: 각 항목에 강의명도 함께 표시(className, 여러 강의면 쉼표로 나열). */
+   2026-09-08: 교수 단위(student-professors)가 아니라 수업 단위(student-classes)로 목록을 만든다.
+   같은 교수님의 수업을 여러 개 들어도 각각 한 줄로 보이고, 줄마다 [나가기] 버튼이 붙는다 —
+   수업 코드를 잘못 입력해 엉뚱한 수업에 등록됐을 때 학생이 교수님을 거치지 않고 스스로 뺄 수 있다. */
 async function loadSettingsProfList() {
   const wrap = document.getElementById("settingsProfList");
   if (!wrap) return;
   const esc2 = typeof esc === "function" ? esc : (s => String(s == null ? "" : s));
-  const res = await apiFetch("student-professors");
+  const res = await apiFetch("student-classes");
   if (!wrap.isConnected) return;
-  const professors = (res.ok && res.body && res.body.professors) || [];
-  wrap.innerHTML = professors.length
-    ? `<p class="hint">등록된 강의 (${professors.length}건) — 과제 제출/첨삭 화면의 드롭다운에서 고를 수 있습니다.</p>
-       <ul class="settings-prof-list">${professors.map(p => `<li>${p.className ? `${esc2(p.className)} · ` : ""}${esc2(p.school || "")} ${esc2(p.name || "")}</li>`).join("")}</ul>`
-    : `<p class="hint">아직 등록된 강의가 없습니다. 교수님께 받은 6자리 강의 코드를 아래에 입력해 등록하세요.</p>`;
+  const classes = (res.ok && res.body && res.body.classes) || [];
+  if (!classes.length) {
+    wrap.innerHTML = `<p class="hint">아직 등록된 강의가 없습니다. 교수님께 받은 6자리 강의 코드를 아래에 입력해 등록하세요.</p>`;
+    return;
+  }
+  wrap.innerHTML =
+    `<p class="hint">등록된 강의 (${classes.length}건) — 상단 수업 선택 드롭다운에서 고를 수 있습니다.
+      잘못 등록한 수업이 있으면 [나가기]로 직접 빼실 수 있습니다.</p>
+     <ul class="settings-prof-list">${classes.map((c, i) => `
+       <li>
+         <span class="settings-prof-name">${c.className ? `<b>${esc2(c.className)}</b> · ` : ""}${esc2(c.profSchool || "")} ${esc2(c.profName || "")}${c.className ? "" : " <span class=\"hint\">(수업 미지정)</span>"}</span>
+         <button type="button" class="btn ghost sm settings-class-leave" data-i="${i}">나가기</button>
+       </li>`).join("")}</ul>`;
+
+  wrap.querySelectorAll(".settings-class-leave").forEach((btn) => {
+    btn.onclick = async () => {
+      const c = classes[Number(btn.dataset.i)];
+      if (!c) return;
+      /* 실수로 눌러 수업에서 빠지는 일이 없도록, 어느 수업인지 분명히 보여주고 확인을 받는다 */
+      const label = c.className
+        ? `"${c.className}" (${c.profName || ""} 교수님)`
+        : `${c.profName || ""} 교수님`;
+      const ok = confirm(
+        `${label} 수업에서 나가시겠습니까?\n\n` +
+        `· 이 수업의 과제와 받아둔 첨삭이 화면에 보이지 않게 됩니다.\n` +
+        `· 이미 제출한 과제가 지워지지는 않습니다. 같은 등록 코드로 다시 등록하면 그대로 다시 보입니다.\n\n` +
+        `나가려면 [확인], 그만두려면 [취소]를 눌러주세요.`
+      );
+      if (!ok) return;
+      btn.disabled = true; btn.textContent = "처리 중…";
+      const payload = c.classId != null ? { classId: c.classId } : { profId: c.profId };
+      const r = await apiFetch("student-leave-class", { method: "POST", body: JSON.stringify(payload) });
+      if (!r.ok) {
+        alert((r.body && r.body.error) || "나가기에 실패했습니다.");
+        btn.disabled = false; btn.textContent = "나가기";
+        return;
+      }
+      alert(`${label} 수업에서 나갔습니다.`);
+      loadSettingsProfList();
+      if (typeof onAuthChanged === "function") onAuthChanged(); // 상단 수업 드롭다운 갱신
+    };
+  });
 }
 
 async function signOut() {

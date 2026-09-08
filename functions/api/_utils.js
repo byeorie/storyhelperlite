@@ -41,6 +41,29 @@ export async function ensureSubmissionSchema(env) {
   submissionSchemaEnsured = true;
 }
 
+/* ===== (2026-09-08) 수강 등록 표 정리 =====
+   "수업 코드 입력이 꼬여서 같은 수업에 두 번 등록된 학생이 생겼다"는 신고에 대한 대응.
+   원래 schema.sql에는 중복을 막는 UNIQUE 인덱스가 있지만, 그 SQL을 운영 DB에 실행하지 않았다면
+   인덱스가 없어 같은 (수업, 학생) 조합이 여러 번 들어갈 수 있다.
+   등록/탈퇴 API가 처음 호출될 때 (1) 이미 생긴 중복 행을 하나만 남기고 정리한 뒤 (2) UNIQUE 인덱스를
+   만들어 앞으로는 중복이 아예 생기지 않게 한다. 순서가 중요하다 — 중복이 남아 있으면 인덱스 생성이 실패한다. */
+let enrollmentSchemaEnsured = false;
+export async function ensureEnrollmentSchema(env) {
+  if (enrollmentSchemaEnsured) return;
+  const stmts = [
+    // (1) 중복 정리 — 각 조합에서 가장 먼저 등록된 행(id가 가장 작은 것)만 남긴다
+    "DELETE FROM class_students WHERE id NOT IN (SELECT MIN(id) FROM class_students GROUP BY class_id, student_id)",
+    "DELETE FROM student_professors WHERE id NOT IN (SELECT MIN(id) FROM student_professors GROUP BY student_id, prof_id)",
+    // (2) 앞으로의 중복 차단
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_class_students_pair ON class_students(class_id, student_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_student_professors_pair ON student_professors(student_id, prof_id)",
+  ];
+  for (const sql of stmts) {
+    try { await env.DB.prepare(sql).run(); } catch (e) {}
+  }
+  enrollmentSchemaEnsured = true;
+}
+
 /* 2026-08-20(2): 데이터 자동 삭제 방식을 "미접속 기간 기반 삭제"에서 "매년 3월 1일·9월 1일,
    두 고정 기준일에 계정(users) 정보만 남기고 나머지 서버 저장 데이터를 전부 초기화"로 변경.
    서버 용량을 일정하게 유지하려는 목적으로, 미접속 여부와 무관하게 기준일이 되면 무조건 지운다.
