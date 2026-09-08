@@ -117,5 +117,22 @@ CREATE TABLE IF NOT EXISTS class_students (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_class_students_pair ON class_students(class_id, student_id);
 CREATE INDEX IF NOT EXISTS idx_class_students_class ON class_students(class_id);
 CREATE INDEX IF NOT EXISTS idx_class_students_student ON class_students(student_id);
+
+-- ===== 나중에 ALTER TABLE로 추가된 컬럼들 =====
+-- (표가 이미 있으면 위의 CREATE TABLE IF NOT EXISTS는 아무것도 하지 않으므로, 아래 컬럼 추가문이
+--  따로 필요합니다. 이미 있는 컬럼을 추가하려 하면 "duplicate column name" 오류가 나는데,
+--  그 줄은 그냥 무시하고 다음 줄을 계속 실행하면 됩니다.)
+ALTER TABLE assignments ADD COLUMN class_id INTEGER;
+ALTER TABLE classes ADD COLUMN code TEXT;
+ALTER TABLE classes ADD COLUMN school_name TEXT;
+ALTER TABLE classes ADD COLUMN section TEXT;
+ALTER TABLE classes ADD COLUMN class_day TEXT;
+ALTER TABLE classes ADD COLUMN class_time TEXT;
+ALTER TABLE submissions ADD COLUMN checked_at INTEGER;
+
+-- 코드가 비어있는 수업에 6자리 등록 코드 자동 발급
+UPDATE classes SET code = printf('%06d', (ABS(RANDOM()) % 900000) + 100000) WHERE code IS NULL;
+
+-- 위 컬럼들이 생긴 뒤에야 만들 수 있는 인덱스
 CREATE INDEX IF NOT EXISTS idx_assignments_class ON assignments(class_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_code ON classes(code);

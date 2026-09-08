@@ -1,4 +1,4 @@
-import { requireProfessor, jsonResponse } from "./_utils.js";
+import { requireProfessor, jsonResponse, ensureSubmissionSchema } from "./_utils.js";
 
 const TYPE_LABEL = { plan: "기획서", plot: "플롯", write: "글쓰기", character: "캐릭터 설정", background: "배경 설정", event: "사건 설정", storyboard: "콘티" };
 
@@ -6,6 +6,8 @@ const TYPE_LABEL = { plan: "기획서", plot: "플롯", write: "글쓰기", char
 export async function onRequestGet({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
+
+  await ensureSubmissionSchema(env);
 
   const url = new URL(request.url);
   const id = Number(url.searchParams.get("id"));
@@ -16,15 +18,44 @@ export async function onRequestGet({ request, env }) {
   ).bind(id, auth.user.id).first();
   if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
-  const { results } = await env.DB.prepare(
-    "SELECT s.id, s.type, s.project_name, s.submitted_at, s.feedback_at, " +
-    "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username, " +
-    "  (SELECT COUNT(*) FROM submission_feedback_versions v WHERE v.submission_id = s.id) AS version_count " +
-    "FROM submissions s JOIN users u ON u.id = s.student_id " +
-    "WHERE s.assignment_id = ? ORDER BY s.submitted_at DESC"
-  ).bind(id).all();
+  /* 2026-09-08: 예전에는 제출 목록 한 쿼리 안에서 submission_feedback_versions를 서브쿼리로 세었기 때문에,
+     그 표가 운영 DB에 없으면 "제출함" 화면 전체가 열리지 않았다(500). 이제 본 목록과 버전 수 집계를
+     분리하고, 집계는 실패해도 그냥 0으로 두고 넘어간다. checked_at(과제 확인)도 컬럼이 없는 DB를
+     대비해 2단계로 시도한다. */
+  let results = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT s.id, s.type, s.project_name, s.submitted_at, s.feedback_at, s.checked_at, " +
+      "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username " +
+      "FROM submissions s JOIN users u ON u.id = s.student_id " +
+      "WHERE s.assignment_id = ? ORDER BY s.submitted_at DESC"
+    ).bind(id).all();
+    results = r.results || [];
+  } catch (e) {
+    const r = await env.DB.prepare(
+      "SELECT s.id, s.type, s.project_name, s.submitted_at, s.feedback_at, " +
+      "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username " +
+      "FROM submissions s JOIN users u ON u.id = s.student_id " +
+      "WHERE s.assignment_id = ? ORDER BY s.submitted_at DESC"
+    ).bind(id).all();
+    results = r.results || [];
+  }
 
-  const submissions = (results || []).map((r) => ({ ...r, type_label: TYPE_LABEL[r.type] || r.type }));
+  const versionCounts = {};
+  try {
+    const vr = await env.DB.prepare(
+      "SELECT v.submission_id AS sid, COUNT(*) AS n FROM submission_feedback_versions v " +
+      "JOIN submissions s ON s.id = v.submission_id WHERE s.assignment_id = ? GROUP BY v.submission_id"
+    ).bind(id).all();
+    (vr.results || []).forEach((x) => { versionCounts[x.sid] = x.n; });
+  } catch (e) {}
+
+  const submissions = results.map((r) => ({
+    ...r,
+    checked_at: r.checked_at || null,
+    version_count: versionCounts[r.id] || 0,
+    type_label: TYPE_LABEL[r.type] || r.type,
+  }));
   return jsonResponse({ assignment, submissions });
 }
 
@@ -42,6 +73,12 @@ export async function onRequestDelete({ request, env }) {
   ).bind(id, auth.user.id).first();
   if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
+  /* 2026-09-08: 첨삭 버전 이력도 함께 지운다(예전에는 제출물만 지워 이력 행이 계속 남았다) */
+  try {
+    await env.DB.prepare(
+      "DELETE FROM submission_feedback_versions WHERE submission_id IN (SELECT id FROM submissions WHERE assignment_id = ?)"
+    ).bind(id).run();
+  } catch (e) {}
   await env.DB.prepare("DELETE FROM submissions WHERE assignment_id = ?").bind(id).run();
   await env.DB.prepare("DELETE FROM assignments WHERE id = ? AND prof_id = ?").bind(id, auth.user.id).run();
 

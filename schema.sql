@@ -220,3 +220,8 @@ ALTER TABLE classes ADD COLUMN school_name TEXT;
 ALTER TABLE classes ADD COLUMN section TEXT;
 ALTER TABLE classes ADD COLUMN class_day TEXT;
 ALTER TABLE classes ADD COLUMN class_time TEXT;
+
+-- ===== 2026-09-08: "과제 확인" — 첨삭을 하지 않아도 교수가 제출물을 확인했음을 표시 =====
+-- 서버 코드(functions/api/_utils.js ensureSubmissionSchema)가 필요할 때 자동으로 실행하므로
+-- 보통은 손댈 필요가 없습니다. 수동으로 미리 넣어두고 싶다면 아래 한 줄만 실행하세요.
+ALTER TABLE submissions ADD COLUMN checked_at INTEGER;

@@ -15,6 +15,32 @@ export function nowSec() {
   return Math.floor(Date.now() / 1000);
 }
 
+/* ===== (2026-09-08) 제출/첨삭 관련 표·컬럼 자동 보정 =====
+   그동안 새 기능을 넣을 때마다 schema.sql에 "D1 콘솔에서 한 번 실행하세요"라는 안내만 남겼기 때문에,
+   운영 DB에 그 실행을 빠뜨리면 표(또는 컬럼)가 없는 상태가 되고 → 첨삭 저장/조회 API가 통째로 500이
+   나면서 "피드백을 눌러도 저장이 안 된다 / 제출물을 열 수 없다"는 증상이 생겼다.
+   (2026-09-01에 추가된 submission_feedback_versions가 실제로 그런 상태였던 것으로 보인다)
+   이제 제출/첨삭 API가 처음 호출될 때 필요한 표와 컬럼을 스스로 만들어 둔다.
+   - CREATE TABLE/INDEX IF NOT EXISTS, ALTER TABLE ADD COLUMN 모두 이미 있으면 그냥 실패 → 무시한다.
+   - 어떤 단계가 실패해도 예외를 밖으로 던지지 않는다(조회/저장이 그것 때문에 막히면 안 되므로). */
+let submissionSchemaEnsured = false;
+export async function ensureSubmissionSchema(env) {
+  if (submissionSchemaEnsured) return;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS submission_feedback_versions (" +
+      "id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id INTEGER NOT NULL, version INTEGER NOT NULL, " +
+      "feedback TEXT NOT NULL, memos TEXT, created_at INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_sfv_submission ON submission_feedback_versions(submission_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sfv_submission_version ON submission_feedback_versions(submission_id, version)",
+    /* 2026-09-08: "과제 확인" — 첨삭을 하지 않았어도 교수가 제출물을 확인했음을 표시하는 시각(unix초) */
+    "ALTER TABLE submissions ADD COLUMN checked_at INTEGER",
+  ];
+  for (const sql of stmts) {
+    try { await env.DB.prepare(sql).run(); } catch (e) {}
+  }
+  submissionSchemaEnsured = true;
+}
+
 /* 2026-08-20(2): 데이터 자동 삭제 방식을 "미접속 기간 기반 삭제"에서 "매년 3월 1일·9월 1일,
    두 고정 기준일에 계정(users) 정보만 남기고 나머지 서버 저장 데이터를 전부 초기화"로 변경.
    서버 용량을 일정하게 유지하려는 목적으로, 미접속 여부와 무관하게 기준일이 되면 무조건 지운다.
@@ -71,9 +97,13 @@ export async function wipeIfDue(env) {
   }
   if (firstRun) return false;
 
+  /* (2026-09-08) 삭제 대상을 좁혔다. 예전에는 users를 뺀 모든 표를 지웠기 때문에 기준일이 지나면
+     수업(classes)·등록 코드·수강생 배정(class_students)·교수 등록(student_professors)·과제(assignments)와
+     제출물까지 통째로 사라졌다 — 3/1, 9/1은 바로 개강일이라 학기 초에 만들어둔 수업이 날아갈 수 있었다.
+     서버 용량의 대부분은 학생 작품 데이터(user_data)이므로 그것만 정리하면 목적은 달성된다.
+     이제 수업·등록 코드·과제·제출물·첨삭 기록은 그대로 보존한다(필요하면 관리자 화면에서 직접 삭제). */
   const tables = [
-    "assignments", "submissions", "submission_feedback_versions",
-    "user_data", "student_professors", "classes", "class_students",
+    "user_data",
     "sessions", "password_resets", "rate_limits",
   ];
   for (const t of tables) {

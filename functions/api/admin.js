@@ -76,6 +76,12 @@ export async function onRequestPost({ request, env }) {
       // (다른 등록 교수가 있으면 그 교수를 기본 선택으로 넘겨준다)
       const { results: assigns } = await env.DB.prepare("SELECT id FROM assignments WHERE prof_id = ?").bind(userId).all();
       for (const a of (assigns || [])) {
+        // 2026-09-08: 첨삭 버전 이력도 함께 지운다(예전에는 제출물만 지워 이력 행이 계속 남았다)
+        try {
+          await env.DB.prepare(
+            "DELETE FROM submission_feedback_versions WHERE submission_id IN (SELECT id FROM submissions WHERE assignment_id = ?)"
+          ).bind(a.id).run();
+        } catch (e) {}
         await env.DB.prepare("DELETE FROM submissions WHERE assignment_id = ?").bind(a.id).run();
       }
       await env.DB.prepare("DELETE FROM assignments WHERE prof_id = ?").bind(userId).run();
@@ -91,6 +97,11 @@ export async function onRequestPost({ request, env }) {
     await env.DB.prepare("DELETE FROM student_professors WHERE student_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM class_students WHERE student_id = ?").bind(userId).run();
     // 학생 계정이든(자신이 제출한 것) 교수 계정이든(교수 자신도 제출자로 남아있을 수 있음) 제출물 정리
+    try {
+      await env.DB.prepare(
+        "DELETE FROM submission_feedback_versions WHERE submission_id IN (SELECT id FROM submissions WHERE student_id = ?)"
+      ).bind(userId).run();
+    } catch (e) {}
     await env.DB.prepare("DELETE FROM submissions WHERE student_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM user_data WHERE user_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();

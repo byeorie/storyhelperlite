@@ -568,6 +568,10 @@ body.logged-in .login-overlay { display: none; }
 
 /* 교수 — 과제 폴더 제출함 목록의 각 줄: 제출물 버튼 + (버전이 2개 이상이면) 작은 버전 드롭다운 */
 .submit-assign-row { display: flex; align-items: center; gap: 6px; }
+/* 2026-09-08: "과제 확인" 버튼 — 첨삭과 별개로 교수가 제출물을 확인했음을 표시 */
+.submit-check-btn { flex-shrink: 0; white-space: nowrap; font-size: 12px; }
+.submit-check-btn.checked { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.submit-check-state { color: var(--accent); font-weight: 600; }
 .submit-assign-row .submit-assign-item { flex: 1; min-width: 0; }
 .submit-version-select { flex-shrink: 0; font-size: 11px; padding: 3px 4px; border: 1px solid var(--line);
   border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }

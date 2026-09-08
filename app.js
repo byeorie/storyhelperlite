@@ -337,14 +337,25 @@ function showSaveToast(state){
   if(state!=="saving") saveToastTimer=setTimeout(()=>{ el.hidden=true; }, 1200);
 }
 function save(){
-  localStorage.setItem(LS_KEY, JSON.stringify(DB));
+  /* (2026-09-08) 로컬 저장이 실패해도(브라우저 저장 공간 초과, 시크릿 모드 등) 그 뒤의 서버 저장까지
+     함께 멈춰버리면 안 된다 — 예전에는 여기서 예외가 나면 아래 saveToServer()가 아예 호출되지 않아
+     작품이 어디에도 저장되지 않았다. 이제 로컬 실패는 따로 알려주고 서버 저장은 계속 진행한다. */
+  let localOk = true;
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }
+  catch(e){
+    localOk = false;
+    if(!window.__lsQuotaWarned){
+      window.__lsQuotaWarned = true;
+      alert("이 브라우저에 임시 저장할 공간이 부족합니다.\n작품 내용은 서버에 저장되지만, 인터넷이 끊긴 상태에서는 저장되지 않을 수 있습니다.\n사용하지 않는 작품을 정리하거나 브라우저 저장 공간을 비워주세요.");
+    }
+  }
   try{
     if(typeof getToken==="function" && getToken() && typeof currentUser!=="undefined" && currentUser && currentUser.username){
       localStorage.setItem(LS_OWNER_KEY, currentUser.username);
     }
   }catch(e){}
   const el=document.getElementById("saveStatus");
-  if(el){ el.textContent="저장됨"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
+  if(el){ el.textContent=localOk?"저장됨":"임시 저장 공간 부족"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
   /* (2026-09-08) 로그인 상태라도 "서버에서 내 데이터를 불러오기 전"에는 서버에 저장하지 않는다
      (auth.js serverSaveReady 참고 — 빈 화면이 서버 데이터를 덮어쓰는 사고 방지).
      그 경우엔 실제로 서버에 안 올라가므로 정직하게 "저장 실패"로 표시한다. */
@@ -4130,7 +4141,7 @@ async function openSubmitModal(type){
       <div class="submit-assign-list">${openList.map(a=>{
         const mine=(a.mySubmissions||[]).filter(s=>s.type===type);
         const already=mine.length
-          ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":""}</span>`
+          ? `<span class="submit-already" data-view-id="${mine[0].id}">이미 ${mine.length}회 제출함${mine[0].has_feedback?" · 첨삭 완료(보기)":(mine[0].checked_at?" · 교수님 확인함":"")}</span>`
           : "";
         return `<button type="button" class="submit-assign-item" data-id="${a.id}">
           <b>${esc(a.title)}</b>${a.class_name?` <span class="assign-type-badge">${esc(a.class_name)}</span>`:""}
@@ -4189,7 +4200,7 @@ async function rFeedbackList(type){
   wrap.innerHTML=`<div class="submit-assign-list">${list.map(s=>`
     <button type="button" class="submit-assign-item" data-id="${s.id}">
       <b>${esc(s.assignmentTitle)}</b>
-      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":" · 첨삭 전"}</span>
+      <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료(보기)":(s.checked_at?" · 교수님 확인함(첨삭 전)":" · 첨삭 전")}</span>
     </button>`).join("")}</div>`;
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=()=>{ feedbackPage={type, mode:"detail", id:Number(btn.dataset.id)}; render(); };
@@ -4213,7 +4224,12 @@ async function rFeedbackDetail(type, id, version){
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const sub=res.body.submission;
   if(titleEl) titleEl.innerHTML=`${ICONS.chat} ${esc(TYPE_LABEL[sub.type])} — ${esc(sub.assignmentTitle)}`;
-  if(!sub.feedback){ wrap.innerHTML=`<p class="hint">아직 첨삭 전입니다.</p>`; return; }
+  if(!sub.feedback){
+    wrap.innerHTML=sub.checkedAt
+      ? `<p class="hint">교수님이 이 과제를 확인하셨습니다. (${esc(fmtDate(sub.checkedAt))}) 첨삭 내용은 아직 없습니다.</p>`
+      : `<p class="hint">아직 첨삭 전입니다.</p>`;
+    return;
+  }
   if(sub.type==="storyboard"){
     const versionPicker=(sub.versions && sub.versions.length>1)
       ? `<label class="hint" style="display:inline-flex;align-items:center;gap:5px;margin:0 0 10px">버전
@@ -4694,23 +4710,49 @@ async function rProfAssignmentFolder(id){
     /* version_count는 버전 테이블 기준(2026-08-20 이 기능 이후 저장분만) — 그 이전에 저장된 첨삭 1건은
        버전 테이블엔 없지만 has_feedback만으로도 "버전 1" 하나로 취급해 보여준다(서버 GET과 동일한 규칙) */
     const effCount = s.version_count || (s.has_feedback?1:0);
+    /* 2026-09-08: "과제 확인" — 첨삭을 하지 않았어도 읽어봤다는 표시를 남길 수 있다(학생 화면에도 보임) */
+    const isChecked = !!s.checked_at;
     return `<div class="submit-assign-row">
       <button type="button" class="submit-assign-item" data-id="${s.id}">
         <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
         <span class="assign-type-badge">${esc(s.type_label)}</span>
-        <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}</span>
-      </button>${effCount>1?`
+        <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}<span class="submit-check-state" data-id="${s.id}">${isChecked?" · 확인함":""}</span></span>
+      </button>
+      <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${s.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>${effCount>1?`
       <select class="submit-version-select" data-id="${s.id}" title="과거 피드백 버전 보기">
         ${Array.from({length:effCount},(_,i)=>effCount-i).map(v=>`<option value="${v}">버전 ${v}${v===effCount?" (최신)":""}</option>`).join("")}
       </select>`:""}
     </div>`;
   }).join("")}</div>`;
+  bindSubmitCheckBtns(wrap);
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); profReviewVersion=null; render(); };
   });
   wrap.querySelectorAll(".submit-version-select").forEach(sel=>{
     sel.onclick=e=>e.stopPropagation();
     sel.onchange=()=>{ profReviewId=Number(sel.dataset.id); profReviewVersion=Number(sel.value); render(); };
+  });
+}
+
+/* "과제 확인" 버튼(.submit-check-btn) 공통 동작 — 누를 때마다 확인함/해제를 토글하고 서버에 바로 저장한다.
+   (2026-09-08 추가 · 첨삭을 하지 않아도 "이 과제는 확인했다"는 표시를 남기기 위한 기능) */
+function bindSubmitCheckBtns(root){
+  if(!root) return;
+  root.querySelectorAll(".submit-check-btn").forEach(btn=>{
+    btn.onclick=async (e)=>{
+      e.stopPropagation();
+      const id=Number(btn.dataset.id);
+      const next=btn.dataset.checked!=="1";
+      const prevHtml=btn.innerHTML;
+      btn.disabled=true; btn.textContent="저장 중…";
+      const r=await apiFetch("professor-submission-check", {method:"POST", body:JSON.stringify({id, checked:next})});
+      btn.disabled=false;
+      if(!r.ok){ btn.innerHTML=prevHtml; alert((r.body&&r.body.error)||"확인 표시를 저장하지 못했습니다."); return; }
+      btn.dataset.checked=next?"1":"0";
+      btn.classList.toggle("checked", next);
+      btn.innerHTML=next?(ICONS.check+" 확인함"):"과제 확인";
+      root.querySelectorAll(`.submit-check-state[data-id="${id}"]`).forEach(el=>{ el.textContent=next?" · 확인함":""; });
+    };
   });
 }
 
@@ -4818,6 +4860,7 @@ async function rProfSubmissionReview(id, version){
   c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} 제출함으로</button>
     <h2 id="reviewTitle">${ICONS.edit} 불러오는 중…</h2>
     <p class="hint" id="reviewHint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>(위/아래로 분리) 또는 <b>메모</b>(텍스트를 드래그해 선택한 채 우클릭하면 그 범위에 각주로, 그냥 우클릭하면 블록 전체에 표시)를 달 수 있습니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
+    <div id="reviewCheckBar"></div>
     <div id="reviewVersionBanner"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
     <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
@@ -4836,6 +4879,15 @@ async function rProfSubmissionReview(id, version){
   if(titleEl) titleEl.innerHTML=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}`;
   const hintEl=document.getElementById("reviewHint");
   if(hintEl && sub.type==="storyboard") hintEl.textContent="각 그림의 [피드백 그리기]를 눌러 그 이미지 위에 직접 그려서 첨삭할 수 있습니다.";
+  /* 2026-09-08: 첨삭을 하지 않고 읽어보기만 해도 "과제 확인" 표시를 남길 수 있다 */
+  const checkBar=document.getElementById("reviewCheckBar");
+  if(checkBar){
+    const isChecked=!!sub.checkedAt;
+    checkBar.innerHTML=`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+      <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${sub.id}" data-checked="${isChecked?1:0}">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>
+      <span class="submit-check-state" data-id="${sub.id}">${isChecked?`확인 ${esc(fmtDate(sub.checkedAt))}`:"아직 확인 표시를 하지 않았습니다."}</span></p>`;
+    bindSubmitCheckBtns(checkBar);
+  }
   if(bannerEl){
     if(!isLatest){
       bannerEl.innerHTML=`<p class="hint" style="color:var(--accent)">버전 ${sub.viewingVersion} / ${sub.latestVersion} 을 보고 있습니다 (과거 기록, 읽기 전용). <button type="button" class="btn ghost sm" id="reviewGoLatestBtn" style="margin-left:6px">최신 버전에서 계속 편집</button></p>`;

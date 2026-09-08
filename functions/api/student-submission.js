@@ -1,11 +1,14 @@
-import { requireAuth, jsonResponse } from "./_utils.js";
+import { requireAuth, jsonResponse, ensureSubmissionSchema } from "./_utils.js";
 
 /* GET /api/student-submission?id=123[&version=N] — 내가 제출한 것의 상세(교수 첨삭 포함) — 본인 것만.
    버전별 저장(2026-08-20 추가): version을 안 주면 최신 버전, 주면 그 버전(과거 기록)을 보여준다.
-   professor-submission.js의 GET과 같은 규칙 — 자세한 설명은 그쪽 주석 참고. */
+   2026-09-08: submission_feedback_versions 표가 운영 DB에 없어도(또는 조회에 실패해도) 500이 나지 않고
+   submissions.feedback(최신 첨삭)을 그대로 보여주도록 방어. 예전에는 이 표가 없으면 학생이 첨삭을
+   아예 열어볼 수 없었다. */
 export async function onRequestGet({ request, env }) {
   const auth = await requireAuth(request, env);
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+  await ensureSubmissionSchema(env);
 
   const url = new URL(request.url);
   const id = Number(url.searchParams.get("id"));
@@ -13,15 +16,19 @@ export async function onRequestGet({ request, env }) {
   const wantVersion = Number(url.searchParams.get("version")) || null;
 
   const row = await env.DB.prepare(
-    "SELECT s.id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, a.title AS assignment_title " +
+    "SELECT s.id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, a.title AS assignment_title " +
     "FROM submissions s JOIN assignments a ON a.id = s.assignment_id WHERE s.id = ? AND s.student_id = ?"
   ).bind(id, auth.user.id).first();
   if (!row) return jsonResponse({ error: "제출물을 찾을 수 없습니다." }, 404);
 
-  const { results: versionRows } = await env.DB.prepare(
-    "SELECT version, created_at FROM submission_feedback_versions WHERE submission_id = ? ORDER BY version ASC"
-  ).bind(id).all();
-  let versions = (versionRows || []).map((v) => ({ version: v.version, createdAt: v.created_at }));
+  let versionRows = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT version, created_at FROM submission_feedback_versions WHERE submission_id = ? ORDER BY version ASC"
+    ).bind(id).all();
+    versionRows = r.results || [];
+  } catch (e) { versionRows = []; }
+  let versions = versionRows.map((v) => ({ version: v.version, createdAt: v.created_at }));
 
   let data = null;
   try { data = JSON.parse(row.data); } catch (e) {}
@@ -35,12 +42,17 @@ export async function onRequestGet({ request, env }) {
     versions = [{ version: 1, createdAt: row.feedback_at || row.submitted_at }];
   } else if (versions.length) {
     const targetVersion = wantVersion && versions.some((v) => v.version === wantVersion) ? wantVersion : latestVersion;
-    const vr = await env.DB.prepare(
-      "SELECT feedback, memos FROM submission_feedback_versions WHERE submission_id = ? AND version = ?"
-    ).bind(id, targetVersion).first();
+    let vr = null;
+    try {
+      vr = await env.DB.prepare(
+        "SELECT feedback, memos FROM submission_feedback_versions WHERE submission_id = ? AND version = ?"
+      ).bind(id, targetVersion).first();
+    } catch (e) {}
     if (vr) {
       try { feedback = JSON.parse(vr.feedback); } catch (e) {}
       try { memos = vr.memos ? JSON.parse(vr.memos) : []; } catch (e) {}
+    } else if (row.feedback) {
+      try { feedback = JSON.parse(row.feedback); } catch (e) {}
     }
     viewingVersion = targetVersion;
   }
@@ -48,7 +60,8 @@ export async function onRequestGet({ request, env }) {
   return jsonResponse({
     submission: {
       id: row.id, type: row.type, projectName: row.project_name, data, feedback, memos,
-      submittedAt: row.submitted_at, feedbackAt: row.feedback_at, assignmentTitle: row.assignment_title,
+      submittedAt: row.submitted_at, feedbackAt: row.feedback_at, checkedAt: row.checked_at || null,
+      assignmentTitle: row.assignment_title,
       versions, viewingVersion, latestVersion,
     },
   });

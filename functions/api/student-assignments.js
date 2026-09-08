@@ -53,13 +53,25 @@ export async function onRequestGet({ request, env }) {
   const stmt = classId ? env.DB.prepare(query).bind(profId, classId) : env.DB.prepare(query).bind(profId);
   const { results } = await stmt.all();
 
-  const { results: mine } = await env.DB.prepare(
-    "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at " +
-    "FROM submissions WHERE student_id = ? ORDER BY submitted_at DESC"
-  ).bind(auth.user.id).all();
+  /* 2026-09-08: 교수가 "과제 확인"만 누른 경우(첨삭 전)도 학생 화면에 표시하기 위해 checked_at을 함께
+     내려준다. 아직 컬럼이 없는 DB에서도 목록이 열리도록 실패 시 예전 쿼리로 되돌아간다. */
+  let mine = [];
+  try {
+    const r = await env.DB.prepare(
+      "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at, checked_at " +
+      "FROM submissions WHERE student_id = ? ORDER BY submitted_at DESC"
+    ).bind(auth.user.id).all();
+    mine = r.results || [];
+  } catch (e) {
+    const r = await env.DB.prepare(
+      "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at " +
+      "FROM submissions WHERE student_id = ? ORDER BY submitted_at DESC"
+    ).bind(auth.user.id).all();
+    mine = r.results || [];
+  }
 
   const byAssignment = {};
-  (mine || []).forEach((s) => {
+  mine.forEach((s) => {
     (byAssignment[s.assignment_id] = byAssignment[s.assignment_id] || []).push(s);
   });
   const assignments = (results || []).map((a) => ({ ...a, mySubmissions: byAssignment[a.id] || [] }));
