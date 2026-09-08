@@ -501,7 +501,11 @@ function bindAuthForms() {
     const resultEl = document.getElementById("findResult");
     resultEl.textContent = "확인 중…";
     const res = await apiFetch("find-account", { method: "POST", body: JSON.stringify({ email }) });
-    resultEl.textContent = (res.body && res.body.message) || "확인할 수 없습니다.";
+    /* (2026-09-08) 예전에는 서버가 돌려준 error를 통째로 무시하고 무조건 "확인할 수 없습니다."만 띄웠다.
+       그래서 요청 횟수 제한(같은 강의실에서 여러 학생이 연달아 시도하면 걸린다)이나 메일 발송 오류처럼
+       원인이 분명한 경우에도 이유를 알 수 없었다. 이제 서버가 알려준 이유를 그대로 보여준다. */
+    resultEl.textContent = (res.body && (res.body.message || res.body.error))
+      || "서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.";
   };
 
   const profileBtn = document.getElementById("menuProfileBtn");

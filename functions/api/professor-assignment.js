@@ -85,7 +85,11 @@ export async function onRequestDelete({ request, env }) {
   return jsonResponse({ ok: true });
 }
 
-/* POST /api/professor-assignment — 과제 마감 스위치 토글  body: { id, open: 0|1 } */
+/* POST /api/professor-assignment — 등록해둔 과제의 설정 변경 (본인 과제만)
+   body: { id, open?: 0|1, title?: "새 과제명", dueAt?: unix초 | null, classId?: 수업id | null }
+   2026-09-08: 예전에는 마감 스위치(open)만 바꿀 수 있어서, 과제명을 잘못 적거나 제출기한을 바꾸려면
+   과제를 지우고 다시 만들어야 했다(제출물까지 함께 사라짐). 이제 보낸 항목만 골라서 수정한다 —
+   예전처럼 { id, open }만 보내면 마감 스위치만 바뀌므로 기존 화면도 그대로 동작한다. */
 export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
@@ -93,13 +97,54 @@ export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
   const id = Number(body && body.id);
-  const open = (body && body.open) ? 1 : 0;
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
 
-  const result = await env.DB.prepare(
-    "UPDATE assignments SET open = ? WHERE id = ? AND prof_id = ?"
-  ).bind(open, id, auth.user.id).run();
-  if (!result.meta.changes) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
+  const current = await env.DB.prepare(
+    "SELECT id, title, due_at, open, class_id FROM assignments WHERE id = ? AND prof_id = ?"
+  ).bind(id, auth.user.id).first();
+  if (!current) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
-  return jsonResponse({ ok: true, open });
+  const sets = [], binds = [];
+
+  if (Object.prototype.hasOwnProperty.call(body, "open")) {
+    sets.push("open = ?"); binds.push(body.open ? 1 : 0);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "title")) {
+    const title = String(body.title || "").trim();
+    if (!title) return jsonResponse({ error: "과제명을 입력해주세요." }, 400);
+    sets.push("title = ?"); binds.push(title.slice(0, 200));
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "dueAt")) {
+    // null 또는 빈 값이면 "제출기한 없음"으로 지운다
+    const dueAt = (body.dueAt === null || body.dueAt === "" || typeof body.dueAt === "undefined")
+      ? null : Number(body.dueAt);
+    if (dueAt !== null && !Number.isFinite(dueAt)) return jsonResponse({ error: "제출기한이 올바르지 않습니다." }, 400);
+    sets.push("due_at = ?"); binds.push(dueAt);
+  }
+
+  // 과제를 다른 수업으로 옮기기(또는 "수업 미지정"으로 빼기) — 내 수업인지 확인한 뒤에만 허용
+  if (Object.prototype.hasOwnProperty.call(body, "classId")) {
+    let classId = (body.classId === null || body.classId === "" || body.classId === "none") ? null : Number(body.classId);
+    if (classId !== null) {
+      if (!classId) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+      const cls = await env.DB.prepare("SELECT id FROM classes WHERE id = ? AND prof_id = ?").bind(classId, auth.user.id).first();
+      if (!cls) return jsonResponse({ error: "수업을 찾을 수 없습니다." }, 404);
+    }
+    sets.push("class_id = ?"); binds.push(classId);
+  }
+
+  if (!sets.length) return jsonResponse({ error: "변경할 내용이 없습니다." }, 400);
+
+  binds.push(id, auth.user.id);
+  await env.DB.prepare(
+    "UPDATE assignments SET " + sets.join(", ") + " WHERE id = ? AND prof_id = ?"
+  ).bind(...binds).run();
+
+  const updated = await env.DB.prepare(
+    "SELECT id, title, due_at, open, class_id FROM assignments WHERE id = ? AND prof_id = ?"
+  ).bind(id, auth.user.id).first();
+
+  return jsonResponse({ ok: true, assignment: updated, open: updated ? updated.open : null });
 }

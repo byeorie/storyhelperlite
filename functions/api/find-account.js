@@ -15,13 +15,26 @@ export async function onRequestPost({ request, env }) {
   const email = (body.email || "").trim();
   if (!email) return jsonResponse({ error: "이메일을 입력해주세요." }, 400);
 
-  // 메일 폭탄/계정 탐색 방지(2026-08-20 보안 점검 후 추가): 같은 IP에서 1시간에 5건까지만 허용
-  const rl = await checkRateLimit(env, `find-account:${clientIp(request)}`, 5, 60 * 60);
+  /* 요청 횟수 제한 — 2026-09-08 조정.
+     예전에는 "같은 IP에서 1시간에 5건"이었는데, 한 강의실의 학생들은 학교 와이파이를 통해 IP가 하나로
+     묶이기 때문에 6번째 학생부터 무조건 막혔다(회원가입 제한을 완화했던 것과 같은 이유 — 2026-09-03).
+     이제 IP 기준은 40건으로 넉넉히 두고, 대신 "한 이메일 주소로 1시간에 5건"이라는 제한을 따로 두어
+     특정인에게 메일을 퍼붓는 악용은 계속 막는다. */
+  const rl = await checkRateLimit(env, `find-account:${clientIp(request)}`, 40, 60 * 60);
   if (!rl.allowed) {
-    return jsonResponse({ error: `너무 많이 시도했습니다. ${Math.ceil(rl.retryAfterSec / 60)}분 후 다시 시도해주세요.` }, 429);
+    return jsonResponse({ error: `이 네트워크에서 비밀번호 찾기를 너무 많이 시도했습니다. ${Math.ceil(rl.retryAfterSec / 60)}분 후 다시 시도해주세요.` }, 429);
+  }
+  const rlEmail = await checkRateLimit(env, `find-account-mail:${email.toLowerCase()}`, 5, 60 * 60);
+  if (!rlEmail.allowed) {
+    return jsonResponse({ error: `이 이메일로 안내 메일을 이미 여러 번 보냈습니다. 메일함(스팸함 포함)을 먼저 확인해주시고, ${Math.ceil(rlEmail.retryAfterSec / 60)}분 후 다시 시도해주세요.` }, 429);
   }
 
-  const user = await env.DB.prepare("SELECT id, username FROM users WHERE email = ?").bind(email).first();
+  /* 가입할 때 대문자로 입력했거나 지금 대문자로 입력한 경우에도 찾아지도록 대소문자를 무시하고 조회한다
+     (2026-09-08 — 예전에는 정확히 일치할 때만 찾아서, 학생이 "Hong@Gmail.com"으로 가입했다가
+      "hong@gmail.com"으로 입력하면 안내 메일이 오지 않았다) */
+  const user = await env.DB.prepare(
+    "SELECT id, username, email FROM users WHERE lower(email) = lower(?)"
+  ).bind(email).first();
   if (!user) {
     return jsonResponse({ message: GENERIC_MESSAGE });
   }
@@ -42,9 +55,13 @@ export async function onRequestPost({ request, env }) {
     `본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.`;
 
   try {
-    await sendEmail(env, { to: email, subject: "[스토리 가이드] 아이디 안내 및 비밀번호 재설정", text });
+    await sendEmail(env, { to: user.email || email, subject: "[스토리 가이드] 아이디 안내 및 비밀번호 재설정", text });
   } catch (e) {
-    return jsonResponse({ error: "메일 발송에 실패했습니다: " + e.message }, 500);
+    /* 메일 발송 설정(GMAIL_USER / GMAIL_APP_PASSWORD)이 빠졌거나 구글 앱 비밀번호가 만료되면 여기로 온다.
+       학생에게는 "무엇을 해야 하는지"를 알려주고, 원인은 뒤에 덧붙인다. */
+    return jsonResponse({
+      error: "안내 메일을 보내지 못했습니다. 담당 교수님께 알려주세요. (원인: " + ((e && e.message) || e) + ")",
+    }, 500);
   }
 
   return jsonResponse({ message: GENERIC_MESSAGE });

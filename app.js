@@ -4621,6 +4621,7 @@ async function renderProfAssignList(classId){
           <input type="checkbox" ${a.open?"checked":""} data-id="${a.id}">
           <span class="assign-switch-slider"></span>
         </label>
+        <button type="button" class="assign-folder-edit" data-id="${a.id}" title="과제 설정 변경">${ICONS.pencil}</button>
         <button type="button" class="assign-folder-del" data-id="${a.id}" title="과제 삭제">${ICONS.trash}</button>
       </div>
     </div>
@@ -4637,6 +4638,13 @@ async function renderProfAssignList(classId){
       const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:Number(inp.dataset.id), open:inp.checked})});
       if(!r.ok){ alert((r.body&&r.body.error)||"변경에 실패했습니다."); inp.checked=!inp.checked; return; }
       renderProfAssignList(classId);
+    };
+  });
+  wrap.querySelectorAll(".assign-folder-edit").forEach(btn=>{
+    btn.onclick=(e)=>{
+      e.stopPropagation();
+      const item=list.find(a=>a.id===Number(btn.dataset.id));
+      if(item) openAssignmentModal(classId, item);
     };
   });
   wrap.querySelectorAll(".assign-folder-del").forEach(btn=>{
@@ -4657,27 +4665,72 @@ async function renderProfAssignList(classId){
     el.onclick=()=>{ profAssignFolderId=Number(el.dataset.id); render(); };
   });
 }
-function openNewAssignmentModal(classId){
+/* unix초 → <input type="date">가 쓰는 "YYYY-MM-DD" (현지 시간 기준) */
+function unixToDateInput(sec){
+  if(!sec) return "";
+  const d=new Date(sec*1000);
+  const p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function openNewAssignmentModal(classId){ openAssignmentModal(classId, null); }
+
+/* 과제 등록 / 설정 변경 공용 모달 (2026-09-08: 등록 후에도 과제명·제출기한·수업·마감 여부를 고칠 수
+   있게 확장. 예전에는 마감 스위치만 바꿀 수 있어서, 과제명을 잘못 적으면 과제를 지우고 다시 만드는
+   수밖에 없었고 그때 학생 제출물까지 함께 사라졌다) */
+function openAssignmentModal(classId, assignment){
+  const editing=!!assignment;
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
   const box=document.createElement("div"); box.className="plot-modal";
   const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="과제 등록";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=editing?"과제 설정 변경":"과제 등록";
   top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
   box.appendChild(top);
   box.insertAdjacentHTML("beforeend",
-    `<label>과제명</label><input type="text" id="newAssignTitle" placeholder="예: 1차 기획서 과제">
-     <label>제출기한 (선택)</label><input type="date" id="newAssignDue">
-     <button class="btn" id="newAssignSaveBtn" style="margin-top:14px;width:100%">등록</button>`);
+    `<label>과제명</label><input type="text" id="newAssignTitle" placeholder="예: 1차 기획서 과제" value="${editing?esc(assignment.title||""):""}">
+     <label>제출기한 (선택 · 비워두면 기한 없음)</label><input type="date" id="newAssignDue" value="${editing?unixToDateInput(assignment.due_at):""}">
+     ${editing?`<label>소속 수업</label><select id="newAssignClass"><option value="none">수업 미지정(전체 공개)</option></select>
+     <label style="display:flex;align-items:center;gap:8px;margin-top:12px">
+       <input type="checkbox" id="newAssignOpen" style="width:auto;margin:0"${assignment.open?" checked":""}> 학생이 제출할 수 있음(마감 안 함)
+     </label>`:""}
+     <button class="btn" id="newAssignSaveBtn" style="margin-top:14px;width:100%">${editing?"변경 내용 저장":"등록"}</button>`);
   overlay.appendChild(box); document.body.appendChild(overlay);
+
+  // 수업 이동용 목록은 열어본 뒤 채운다(등록 화면에서는 이미 그 수업 안에 있으므로 필요 없음)
+  if(editing){
+    const sel=box.querySelector("#newAssignClass");
+    apiFetch("professor-classes").then(res=>{
+      if(!overlay.isConnected || !sel) return;
+      const classes=(res.ok && res.body && res.body.classes)||[];
+      classes.forEach(cl=>{
+        const op=document.createElement("option");
+        op.value=String(cl.id); op.textContent=cl.name||("수업 "+cl.id);
+        sel.appendChild(op);
+      });
+      sel.value = assignment.class_id ? String(assignment.class_id) : "none";
+    });
+  }
+
   box.querySelector("#newAssignSaveBtn").onclick=async ()=>{
+    const btn=box.querySelector("#newAssignSaveBtn");
     const title=box.querySelector("#newAssignTitle").value.trim();
     if(!title){ alert("과제명을 입력해주세요."); return; }
     const dueStr=box.querySelector("#newAssignDue").value;
     const dueAt=dueStr ? Math.floor(new Date(dueStr+"T23:59:59").getTime()/1000) : null;
-    const r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt, classId: classId==="none"?null:classId})});
+    btn.disabled=true;
+    let r;
+    if(editing){
+      const selEl=box.querySelector("#newAssignClass");
+      const payload={id:assignment.id, title, dueAt, open:box.querySelector("#newAssignOpen").checked?1:0};
+      // 수업 목록이 아직 안 채워졌으면(네트워크 지연) 수업은 건드리지 않는다
+      if(selEl && selEl.options.length>1) payload.classId = selEl.value==="none" ? null : Number(selEl.value);
+      r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify(payload)});
+    }else{
+      r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt, classId: classId==="none"?null:classId})});
+    }
+    btn.disabled=false;
     if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(classId); }
-    else alert((r.body&&r.body.error)||"등록에 실패했습니다.");
+    else alert((r.body&&r.body.error)||(editing?"저장에 실패했습니다.":"등록에 실패했습니다."));
   };
 }
 
