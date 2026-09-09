@@ -9,7 +9,7 @@ import { requireAuth, jsonResponse } from "./_utils.js";
    - GET    : 인증 없이 공개 제공 (key가 추측 불가능한 UUID이므로 사실상 비공개 링크와 동일하게 동작)
    - DELETE : 로그인 필요. 본인이 올린 이미지(키 접두사가 자신의 user_id)만 삭제 가능 */
 
-const MAX_BYTES = 400 * 1024; // 클라이언트 압축 목표(300KB)에 여유를 둔 서버측 상한
+const MAX_BYTES = 600 * 1024; // 클라이언트 압축 목표(작은/중간 칸 300KB, 큰 칸 500KB)에 여유를 둔 서버측 상한
 
 export async function onRequestPost({ request, env }) {
   const auth = await requireAuth(request, env);

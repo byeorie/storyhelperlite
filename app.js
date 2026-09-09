@@ -3551,15 +3551,34 @@ function compressImageToLimit(img, maxBytes, cb){
   }
   attempt();
 }
-/* 캔버스(직접 그리기) 압축 — 화질만 단계적으로 낮춰 300KB 이하로 맞춘다 */
+/* 콘티 칸별 업로드 용량 상한 — 큰 칸은 세로가 길어 선이 많이 들어가므로 여유를 더 준다.
+   (2026-09-09) 서버(functions/api/storyboard-image.js)의 상한 600KB보다 반드시 작아야 한다. */
+function sbMaxBytes(sizeKey){ return sizeKey==="large" ? 500*1024 : 300*1024; }
+
+/* 캔버스(직접 그리기) 압축 — 화질을 단계적으로 낮추고, 그래도 모자라면 그림 크기(해상도)까지 줄여
+   maxBytes 이하로 맞춘다.
+   (2026-09-09) 예전에는 화질만 낮췄기 때문에(최저 0.3에서 포기) 큰 칸에 색을 꽉 채워 그리면 목표
+   용량을 못 맞춘 채 그대로 업로드돼 서버에서 "용량이 너무 큽니다"로 거부됐고, 그 순간 그림이
+   사라졌다. 이제는 반드시 상한 아래로 줄여서 올린다. */
 function compressCanvasToLimit(canvas, maxBytes, cb){
-  let quality=0.92, attempts=0;
+  const w0=canvas.width, h0=canvas.height;
+  let work=canvas, quality=0.92, scale=1, attempts=0;
+  function shrink(){
+    scale*=0.85;
+    const w=Math.max(1,Math.round(w0*scale)), h=Math.max(1,Math.round(h0*scale));
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    const cx=c.getContext("2d");
+    cx.fillStyle="#fff"; cx.fillRect(0,0,w,h);
+    cx.drawImage(canvas,0,0,w,h);
+    work=c; quality=0.7;
+  }
   function attempt(){
     attempts++;
-    canvas.toBlob(blob=>{
+    work.toBlob(blob=>{
       if(!blob){ cb(null); return; }
-      if(blob.size<=maxBytes || quality<=0.3 || attempts>12){ cb(blob); return; }
-      quality-=0.1; attempt();
+      if(blob.size<=maxBytes || attempts>20){ cb(blob); return; }
+      if(quality>0.4) quality-=0.1; else shrink();
+      attempt();
     }, "image/jpeg", quality);
   }
   attempt();
@@ -3591,13 +3610,43 @@ async function duplicateStoryboardImage(key){
     return await uploadStoryboardBlob(blob);
   }catch(e){ return null; }
 }
+/* 손에 들고 있는 콘티 블록(bl)이 아직 현재 작품에 실제로 들어있는지 확인한다.
+   (2026-09-09) 그림을 그리는 동안 서버에서 작품을 다시 불러오면(auth.js loadFromServer가 DB를 통째로
+   교체한다 — 인터넷이 잠깐 끊겼다가 3초 뒤 재시도로 복구되는 경우 등) bl은 버려진 옛 객체가 되고,
+   거기에 저장하면 아무런 오류 없이 그림이 사라졌다. 같은 id의 블록을 현재 작품에서 다시 찾아 준다. */
+function liveWriteBlock(bl){
+  if(!bl) return null;
+  try{
+    const list=allWriteBlocksOrdered();
+    if(list.indexOf(bl)>=0) return bl;
+    return list.find(x=>x.id===bl.id) || null;
+  }catch(e){ return bl; }
+}
+/* 그린 그림을 서버(R2)에 올리고 콘티 칸에 붙인다. 성공하면 true, 실패하면 false를 돌려준다 —
+   호출한 쪽(그리기 팝업)은 false일 때 팝업을 닫지 말아야 한다. */
 async function saveStoryboardBlob(bl, blob, size){
-  const oldKey=bl.storyboard && bl.storyboard.key;
   const key=await uploadStoryboardBlob(blob);
-  if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); return; }
-  bl.storyboard={key, size:size||"medium"};
-  save(); render();
+  if(!key){
+    alert("그림을 서버에 올리지 못했습니다.\n\n인터넷 연결을 확인한 뒤 [저장 후 종료]를 다시 눌러 주세요.\n(그림은 화면에 그대로 남아 있습니다.)");
+    return false;
+  }
+  const target=liveWriteBlock(bl);
+  if(!target){
+    alert("그리는 동안 작품 정보가 새로 불러와져서 이 칸을 찾지 못했습니다.\n\n화면을 새로고침(F5)한 뒤 다시 그려 주세요.");
+    deleteStoryboardImage(key);
+    return false;
+  }
+  const oldKey=target.storyboard && target.storyboard.key;
+  target.storyboard={key, size:size||"medium"};
+  save();
+  /* 0.6초 디바운스를 기다리지 않고 바로 서버에 올린다 — 저장 직후 창을 닫아도 유실되지 않게 */
+  if(typeof forceSaveToServer==="function") forceSaveToServer();
+  render();
   if(oldKey && oldKey!==key) deleteStoryboardImage(oldKey);
+  if(typeof serverSaveReady==="function" && !serverSaveReady()){
+    alert("그림은 이 브라우저에 저장했지만, 지금 서버와 연결되어 있지 않아 서버에는 올라가지 않았습니다.\n\n화면을 새로고침(F5)해 서버 연결을 되살린 뒤 다시 확인해 주세요.\n이 상태로 다른 컴퓨터에서 열면 이 그림이 보이지 않습니다.");
+  }
+  return true;
 }
 function deleteStoryboardSlot(bl){
   if(!confirm("이 콘티를 삭제할까요?")) return;
@@ -3682,9 +3731,15 @@ function openDrawModal(bl, sizeKey){
   resetCanvas();
   clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")) resetCanvas(); };
   /* 기존 콘티가 있으면 이어서 수정할 수 있도록 배경으로 불러온다 (실패해도 빈 캔버스로 계속 진행) */
+  let preloadFailed=false;
   if(bl.storyboard && bl.storyboard.key){
     const preload=new Image();
     preload.onload=()=>{ ctx.drawImage(preload,0,0,canvas.width,canvas.height); };
+    /* (2026-09-09) 기존 그림을 못 불러온 채로 저장하면 원래 그림이 빈 캔버스로 덮여 사라진다 */
+    preload.onerror=()=>{
+      preloadFailed=true;
+      alert("기존 콘티 그림을 불러오지 못했습니다(인터넷 연결 문제일 수 있습니다).\n\n이대로 저장하면 원래 그림이 사라지니, 저장하지 말고 화면을 새로고침(F5)해 주세요.");
+    };
     preload.src="/api/storyboard-image?key="+encodeURIComponent(bl.storyboard.key);
   }
   canvasWrap.appendChild(canvas);
@@ -3716,12 +3771,17 @@ function openDrawModal(bl, sizeKey){
   const actions=document.createElement("div"); actions.className="dlg-modal-actions";
   const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
   saveBtn.textContent="저장 후 종료";
+  /* (2026-09-09) 예전에는 업로드 결과를 기다리지 않고 곧바로 팝업을 닫았다. 그래서 업로드가
+     실패하면(인터넷 끊김·로그인 만료·용량 초과) 알림만 뜨고 그림이 있던 캔버스는 이미 사라져
+     되살릴 방법이 없었다. 이제 저장이 확실히 끝났을 때만 닫는다. */
   saveBtn.onclick=()=>{
+    if(preloadFailed && !confirm("기존 그림을 불러오지 못한 상태입니다.\n지금 저장하면 원래 그림이 사라집니다. 그래도 저장할까요?")) return;
     saveBtn.disabled=true; saveBtn.textContent="저장 중…";
-    compressCanvasToLimit(canvas, 300*1024, blob=>{
+    compressCanvasToLimit(canvas, sbMaxBytes(sizeKey), async blob=>{
       if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-      saveStoryboardBlob(bl, blob, sizeKey);
-      document.body.removeChild(overlay);
+      const ok=await saveStoryboardBlob(bl, blob, sizeKey);
+      if(!ok){ saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
+      if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
     });
   };
   actions.appendChild(saveBtn);
@@ -3826,7 +3886,7 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   saveBtn.textContent="저장 후 종료";
   saveBtn.onclick=()=>{
     saveBtn.disabled=true; saveBtn.textContent="저장 중…";
-    compressCanvasToLimit(canvas, 300*1024, async blob=>{
+    compressCanvasToLimit(canvas, sbMaxBytes(sizeKey), async blob=>{
       if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
       const key=await uploadStoryboardBlob(blob);
       if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
