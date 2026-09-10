@@ -2,6 +2,55 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-09-10 — 평가 입력창 · 콘티 대사 번호 · 아이디어를 섹션 블럭(그룹)으로
+
+### 1) 피드백(첨삭) 화면에 "평가" 입력창 추가 — 선택 사항
+첨삭·메모와는 별개로, 교수가 과제 전체에 대한 총평을 자유 텍스트로 남길 수 있다. 비워둬도 된다.
+
+- **DB**: `submissions.evaluation TEXT` 컬럼 추가. 첨삭처럼 버전별로 쌓지 않고 **가장 최근 것 하나만** 보관한다
+  (총평은 "지금 기준의 평가"라서 이력이 필요 없고, 버전 표가 없는 DB에서도 안전하게 동작시키기 위함).
+  - `functions/api/_utils.js` `ensureSubmissionSchema()`에 `ALTER TABLE submissions ADD COLUMN evaluation TEXT` 추가
+    (기존 checked_at과 같은 방식 — 이미 있으면 조용히 실패하고 넘어감).
+  - `schema.sql` / `schema-ensure.sql`에도 컬럼 반영(schema.sql에는 그동안 빠져 있던 checked_at도 함께 기록).
+- **functions/api/professor-submission.js**:
+  - GET에 `s.evaluation` 조회 추가 → `submission.evaluation`으로 반환.
+  - POST가 `evaluation`만 받아도 동작하도록 변경. `feedback` 없이 `evaluation`만 오면 **새 첨삭 버전을 만들지 않고**
+    총평만 갱신하고 끝낸다(콘티처럼 "피드백 전달" 버튼이 없는 화면에서도 총평을 남길 수 있게 하기 위함).
+    총평 UPDATE는 try/catch로 감싸 컬럼이 아직 없는 DB에서도 첨삭 저장을 막지 않는다.
+- **functions/api/student-submission.js**: GET에 `s.evaluation` 조회 추가 → 학생도 그대로 받아본다.
+- **app.js `rProfSubmissionReview`**: 버전 안내 아래, 첨삭 목록 위에 `#reviewEvalBox` 신설.
+  최신 버전을 보고 있을 때만 입력 가능(과거 버전은 읽기 전용 표시). 자체 [평가 저장] 버튼이 있어 콘티에서도 저장되고,
+  "피드백 전달"을 누를 때도 지금 입력칸 내용이 함께 저장된다.
+- **app.js `rFeedbackDetail`(학생)**: 교수 평가가 있으면 첨삭 내용보다 **먼저** 보여준다.
+  첨삭이 아직 없는 상태(확인만 함)에서도 평가만 있으면 보인다. 콘티 피드백 화면에도 동일하게 표시.
+- **app.js `submissionToPdfBlob`**: 제출물 PDF 내보내기 머리말에 평가를 포함.
+- **style.css**: `.review-eval` 계열(옅은 노란 테두리 상자) 추가.
+
+### 2) 콘티 작성 페이지 — 대사마다 번호
+`storyboardRow`의 왼쪽 글 칸에서 대사(`type==="line"`) 앞에 번호를 붙인다. 번호는 **콘티 전체를 통틀어 연속**이며
+(칸이 바뀌어도 1, 2, 3… 계속 이어짐), 화면에 그려지는 칸 순서 그대로 센다.
+`rStoryboard`에서 카운터 객체 `dlgNo={n:0}`를 만들어 `storyboardRow(bl, no, dlgNo)`로 넘긴다. 지문은 번호 없음.
+
+### 3) 글쓰기 페이지 — 플롯 아이디어를 "섹션 블럭(그룹)"으로 불러오기
+예전: 아이디어 1개 = 장면 블록(칸) 1개. → 지금: **아이디어 1개 = 그룹(섹션 블럭) 1개**, 그 안에 칸을 여러 개 만든다.
+
+- `fillWriteDoc`: 그룹에 `fromIdea`(어느 아이디어에서 왔는지)와 `sectionId`(어느 플롯 단계인지) 보존. 예전 데이터는 빈 값.
+- `loadedIdeaIds()` 신설: 이미 불러온 아이디어 판별을 블록의 fromIdea + **그룹의 fromIdea** 양쪽에서 본다.
+- `createIdeaGroup(sec, ideaId)` 신설: 아이디어 문구를 이름으로 하는 그룹 + 그 안의 빈 칸 블록 1개를 만든다.
+  칸 블록에는 fromIdea를 남기지 않는다 — 남기면 "제목이 비면 아이디어 문구로 채우는" 기존 보정이 걸려
+  그룹 이름과 칸 제목이 똑같이 중복되기 때문.
+- `addBlockToGroup(gid)` 신설: 그룹 머리의 **＋** 버튼. 같은 그룹 블록이 목록에서 이어져 보이도록
+  그 그룹의 마지막 블록 **바로 뒤에** 끼워 넣는다(칸이 없으면 목록 끝).
+- `loadPlotIntoWrite` / `loadSectionIdeas`가 위 함수들을 쓰도록 교체.
+- `blockGroupWrap`: 머리 버튼을 [＋ 칸 추가] · [이름 변경] · [그룹 해제] 3개로.
+- `rWrite`: 칸을 모두 지운 그룹도 빈 상자로 계속 그려서 ＋로 다시 칸을 만들 수 있게 했다
+  (그룹 상자는 원래 소속 블록을 그릴 때 생기므로, 블록이 없으면 따로 그려줘야 함).
+- **기존에 이미 불러와 둔 낱개 아이디어 블록은 건드리지 않는다** — 작업물이 바뀔 위험이 없도록 그대로 유지.
+
+검증: `node --check` 통과(app.js, professor-submission.js, student-submission.js, _utils.js).
+**배포 전 D1 콘솔에서 `schema-ensure.sql`을 한 번 실행**하면 확실하지만, 실행하지 않아도
+`ensureSubmissionSchema()`가 첫 요청 때 컬럼을 자동으로 추가한다.
+
 ## 2026-09-09 — 콘티제작: "저장 후 종료"를 눌렀는데 그림이 사라지는 문제 수정
 
 **요청**: "콘티제작에서 그림을 그린 후 '저장 후 종료'를 눌렀을 때, 어떤 경우에 이미지가 저장 안 되고

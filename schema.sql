@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS submissions (
   data TEXT NOT NULL,          -- 제출 당시 스냅샷(JSON) — 원본, 이후 변경 안 됨
   feedback TEXT,               -- 교수 첨삭본(JSON) — 첨삭 전에는 NULL
   submitted_at INTEGER NOT NULL,
-  feedback_at INTEGER
+  feedback_at INTEGER,
+  checked_at INTEGER,          -- 교수가 제출물을 확인한 시각
+  evaluation TEXT              -- 교수 총평(선택 입력) — 첨삭/메모와는 별개
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);

@@ -129,6 +129,8 @@ ALTER TABLE classes ADD COLUMN section TEXT;
 ALTER TABLE classes ADD COLUMN class_day TEXT;
 ALTER TABLE classes ADD COLUMN class_time TEXT;
 ALTER TABLE submissions ADD COLUMN checked_at INTEGER;
+-- 2026-09-10: 교수 총평(선택 입력)
+ALTER TABLE submissions ADD COLUMN evaluation TEXT;
 
 -- 코드가 비어있는 수업에 6자리 등록 코드 자동 발급
 UPDATE classes SET code = printf('%06d', (ABS(RANDOM()) % 900000) + 100000) WHERE code IS NULL;

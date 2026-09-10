@@ -34,6 +34,8 @@ export async function ensureSubmissionSchema(env) {
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_sfv_submission_version ON submission_feedback_versions(submission_id, version)",
     /* 2026-09-08: "과제 확인" — 첨삭을 하지 않았어도 교수가 제출물을 확인했음을 표시하는 시각(unix초) */
     "ALTER TABLE submissions ADD COLUMN checked_at INTEGER",
+    /* 2026-09-10: "평가" — 첨삭/메모와 별개로 교수가 남기는 총평(선택 입력). 최신 것만 보관한다. */
+    "ALTER TABLE submissions ADD COLUMN evaluation TEXT",
   ];
   for (const sql of stmts) {
     try { await env.DB.prepare(sql).run(); } catch (e) {}

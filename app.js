@@ -420,7 +420,13 @@ function fillWriteDoc(wd){
       : null;
     return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items, groupId, backgrounds, characters, storyboard};
   }) : []);
-  const groups=(Array.isArray(wd.groups)?wd.groups:[]).map(g=>({id:(g&&g.id)||uid(), name:(g&&g.name)||"그룹"}));
+  /* 2026-09-10: 그룹이 "플롯에서 불러온 아이디어 섹션 블럭"으로도 쓰이면서 fromIdea(어느 아이디어에서
+     왔는지 — 중복 불러오기 방지용)와 sectionId(어느 플롯 단계에 속하는지 — 칸이 없어도 그 단계에
+     상자를 그리기 위함)를 함께 보관한다. 예전 데이터에는 없는 값이라 빈 문자열로 채워진다. */
+  const groups=(Array.isArray(wd.groups)?wd.groups:[]).map(g=>({
+    id:(g&&g.id)||uid(), name:(g&&g.name)||"그룹",
+    fromIdea:(g&&g.fromIdea)||"", sectionId:(g&&g.sectionId)||"",
+  }));
   return {blocks, groups};
 }
 /* plotDoc 기본값 보정 (예전 데이터 안전 처리) */
@@ -2377,7 +2383,7 @@ function rWrite(){
   const bar=document.createElement("div"); bar.className="write-toolbar";
   const loadBtn=document.createElement("button"); loadBtn.className="btn ghost sm icon-btn";
   loadBtn.innerHTML=ICONS.load+" 플롯 불러오기";
-  loadBtn.title="플롯 생성에서 각 섹션에 배치한 아이디어를 장면 블록으로 불러옵니다";
+  loadBtn.title="플롯 생성에서 각 섹션에 배치한 아이디어를 섹션 블럭(그룹)으로 불러옵니다 — 그 안에 칸을 여러 개 만들 수 있습니다";
   loadBtn.onclick=loadPlotIntoWrite;
   bar.append(loadBtn);
   const barRight=document.createElement("div"); barRight.className="write-toolbar-right";
@@ -2440,6 +2446,10 @@ function rWrite(){
         list.appendChild(card);
       }
     });
+    /* 2026-09-10: 칸을 모두 지운 섹션 블럭(그룹)도 빈 상자로 남겨서 [＋]로 다시 칸을 만들 수 있게 한다.
+       (그룹 상자는 소속 블록을 그릴 때 만들어지므로, 블록이 없으면 이렇게 따로 그려줘야 한다) */
+    const usedGids=new Set(blocksOfSection(sec.id).map(b=>b.groupId).filter(Boolean));
+    (P.writeDoc.groups||[]).forEach(g=>{ if(g.sectionId===sec.id && !usedGids.has(g.id)) blockGroupWrap(g.id, list); });
     group.appendChild(list);
     setupBlockDnD(list, main);
     main.appendChild(group);
@@ -2464,18 +2474,53 @@ function rWrite(){
   }
 }
 
-/* 플롯 생성에서 배치한 아이디어를 장면 블록으로 불러오기 (이미 불러온 아이디어는 건너뜀) */
+/* ===== 플롯 아이디어 → 글쓰기 (2026-09-10 변경) =====
+   예전에는 아이디어 하나가 장면 블록(칸) 하나가 됐지만, 이제는 아이디어 하나가 그룹(섹션 블럭) 하나가
+   되고 그 안에 칸 블록을 여러 개 만들 수 있다. 그룹 머리의 [＋]로 칸을 계속 추가하면 된다.
+   예전 방식으로 이미 불러와 둔 낱개 블록은 그대로 두고 건드리지 않는다. */
+
+/* 이미 글쓰기로 불러온 아이디어 id 모음 — 예전 방식(블록의 fromIdea)과 새 방식(그룹의 fromIdea) 둘 다 */
+function loadedIdeaIds(){
+  const s=new Set();
+  (P.writeDoc.blocks||[]).forEach(b=>{ if(b.fromIdea) s.add(b.fromIdea); });
+  (P.writeDoc.groups||[]).forEach(g=>{ if(g.fromIdea) s.add(g.fromIdea); });
+  return s;
+}
+/* 아이디어 하나 → 그룹(섹션 블럭) + 그 안의 빈 칸 블록 하나.
+   칸 블록에는 fromIdea를 남기지 않는다 — 아이디어와의 연결은 그룹이 갖고 있고, 블록에 남기면
+   "제목이 비면 아이디어 문구로 채우는" 보정(2356행)이 걸려 그룹 이름과 제목이 중복되기 때문. */
+function createIdeaGroup(sec, ideaId){
+  const gid=uid();
+  P.writeDoc.groups=P.writeDoc.groups||[];
+  P.writeDoc.groups.push({id:gid, name:plotIdeaText(ideaId)||"아이디어", fromIdea:ideaId, sectionId:sec.id});
+  P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[], groupId:gid, backgrounds:[], characters:[]});
+}
+/* 그룹(섹션 블럭) 안에 칸 블록 하나 추가 — 같은 그룹 블록들이 목록에서 이어져 보여야 하므로
+   그 그룹의 마지막 블록 바로 뒤에 끼워 넣는다(칸이 하나도 없으면 목록 끝에 붙인다). */
+function addBlockToGroup(gid){
+  const g=(P.writeDoc.groups||[]).find(x=>x.id===gid); if(!g) return;
+  const blocks=P.writeDoc.blocks||[];
+  let lastIdx=-1;
+  blocks.forEach((b,i)=>{ if(b.groupId===gid) lastIdx=i; });
+  const secId = lastIdx>=0 ? (blocks[lastIdx].sectionId||g.sectionId||"") : (g.sectionId||"");
+  const nb={id:uid(), sectionId:secId, fromIdea:"", title:"", items:[], groupId:gid, backgrounds:[], characters:[]};
+  if(lastIdx>=0) blocks.splice(lastIdx+1, 0, nb); else blocks.push(nb);
+  P.writeDoc.blocks=blocks;
+  writeFocusTitle=nb.id; save(); render();
+}
+
+/* 플롯 생성에서 배치한 아이디어를 섹션 블럭(그룹)으로 불러오기 (이미 불러온 아이디어는 건너뜀) */
 function loadPlotIntoWrite(){
-  const existing=new Set((P.writeDoc.blocks||[]).map(b=>b.fromIdea).filter(Boolean));
+  const existing=loadedIdeaIds();
   let added=0;
   (P.plotDoc.sections||[]).forEach(sec=>{
     (sec.ideaIds||[]).forEach(id=>{
       if(existing.has(id)) return;
-      P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[], groupId:"", backgrounds:[], characters:[]});
+      createIdeaGroup(sec, id);
       existing.add(id); added++;
     });
   });
-  if(added){ save(); render(); alert(`플롯에서 ${added}개의 아이디어를 장면 블록으로 불러왔습니다.`); }
+  if(added){ save(); render(); alert(`플롯에서 ${added}개의 아이디어를 섹션 블럭으로 불러왔습니다.\n각 섹션 블럭 머리의 ＋ 버튼으로 그 안에 칸을 추가할 수 있습니다.`); }
   else alert("새로 불러올 아이디어가 없습니다.\n(플롯 생성 탭에서 각 섹션에 아이디어를 배치해 주세요.)");
 }
 /* 특정 플롯 단계(섹션)에 빈 장면 블록 하나 생성 */
@@ -2485,11 +2530,11 @@ function addSceneBlock(sec){
 }
 /* 특정 플롯 단계(섹션)의 배치 아이디어만 불러오기 */
 function loadSectionIdeas(sec){
-  const existing=new Set((P.writeDoc.blocks||[]).map(b=>b.fromIdea).filter(Boolean));
+  const existing=loadedIdeaIds();
   let added=0;
   (sec.ideaIds||[]).forEach(id=>{
     if(existing.has(id)) return;
-    P.writeDoc.blocks.push({id:uid(), sectionId:sec.id, fromIdea:id, title:plotIdeaText(id), items:[], groupId:"", backgrounds:[], characters:[]});
+    createIdeaGroup(sec, id);
     existing.add(id); added++;
   });
   if(added){ save(); render(); }
@@ -2579,7 +2624,10 @@ function blockGroupWrap(gid, list){
   };
   const ungroupBtn=document.createElement("button"); ungroupBtn.title="그룹 해제"; ungroupBtn.innerHTML=ICONS.ungroup;
   ungroupBtn.onclick=()=>ungroupBlocks(gid);
-  actions.append(renameBtn, ungroupBtn);
+  /* 2026-09-10: 이 섹션 블럭 안에 칸 블록을 바로 추가 */
+  const addBtn=document.createElement("button"); addBtn.title="이 섹션 블럭 안에 칸 추가"; addBtn.innerHTML=ICONS.plus;
+  addBtn.onclick=()=>addBlockToGroup(gid);
+  actions.append(addBtn, renameBtn, ungroupBtn);
   head.append(title, actions);
   const body=document.createElement("div"); body.className="wg-body";
   wrap.append(head, body);
@@ -3392,6 +3440,9 @@ function rStoryboard(){
   app.appendChild(layout);
 
   let rowNo=0;
+  /* 2026-09-10: 대사 번호 — 콘티 전체를 통틀어 1부터 이어지는 연속 번호(칸이 바뀌어도 이어짐).
+     칸 순서(위 → 아래)대로 세야 하므로 행을 그리는 순서 그대로 하나의 카운터를 넘겨준다. */
+  const dlgNo={n:0};
   pd.sections.forEach(sec=>{
     const secBlocks=blocksOfSection(sec.id);
     if(!secBlocks.length) return;
@@ -3400,14 +3451,14 @@ function rStoryboard(){
     div.innerHTML=`<span class="wd-name">${esc(sec.name)}</span>`;
     section.appendChild(div);
     const list=document.createElement("div"); list.className="sb-rowlist"; list.dataset.sec=sec.id;
-    secBlocks.forEach(bl=>{ list.appendChild(storyboardRow(bl, ++rowNo)); });
+    secBlocks.forEach(bl=>{ list.appendChild(storyboardRow(bl, ++rowNo, dlgNo)); });
     section.appendChild(list);
     setupStoryboardRowDnD(list, layout);
     layout.appendChild(section);
   });
 }
 
-function storyboardRow(bl, no){
+function storyboardRow(bl, no, dlgNo){
   const row=document.createElement("div"); row.className="sb-row"; row.draggable=true; row.dataset.id=bl.id;
   row.addEventListener("dragstart", ()=>{ row.classList.add("dragging"); dndDropHandled=false; });
   row.addEventListener("dragend", ()=>{ row.classList.remove("dragging"); if(!dndDropHandled) commitStoryboardOrder(row.closest(".storyboard-layout")); });
@@ -3422,7 +3473,9 @@ function storyboardRow(bl, no){
   textCell.appendChild(title);
   const body=document.createElement("div"); body.className="sb-text-body";
   const texts=(bl.items||[]).filter(it=>(it.text||"").trim().length)
-    .map(it=> it.type==="line" ? ((it.char||"(미지정)")+": "+it.text.trim()) : it.text.trim());
+    .map(it=> it.type==="line"
+      ? ((dlgNo ? (++dlgNo.n)+". " : "")+(it.char||"(미지정)")+": "+it.text.trim())
+      : it.text.trim());
   body.textContent=texts.length?texts.join("\n"):"(내용 없음)";
   textCell.appendChild(body);
   row.appendChild(textCell);
@@ -4284,10 +4337,14 @@ async function rFeedbackDetail(type, id, version){
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const sub=res.body.submission;
   if(titleEl) titleEl.innerHTML=`${ICONS.chat} ${esc(TYPE_LABEL[sub.type])} — ${esc(sub.assignmentTitle)}`;
+  /* 2026-09-10: 교수님이 남긴 "평가"(총평) — 있으면 첨삭 내용보다 먼저 보여준다 */
+  const evalHtml=(sub.evaluation||"").trim()
+    ? `<div class="review-eval"><div class="review-eval-label">${ICONS.check} 교수님 평가</div><div class="review-eval-view">${esc(sub.evaluation)}</div></div>`
+    : "";
   if(!sub.feedback){
-    wrap.innerHTML=sub.checkedAt
+    wrap.innerHTML=evalHtml+(sub.checkedAt
       ? `<p class="hint">교수님이 이 과제를 확인하셨습니다. (${esc(fmtDate(sub.checkedAt))}) 첨삭 내용은 아직 없습니다.</p>`
-      : `<p class="hint">아직 첨삭 전입니다.</p>`;
+      : `<p class="hint">아직 첨삭 전입니다.</p>`);
     return;
   }
   if(sub.type==="storyboard"){
@@ -4297,7 +4354,7 @@ async function rFeedbackDetail(type, id, version){
             ${sub.versions.slice().reverse().map(v=>`<option value="${v.version}"${v.version===sub.viewingVersion?" selected":""}>버전 ${v.version}${v.version===sub.latestVersion?" (최신)":""}</option>`).join("")}
           </select></label>`
       : "";
-    wrap.innerHTML=`${versionPicker}<div id="feedbackPairs"></div>`;
+    wrap.innerHTML=`${evalHtml}${versionPicker}<div id="feedbackPairs"></div>`;
     const verSel=document.getElementById("feedbackVersionSelect");
     if(verSel) verSel.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(verSel.value)}; render(); };
     renderSbFeedbackBlocks(document.getElementById("feedbackPairs"), Array.isArray(sub.data)?sub.data:[], sub.feedback, {editable:false, submittedLabel:"내가 제출한 콘티"});
@@ -4319,7 +4376,7 @@ async function rFeedbackDetail(type, id, version){
           ${sub.versions.slice().reverse().map(v=>`<option value="${v.version}"${v.version===sub.viewingVersion?" selected":""}>버전 ${v.version}${v.version===sub.latestVersion?" (최신)":""}</option>`).join("")}
         </select></label>`
     : "";
-  wrap.innerHTML=`${versionPicker}<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat}${memoNote} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
+  wrap.innerHTML=`${evalHtml}${versionPicker}<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat}${memoNote} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
     ${mismatch?`<br><b style="color:#b3503a">※ 이 과제는 "${esc(sub.projectName)}" 작품에서 제출했는데, 지금 열려있는 작품은 "${esc(P.name)}"입니다. 다른 작품에 반영될 수 있으니 확인해주세요.</b>`:""}</p>
     <button class="btn" id="applyFeedbackBtn" style="margin-bottom:14px;width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>
     <div id="feedbackPairs"></div>`;
@@ -4894,6 +4951,7 @@ async function submissionToPdfBlob(sub){
     +"font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:14px;line-height:1.6;box-sizing:border-box";
   wrap.innerHTML=`<h2 style="margin:0 0 4px;font-size:20px">${esc(sub.studentName)} (${esc(sub.studentUsername)})</h2>
     <p style="margin:0 0 18px;color:#666">${esc(sub.assignmentTitle)} · ${esc(TYPE_LABEL[sub.type]||sub.type)} · 제출 ${esc(fmtDate(sub.submittedAt))}</p>
+    ${(sub.evaluation||"").trim() ? `<div style="margin:0 0 18px;padding:10px 12px;background:#fdf6e3;border-left:3px solid #c9a227;white-space:pre-wrap"><b>평가:</b> ${esc(sub.evaluation)}</div>` : ""}
     ${pairs.length ? pairs.map(p=>`<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #ddd">
         <div style="font-weight:700;margin-bottom:6px">${esc(p.label)}</div>
         <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
@@ -4975,6 +5033,7 @@ async function rProfSubmissionReview(id, version){
     <p class="hint" id="reviewHint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>(위/아래로 분리) 또는 <b>메모</b>(텍스트를 드래그해 선택한 채 우클릭하면 그 범위에 각주로, 그냥 우클릭하면 블록 전체에 표시)를 달 수 있습니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
     <div id="reviewCheckBar"></div>
     <div id="reviewVersionBanner"></div>
+    <div id="reviewEvalBox"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
     <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
   app.appendChild(c);
@@ -5014,6 +5073,31 @@ async function rProfSubmissionReview(id, version){
       bannerEl.innerHTML="";
     }
   }
+  /* 2026-09-10: "평가" — 첨삭·메모와 별개로 교수가 남기는 총평(선택 입력). 콘티처럼 "피드백 전달"
+     버튼이 없는 화면에서도 남길 수 있도록 자체 [평가 저장] 버튼을 둔다. 첨삭 버전과 무관하게
+     "가장 최근에 저장한 총평" 하나만 보관되고, 학생 피드백 화면에 그대로 보인다. */
+  const evalBox=document.getElementById("reviewEvalBox");
+  let evalTa=null;
+  if(evalBox && isLatest){
+    evalBox.innerHTML=`<div class="review-eval">
+      <div class="review-eval-label">${ICONS.check} 평가 <span class="hint">(선택 사항 · 학생에게 그대로 보입니다)</span></div>
+      <textarea id="reviewEvalInput" class="review-eval-input" rows="3" placeholder="과제 전체에 대한 평가를 자유롭게 적어주세요. 비워두어도 됩니다."></textarea>
+      <div class="review-eval-actions"><button type="button" class="btn ghost sm" id="reviewEvalSaveBtn">평가 저장</button><span class="hint" id="reviewEvalState"></span></div>
+    </div>`;
+    evalTa=document.getElementById("reviewEvalInput");
+    evalTa.value=sub.evaluation||"";
+    const evalSaveBtn=document.getElementById("reviewEvalSaveBtn");
+    const evalState=document.getElementById("reviewEvalState");
+    evalSaveBtn.onclick=async ()=>{
+      evalSaveBtn.disabled=true; evalState.textContent="저장 중…";
+      const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, evaluation:evalTa.value})});
+      evalSaveBtn.disabled=false;
+      evalState.textContent = r.ok ? "저장했습니다." : ((r.body&&r.body.error)||"저장에 실패했습니다.");
+    };
+  }else if(evalBox && (sub.evaluation||"").trim()){
+    evalBox.innerHTML=`<div class="review-eval"><div class="review-eval-label">평가</div><div class="review-eval-view">${esc(sub.evaluation)}</div></div>`;
+  }
+
   if(sub.type==="storyboard"){
     if(saveBtn) saveBtn.style.display="none";
     renderSbFeedbackBlocks(pairsEl, Array.isArray(sub.data)?sub.data:[], sub.feedback, {
@@ -5041,7 +5125,9 @@ async function rProfSubmissionReview(id, version){
     });
     const afterList=pairs.map(p=>p.after);
     const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList);
-    const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback, memos:reviewMemos})});
+    const payload={id, feedback, memos:reviewMemos};
+    if(evalTa) payload.evaluation=evalTa.value;   /* 평가도 함께 저장 */
+    const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify(payload)});
     /* rProfSubmissionReview(id)를 직접 다시 부르면 app.innerHTML을 지우지 않고 카드를 또 appendChild해서
        화면에 이전 카드+새 카드가 이중으로 쌓인다(2026-08-20 발견). render()를 거쳐야 app이 먼저 비워진 뒤
        profReviewId 기준으로 이 함수가 다시 호출된다. */

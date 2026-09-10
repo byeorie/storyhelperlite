@@ -986,3 +986,14 @@ canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
 .class-code-big-name{font-size:clamp(20px,4vw,34px);margin-bottom:18px;opacity:.9}
 .class-code-big-code{font-size:clamp(72px,18vw,220px);font-weight:800;letter-spacing:.08em;line-height:1}
 .class-code-big-hint{font-size:clamp(14px,2vw,20px);margin-top:22px;opacity:.7}
+
+
+/* ===== 평가(총평) — 첨삭 화면 / 학생 피드백 화면 (2026-09-10) =====
+   첨삭·메모와는 별개로 교수가 과제 전체에 남기는 선택 입력. 옅은 노란 테두리 상자로 구분한다. */
+.review-eval{margin:0 0 14px;padding:12px 14px;border:1px solid #e3d9b0;border-radius:10px;background:#fdfaef}
+.review-eval-label{font-weight:700;font-size:13px;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.review-eval-label svg{width:15px;height:15px}
+.review-eval-label .hint{font-weight:400}
+.review-eval-input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;line-height:1.6;resize:vertical;background:#fff}
+.review-eval-actions{display:flex;align-items:center;gap:10px;margin-top:8px}
+.review-eval-view{white-space:pre-wrap;font-size:13px;line-height:1.7}

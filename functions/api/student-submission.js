@@ -16,7 +16,7 @@ export async function onRequestGet({ request, env }) {
   const wantVersion = Number(url.searchParams.get("version")) || null;
 
   const row = await env.DB.prepare(
-    "SELECT s.id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, a.title AS assignment_title " +
+    "SELECT s.id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, s.evaluation, a.title AS assignment_title " +
     "FROM submissions s JOIN assignments a ON a.id = s.assignment_id WHERE s.id = ? AND s.student_id = ?"
   ).bind(id, auth.user.id).first();
   if (!row) return jsonResponse({ error: "제출물을 찾을 수 없습니다." }, 404);
@@ -61,6 +61,7 @@ export async function onRequestGet({ request, env }) {
     submission: {
       id: row.id, type: row.type, projectName: row.project_name, data, feedback, memos,
       submittedAt: row.submitted_at, feedbackAt: row.feedback_at, checkedAt: row.checked_at || null,
+      evaluation: row.evaluation || "",
       assignmentTitle: row.assignment_title,
       versions, viewingVersion, latestVersion,
     },

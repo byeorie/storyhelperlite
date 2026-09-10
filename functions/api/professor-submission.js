@@ -55,7 +55,7 @@ export async function onRequestGet({ request, env }) {
   const wantVersion = Number(url.searchParams.get("version")) || null;
 
   const row = await env.DB.prepare(
-    "SELECT s.id, s.assignment_id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, " +
+    "SELECT s.id, s.assignment_id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, s.evaluation, " +
     "  u.name AS student_name, u.username AS student_username, a.title AS assignment_title, a.prof_id " +
     "FROM submissions s JOIN users u ON u.id = s.student_id JOIN assignments a ON a.id = s.assignment_id " +
     "WHERE s.id = ?"
@@ -72,13 +72,16 @@ export async function onRequestGet({ request, env }) {
       id: row.id, type: row.type, projectName: row.project_name, data,
       feedback: v.feedback, memos: v.memos,
       submittedAt: row.submitted_at, feedbackAt: row.feedback_at, checkedAt: row.checked_at || null,
+      evaluation: row.evaluation || "",
       studentName: row.student_name, studentUsername: row.student_username, assignmentTitle: row.assignment_title,
       versions: v.versions, viewingVersion: v.viewingVersion, latestVersion: v.latestVersion,
     },
   });
 }
 
-/* POST /api/professor-submission — 첨삭 저장(=새 버전 추가)  body: { id, feedback, memos? }
+/* POST /api/professor-submission — 첨삭 저장(=새 버전 추가)  body: { id, feedback, memos?, evaluation? }
+   2026-09-10: "평가"(총평) 추가. feedback 없이 evaluation만 보내면 새 첨삭 버전을 만들지 않고
+   총평만 갱신한다(콘티처럼 "피드백 전달" 버튼이 없는 화면에서도 총평을 남길 수 있게).
    (feedback: JSON 가능한 값, memos: [{id,pairId,start,end,text}, ...] 배열, 없으면 빈 배열로 저장)
 
    2026-09-08: 버전 표에 기록하는 단계가 실패해도 submissions.feedback(최신 첨삭 본문) 갱신은 반드시
@@ -93,7 +96,8 @@ export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
   const id = Number(body && body.id);
-  if (!id || typeof body.feedback === "undefined") return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+  const hasEvaluation = typeof body.evaluation === "string";
+  if (!id || (typeof body.feedback === "undefined" && !hasEvaluation)) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
   const memos = Array.isArray(body.memos) ? body.memos : [];
 
   const owner = await env.DB.prepare(
@@ -102,6 +106,19 @@ export async function onRequestPost({ request, env }) {
   if (!owner || owner.prof_id !== auth.user.id) return jsonResponse({ error: "제출물을 찾을 수 없습니다." }, 404);
 
   const now = nowSec();
+
+  /* 총평 저장 — 컬럼이 아직 없는 DB에서도 첨삭 저장까지 막지 않도록 따로 감싼다 */
+  if (hasEvaluation) {
+    try {
+      await env.DB.prepare("UPDATE submissions SET evaluation = ? WHERE id = ?").bind(body.evaluation, id).run();
+    } catch (e) {}
+    if (typeof body.feedback === "undefined") {
+      try {
+        await env.DB.prepare("UPDATE submissions SET checked_at = COALESCE(checked_at, ?) WHERE id = ?").bind(now, id).run();
+      } catch (e) {}
+      return jsonResponse({ ok: true, evaluationOnly: true, checkedAt: now });
+    }
+  }
   const feedbackJson = JSON.stringify(body.feedback);
 
   /* (1) 버전 이력 남기기 — 실패해도 아래 (2)는 반드시 실행되므로 첨삭 자체는 저장된다. */
