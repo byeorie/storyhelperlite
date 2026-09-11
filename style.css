@@ -883,6 +883,9 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
   cursor:pointer;font-size:11px;font-weight:600;padding:4px 8px}
 .scene-tagbtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
 .scene-meta-row{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:0 0 8px}
+/* 제목 칸 자리(머리줄)에 들어간 배경/캐릭터 메모 — 2열 그리드 대신 한 줄로 흐르게 */
+.scene-title-spacer .scene-meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:2px 14px;margin:0}
+.scene-title-spacer .scene-meta-col{flex:0 1 auto}
 .scene-meta-col{display:flex;flex-wrap:wrap;align-items:center;gap:0;font-size:11px;
   background:var(--accent2);border-radius:8px;padding:5px 9px}
 .scene-meta-label{font-weight:800;color:var(--accent);flex-shrink:0;white-space:nowrap}

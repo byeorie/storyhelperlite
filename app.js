@@ -2768,7 +2768,9 @@ function sceneBlockCard(bl, main, liveRefresh, num){
      칸 안의 "플롯 / 제목" 칸을 두지 않는다. 그룹 밖 낱개 칸 블록은 그대로 제목을 쓴다. */
   const inGroup=!!(bl.groupId && (P.writeDoc.groups||[]).some(g=>g.id===bl.groupId));
   if(inGroup){
+    /* 제목 자리에 배경/캐릭터 메모를 표시 (2026-09-11) */
     const spacer=document.createElement("div"); spacer.className="scene-title-spacer";
+    const mr=sceneMetaRow(bl); if(mr) spacer.appendChild(mr);
     head.append(handle, numEl, spacer, bgBtn, charBtn, delBtn);
   }else{
     head.append(handle, numEl, titleEl, bgBtn, charBtn, delBtn);
@@ -2782,13 +2784,11 @@ function sceneBlockCard(bl, main, liveRefresh, num){
     },0);
   }
 
-  /* 배경/캐릭터 메모 — 플롯/제목 바로 아래 2열, "배경: 이름1, 이름2" 형식으로 라벨은 한 번만 표시 */
-  if((bl.backgrounds&&bl.backgrounds.length) || (bl.characters&&bl.characters.length)){
-    const metaRow=document.createElement("div"); metaRow.className="scene-meta-row";
-    const bgCol=metaCol("배경", bl.backgrounds, i=>{ bl.backgrounds.splice(i,1); save(); render(); });
-    const charCol=metaCol("캐릭터", bl.characters, i=>{ bl.characters.splice(i,1); save(); render(); });
-    metaRow.append(bgCol||document.createElement("div"), charCol||document.createElement("div"));
-    d.appendChild(metaRow);
+  /* 배경/캐릭터 메모 — 그룹 밖 칸 블록은 예전처럼 제목 아래 줄에 표시
+     (그룹 안 칸 블록은 위에서 제목 자리에 이미 넣었다) */
+  if(!inGroup){
+    const metaRow=sceneMetaRow(bl);
+    if(metaRow) d.appendChild(metaRow);
   }
 
   /* 하위 블록(본문/대사) */
@@ -2809,6 +2809,15 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   addRow.append(addTextDashed, addDlgDashed);
   d.appendChild(addRow);
   return d;
+}
+/* 배경/캐릭터 메모 줄 — 내용이 없으면 null */
+function sceneMetaRow(bl){
+  if(!((bl.backgrounds&&bl.backgrounds.length) || (bl.characters&&bl.characters.length))) return null;
+  const row=document.createElement("div"); row.className="scene-meta-row";
+  const bgCol=metaCol("배경", bl.backgrounds, i=>{ bl.backgrounds.splice(i,1); save(); render(); });
+  const charCol=metaCol("캐릭터", bl.characters, i=>{ bl.characters.splice(i,1); save(); render(); });
+  row.append(bgCol||document.createElement("div"), charCol||document.createElement("div"));
+  return row;
 }
 /* 배경/캐릭터 열 하나 — "라벨: 이름1, 이름2" 형식, 항목마다 x로 개별 삭제 */
 function metaCol(label, list, onRemoveAt){
