@@ -2085,3 +2085,16 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
 - 수정: `.submit-version-select`에 `width:auto; max-width:130px; flex:0 0 auto`를 명시.
   `.submit-assign-row`에 `flex-wrap:wrap`, `.submit-assign-item`에 `flex:1 1 260px; min-width:240px`를 줘서
   좁은 화면에서는 버튼·드롭다운이 아랫줄로 내려가도록 했다.
+
+## 2026-09-11 (4) — 콘티 첨삭 화면에 [피드백 전달] 버튼 추가
+
+콘티(storyboard)는 그림을 저장할 때마다 새 버전으로 즉시 올라가는 구조라 다른 과제 타입과 달리
+`reviewSaveBtn`을 아예 숨겨놨었다. 그 결과 교수 화면에 "피드백 전달" 버튼이 없어 마무리 동작이 없었다.
+
+- `functions/api/professor-submission.js` POST에 `deliver:true` 옵션 추가. **새 버전을 만들지 않고**
+  `feedback_at`만 갱신(= 학생 알림 발생) + `checked_at` 표시 + 평가 저장. 아직 그린 첨삭이 없으면
+  (`feedback IS NULL`) `feedback_at`은 건드리지 않고 평가 저장/확인 표시까지만 한다(`delivered:false`로 응답).
+  평가만 저장하던 기존 분기를 "첨삭 본문 없는 요청" 하나로 정리했다.
+- `app.js` — storyboard 분기에서 `saveBtn`을 숨기지 않고 [피드백 전달]로 살려서 `{deliver:true, evaluation}`을 보낸다.
+  그림 한 장 저장 시 뜨던 "피드백을 학생에게 전달했습니다." 알림은 제거(그건 저장일 뿐이라 오해를 줬다).
+  안내 문구도 함께 수정.

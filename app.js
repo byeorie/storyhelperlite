@@ -5264,7 +5264,7 @@ async function rProfSubmissionReview(id, version){
   const isLatest = !sub.latestVersion || sub.viewingVersion===sub.latestVersion;
   if(titleEl) titleEl.innerHTML=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}`;
   const hintEl=document.getElementById("reviewHint");
-  if(hintEl && sub.type==="storyboard") hintEl.textContent="각 그림의 [피드백 그리기]를 눌러 그 이미지 위에 직접 그려서 첨삭할 수 있습니다.";
+  if(hintEl && sub.type==="storyboard") hintEl.textContent="그림을 클릭하면 크게 볼 수 있고, [피드백 그리기]로 그 이미지 위에 직접 그릴 수 있습니다. 다 마쳤으면 맨 아래 [피드백 전달]로 평가와 함께 학생에게 돌려주세요.";
   /* 2026-09-08: 첨삭을 하지 않고 읽어보기만 해도 "과제 확인" 표시를 남길 수 있다 */
   const checkBar=document.getElementById("reviewCheckBar");
   if(checkBar){
@@ -5280,7 +5280,7 @@ async function rProfSubmissionReview(id, version){
       const goBtn=document.getElementById("reviewGoLatestBtn");
       if(goBtn) goBtn.onclick=()=>{ profReviewVersion=null; render(); };
     }else if(sub.type==="storyboard"){
-      bannerEl.innerHTML = sub.latestVersion ? `<p class="hint">현재 버전 ${sub.latestVersion}입니다. 이미지의 [피드백 그리기]를 누르면 그 즉시 새 버전으로 저장됩니다.</p>` : "";
+      bannerEl.innerHTML = sub.latestVersion ? `<p class="hint">현재 버전 ${sub.latestVersion}입니다. 이미지의 [피드백 그리기]를 누르면 그 즉시 새 버전으로 저장됩니다. 새 버전을 또 만들지 않고 평가만 덧붙여 돌려주려면 맨 아래 [피드백 전달]을 누르세요.</p>` : "";
     }else if(sub.latestVersion){
       bannerEl.innerHTML=`<p class="hint">현재 버전 ${sub.latestVersion}을 이어서 편집하는 중입니다. "피드백 전달"을 누르면 버전 ${sub.latestVersion+1}로 새로 저장됩니다.</p>`;
     }else{
@@ -5313,15 +5313,34 @@ async function rProfSubmissionReview(id, version){
   }
 
   if(sub.type==="storyboard"){
-    if(saveBtn) saveBtn.style.display="none";
     renderSbFeedbackBlocks(pairsEl, Array.isArray(sub.data)?sub.data:[], sub.feedback, {
       editable:isLatest,
       onFeedback: async (blockId, baseKey, newKey)=>{
         const r=await submitStoryboardFeedback(id, Array.isArray(sub.data)?sub.data:[], sub.feedback, blockId, baseKey, newKey);
-        if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewVersion=null; render(); }
+        /* 그림 한 장을 저장한 것일 뿐, 아직 "전달"은 아니다 — 전달은 아래 [피드백 전달] 버튼에서 (2026-09-11) */
+        if(r.ok){ profReviewVersion=null; render(); }
         return r;
       },
     });
+    /* 2026-09-11: 콘티도 다른 과제와 똑같이 [피드백 전달] 버튼을 둔다.
+       콘티는 그림을 저장할 때마다 이미 새 버전으로 올라가 있으므로, 이 버튼은 새 버전을 만들지 않고
+       "지금까지 그린 첨삭 + 평가"를 학생에게 보냄으로 표시한다(= 학생 화면에 알림이 뜬다). */
+    if(saveBtn){
+      saveBtn.style.display=isLatest?"":"none";
+      saveBtn.innerHTML=ICONS.upload+" 피드백 전달";
+      saveBtn.onclick=async ()=>{
+        const payload={id, deliver:true};
+        if(evalTa) payload.evaluation=evalTa.value;
+        saveBtn.disabled=true;
+        const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify(payload)});
+        saveBtn.disabled=false;
+        if(!r.ok){ alert((r.body&&r.body.error)||"전달에 실패했습니다."); return; }
+        alert(r.body && r.body.delivered
+          ? "피드백을 학생에게 전달했습니다."
+          : "평가를 저장하고 확인 표시를 했습니다. (아직 그린 피드백이 없습니다)");
+        profReviewVersion=null; render();
+      };
+    }
     return;
   }
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);

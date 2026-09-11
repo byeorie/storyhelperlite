@@ -97,7 +97,10 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
   const id = Number(body && body.id);
   const hasEvaluation = typeof body.evaluation === "string";
-  if (!id || (typeof body.feedback === "undefined" && !hasEvaluation)) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+  /* 2026-09-11: "피드백 전달"만 누른 경우(콘티처럼 그림을 그릴 때마다 이미 저장된 타입).
+     새 버전을 만들지 않고, 지금까지 저장된 첨삭을 "학생에게 보냄"으로 표시(=feedback_at 갱신)만 한다. */
+  const wantDeliver = body.deliver === true;
+  if (!id || (typeof body.feedback === "undefined" && !hasEvaluation && !wantDeliver)) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
   const memos = Array.isArray(body.memos) ? body.memos : [];
 
   const owner = await env.DB.prepare(
@@ -112,13 +115,28 @@ export async function onRequestPost({ request, env }) {
     try {
       await env.DB.prepare("UPDATE submissions SET evaluation = ? WHERE id = ?").bind(body.evaluation, id).run();
     } catch (e) {}
-    if (typeof body.feedback === "undefined") {
-      try {
-        await env.DB.prepare("UPDATE submissions SET checked_at = COALESCE(checked_at, ?) WHERE id = ?").bind(now, id).run();
-      } catch (e) {}
-      return jsonResponse({ ok: true, evaluationOnly: true, checkedAt: now });
-    }
   }
+
+  /* 첨삭 본문 없이 들어온 요청 — 평가만 저장했거나, "피드백 전달"만 누른 경우 */
+  if (typeof body.feedback === "undefined") {
+    let delivered = false;
+    try {
+      if (wantDeliver) {
+        /* 그려둔 첨삭이 있을 때만 "전달 시각"을 새로 찍는다(그래야 학생 화면에 알림이 뜬다).
+           아직 아무것도 그리지 않았다면 평가 저장 + 확인 표시까지만 한다. */
+        await env.DB.prepare(
+          "UPDATE submissions SET feedback_at = CASE WHEN feedback IS NOT NULL THEN ? ELSE feedback_at END, " +
+          "checked_at = COALESCE(checked_at, ?) WHERE id = ?"
+        ).bind(now, now, id).run();
+        const row = await env.DB.prepare("SELECT (feedback IS NOT NULL) AS hasFb FROM submissions WHERE id = ?").bind(id).first();
+        delivered = !!(row && row.hasFb);
+      } else {
+        await env.DB.prepare("UPDATE submissions SET checked_at = COALESCE(checked_at, ?) WHERE id = ?").bind(now, id).run();
+      }
+    } catch (e) {}
+    return jsonResponse({ ok: true, evaluationOnly: !wantDeliver, delivered, checkedAt: now, feedbackAt: delivered ? now : null });
+  }
+
   const feedbackJson = JSON.stringify(body.feedback);
 
   /* (1) 버전 이력 남기기 — 실패해도 아래 (2)는 반드시 실행되므로 첨삭 자체는 저장된다. */
