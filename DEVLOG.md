@@ -30,6 +30,18 @@
   그룹 밖으로 나왔으면 `groupId` 삭제. (기존에는 sectionId만 갱신해서 소속이 어긋났다)
 - `style.css`: 빈 그룹에도 떨어뜨릴 수 있게 `.wg-body{min-height:22px}`, 드롭 중 강조 `.wg-drop`.
 
+### 4) 그룹 안 칸 블록에서 "플롯 / 제목" 칸 제거
+아이디어(플롯 제목)가 섹션 블럭 머리로 분리됐으므로 칸 안에 또 제목을 두는 건 중복.
+- `sceneBlockCard()`: `bl.groupId`가 실제 그룹을 가리키면 titleEl 대신 `.scene-title-spacer`(빈 칸)를 넣어
+  배경·캐릭터·삭제 버튼 위치를 유지. 그룹 **밖** 낱개 칸 블록은 기존대로 제목 사용(미리보기·콘티 라벨이 이 값을 씀).
+- `writeFocusTitle` 자동 포커스도 그룹 안에서는 제목 대신 스크롤만 수행.
+- `style.css`: `.scene-title-spacer{flex:1 1 auto;min-width:0}` 추가.
+
+### 5) 아이디어(섹션 블럭) 상자 배경 진하게
+안쪽 흰색 칸 블록과 구분이 잘 되도록 `style.css`에서:
+`.write-blockgroup` 배경 `#faf8f3`→`#e6ddcb`, 테두리 점선→실선 `#cfc4ad`,
+`.wg-title` 색 `#8a3f2a`, `.wg-actions button` 배경을 반투명 흰색으로(진한 바탕에서 버튼이 묻히지 않게).
+
 
 ## 2026-09-10 — 평가 입력창 · 콘티 대사 번호 · 아이디어를 섹션 블럭(그룹)으로
 

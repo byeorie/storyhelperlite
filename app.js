@@ -2764,9 +2764,23 @@ function sceneBlockCard(bl, main, liveRefresh, num){
     chk.onchange=()=>{ if(chk.checked) writeSelectedIds.add(bl.id); else writeSelectedIds.delete(bl.id); render(); };
     head.appendChild(chk);
   }
-  head.append(handle, numEl, titleEl, bgBtn, charBtn, delBtn);
+  /* 2026-09-11: 섹션 블럭(그룹)에 속한 칸은 그룹 머리에 이미 플롯(아이디어) 제목이 있으므로
+     칸 안의 "플롯 / 제목" 칸을 두지 않는다. 그룹 밖 낱개 칸 블록은 그대로 제목을 쓴다. */
+  const inGroup=!!(bl.groupId && (P.writeDoc.groups||[]).some(g=>g.id===bl.groupId));
+  if(inGroup){
+    const spacer=document.createElement("div"); spacer.className="scene-title-spacer";
+    head.append(handle, numEl, spacer, bgBtn, charBtn, delBtn);
+  }else{
+    head.append(handle, numEl, titleEl, bgBtn, charBtn, delBtn);
+  }
   d.appendChild(head);
-  if(bl.id===writeFocusTitle){ writeFocusTitle=null; setTimeout(()=>{ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"}); },0); }
+  if(bl.id===writeFocusTitle){
+    writeFocusTitle=null;
+    setTimeout(()=>{
+      if(!inGroup){ titleEl.contentEditable="true"; titleEl.focus(); selectAllEditable(titleEl); }
+      if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth", block:"center"});
+    },0);
+  }
 
   /* 배경/캐릭터 메모 — 플롯/제목 바로 아래 2열, "배경: 이름1, 이름2" 형식으로 라벨은 한 번만 표시 */
   if((bl.backgrounds&&bl.backgrounds.length) || (bl.characters&&bl.characters.length)){

@@ -398,6 +398,8 @@ body.sb-collapsed .plot-modal-overlay.center-content{left:44px}
 .scene-dlg-btn:hover{filter:brightness(.96)}
 .scene-del-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 5px}
 .scene-del-btn:hover{color:#b3503a}
+/* 그룹 안 칸 블록: 제목 칸 자리를 빈 공간으로 대신해 버튼 위치를 유지 */
+.scene-title-spacer{flex:1 1 auto;min-width:0}
 .scene-title{flex:1 1 auto;min-width:0;font-size:11px;font-weight:800;color:var(--ink);
   border:1px solid var(--line);border-radius:6px;line-height:1.5;
   padding:6px 10px;margin:0;background:#e2dbca;font-family:inherit;cursor:default;
@@ -846,13 +848,14 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
 /* ===== 본문 블록 선택 · 그룹화 ===== */
 .scene-select-chk{flex-shrink:0;margin-top:6px;width:15px;height:15px;cursor:pointer}
 .scene-block.selected{outline:2px solid var(--accent);outline-offset:1px}
-.write-blockgroup{border:1px dashed var(--line);border-radius:10px;padding:10px;margin-bottom:10px;
-  background:#faf8f3}
+/* 아이디어(섹션 블럭) 상자 — 안쪽 칸 블록(흰색)과 확실히 구분되도록 배경을 진하게 */
+.write-blockgroup{border:1px solid #cfc4ad;border-radius:10px;padding:10px;margin-bottom:10px;
+  background:#e6ddcb}
 .wg-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.wg-title{font-size:12px;font-weight:800;color:var(--accent);flex:1;min-width:0;
+.wg-title{font-size:12px;font-weight:800;color:#8a3f2a;flex:1;min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wg-actions{display:flex;gap:4px}
-.wg-actions button{background:transparent;border:1px solid var(--line);border-radius:6px;
+.wg-actions button{background:rgba(255,255,255,.6);border:1px solid #cfc4ad;border-radius:6px;
   cursor:pointer;font-size:11px;padding:3px 7px;color:var(--muted)}
 .wg-actions button:hover{border-color:var(--accent);color:var(--accent)}
 .wg-actions button.wg-add{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
