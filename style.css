@@ -668,21 +668,32 @@ body.logged-in .login-overlay { display: none; }
 /* ===== 첨삭 화면 — 메모(첨삭과 별도로 학생 원본 텍스트에 다는 메모) =====
    드래그로 선택해서 단 메모: 선택 범위 배경을 노랗게(mark.memo-hl) + 끝에 작은 각주번호(sup.memo-fn-num).
    선택 없이 블록을 그냥 우클릭해서 단 메모: 각주번호 없이 블록 끝에 *(sup.memo-star)만 표시.
-   메모 카드(.memo-block)는 그 블록 텍스트 바로 아래에 여백 없이(margin-top:0) 붙고, 옅은 노란색 배경 +
-   돋움체를 쓴다. */
-mark.memo-hl{background:#ffe066;border-radius:2px;padding:0 1px;font:inherit;color:inherit}
-sup.memo-fn-num{font-size:10px;font-weight:700;color:var(--accent);margin:0 1px}
-sup.memo-star{font-size:12px;font-weight:700;color:var(--accent);margin:0 1px}
+   메모 카드(.memo-block)는 그 블록 텍스트 바로 아래에 여백 없이(margin-top:0) 붙고, 그 메모 색의
+   옅은 배경 + 왼쪽 색 띠 + 돋움체를 쓴다. */
+/* 2026-09-11: 메모마다 색을 달리한다(7색 로테이션, .memo-c0~.memo-c6) — 선택 범위 하이라이트,
+   각주 번호, 메모 카드가 모두 같은 색을 쓴다. 각 클래스는 자기 자신에게 쓸 변수 3개만 정의한다:
+   --memo-hl(선택 범위 배경) / --memo-bg(메모 카드 배경) / --memo-ink(번호·마커 글자색) */
+.memo-c0{--memo-hl:#ffe066;--memo-bg:#fdf6d3;--memo-ink:#8a6d0f}
+.memo-c1{--memo-hl:#ffc2cf;--memo-bg:#fdeaef;--memo-ink:#a8455f}
+.memo-c2{--memo-hl:#b3e0ff;--memo-bg:#e4f3fd;--memo-ink:#2b6f9c}
+.memo-c3{--memo-hl:#c3ebb7;--memo-bg:#e9f6e4;--memo-ink:#467a38}
+.memo-c4{--memo-hl:#dbc9f7;--memo-bg:#f0eafb;--memo-ink:#67499e}
+.memo-c5{--memo-hl:#ffd0a6;--memo-bg:#fdeedd;--memo-ink:#ad6522}
+.memo-c6{--memo-hl:#a9e6da;--memo-bg:#e3f6f2;--memo-ink:#2c7a6c}
+mark.memo-hl{background:var(--memo-hl,#ffe066);border-radius:2px;padding:0 1px;font:inherit;color:inherit}
+sup.memo-fn-num{font-size:10px;font-weight:700;color:var(--memo-ink,var(--accent));margin:0 1px}
+sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent));margin:0 1px}
 .memo-block-list{margin-top:0;display:flex;flex-direction:column;gap:2px}
 /* 이전 버전(prev) 패널은 자체 padding이 0이고 안쪽 version-prev-text가 하단 padding을 갖고 있어서,
    메모 카드 목록을 그 바로 밑에 진짜 "여백 없이" 붙이려면 그 하단 padding만큼 끌어올려야 한다 */
 .version-prev > .memo-block-list{margin-top:-6px}
-.memo-block{background:#fdf6d3;padding:5px 8px;display:flex;align-items:flex-start;gap:6px}
-.memo-block-marker{flex-shrink:0;font-size:11px;font-weight:700;color:var(--accent);line-height:1.6}
+.memo-block{background:var(--memo-bg,#fdf6d3);padding:5px 8px;display:flex;align-items:flex-start;gap:6px;
+  border-left:3px solid var(--memo-hl,#ffe066)}
+.memo-block-marker{flex-shrink:0;font-size:11px;font-weight:700;color:var(--memo-ink,var(--accent));line-height:1.6}
 .memo-block-text{flex:1;min-width:0;font-family:Dotum,"돋움",sans-serif;font-size:12px;line-height:1.6;
   color:var(--ink);white-space:pre-wrap;word-break:break-word}
 .memo-block-editable{cursor:text}
-.memo-block-editable:hover{background:#fbecab;border-radius:3px}
+.memo-block-editable:hover{background:rgba(0,0,0,.06);border-radius:3px}
 .memo-block-edit-ta{flex:1;min-width:0;font-family:Dotum,"돋움",sans-serif;font-size:12px;line-height:1.6;
   color:var(--ink);background:#fff;border:1px solid var(--accent);border-radius:3px;padding:2px 4px;
   resize:vertical;min-height:20px}

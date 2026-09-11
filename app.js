@@ -5570,15 +5570,26 @@ function captureMemoSelection(el){
 }
 /* memos 중 이 pair(pairId)에 속한 것만 골라, 드래그 선택(각주) 메모에 시작 위치 순서로 1,2,3...을 매긴다.
    (본문 옆 각주번호와 아래 메모 카드의 번호가 항상 같은 순서로 매겨지도록 이 번호표를 함께 씀) */
+/* 2026-09-11: 메모마다 다른 색을 쓴다(7색 로테이션) — 선택 범위 하이라이트와 메모 카드가 같은 색이라
+   메모가 여러 개 달린 블록에서도 "이 메모가 어느 부분에 대한 것인지" 색으로 바로 알 수 있다.
+   색 순서는 각주 번호 순서(선택 범위가 있는 메모는 시작 위치 순, 범위 없는 메모는 그 뒤)와 같다. */
+const MEMO_COLOR_COUNT=7;
+function memoColorClass(i){ return "memo-c"+(((i%MEMO_COLOR_COUNT)+MEMO_COLOR_COUNT)%MEMO_COLOR_COUNT); }
 function computePairMemoNumbering(memos, pairId){
   const mine=(memos||[]).filter(m=>m.pairId===pairId);
   const ranged=mine.filter(m=>m.start!=null).sort((a,b)=>a.start-b.start);
   const numMap=new Map(); ranged.forEach((m,i)=>numMap.set(m.id, i+1));
-  return {mine, numMap};
+  /* 색 순서: 범위 메모(번호순) → 범위 없는 메모(등록순) */
+  const colorMap=new Map();
+  let ci=0;
+  ranged.forEach(m=>colorMap.set(m.id, memoColorClass(ci++)));
+  mine.filter(m=>m.start==null).forEach(m=>colorMap.set(m.id, memoColorClass(ci++)));
+  return {mine, numMap, colorMap};
 }
 /* rawText를 mine(이 블록의 메모들)의 범위에 따라 일반 텍스트/<mark>(드래그 메모, 각주번호 포함)로
    다시 그리고, 끝에 "일반 메모"(범위 없음) 개수만큼 *를 붙인다. */
-function renderMemoTargetText(el, rawText, mine, numMap){
+function renderMemoTargetText(el, rawText, mine, numMap, colorMap){
+  const cls=(id)=>(colorMap&&colorMap.get(id))||"memo-c0";
   el.textContent="";
   const ranged=mine.filter(m=>m.start!=null && m.end!=null && m.end>m.start).sort((a,b)=>a.start-b.start);
   const general=mine.filter(m=>m.start==null);
@@ -5590,10 +5601,10 @@ function renderMemoTargetText(el, rawText, mine, numMap){
       ranged.forEach(m=>{
         const s=Math.max(cur,Math.min(m.start,rawText.length)), en=Math.max(s,Math.min(m.end,rawText.length));
         if(s>cur) el.appendChild(document.createTextNode(rawText.slice(cur,s)));
-        const mark=document.createElement("mark"); mark.className="memo-hl"; mark.dataset.memoId=m.id;
+        const mark=document.createElement("mark"); mark.className="memo-hl "+cls(m.id); mark.dataset.memoId=m.id;
         mark.textContent=rawText.slice(s,en);
         el.appendChild(mark);
-        const sup=document.createElement("sup"); sup.className="memo-fn-num"; sup.dataset.memoSynthetic="1";
+        const sup=document.createElement("sup"); sup.className="memo-fn-num "+cls(m.id); sup.dataset.memoSynthetic="1";
         sup.textContent=String(numMap.get(m.id)||"");
         el.appendChild(sup);
         cur=en;
@@ -5603,20 +5614,21 @@ function renderMemoTargetText(el, rawText, mine, numMap){
   }else if(!general.length){
     el.innerHTML='<span class="muted">(내용 없음)</span>';
   }
-  general.forEach(()=>{
-    const sup=document.createElement("sup"); sup.className="memo-star"; sup.dataset.memoSynthetic="1"; sup.textContent="*";
+  general.forEach(m=>{
+    const sup=document.createElement("sup"); sup.className="memo-star "+cls(m.id); sup.dataset.memoSynthetic="1"; sup.textContent="*";
     el.appendChild(sup);
   });
 }
 /* container(블록 el의 부모, 예: box/prev) 맨 아래에 이 블록(mine)에 달린 메모들을 카드로 나열한다.
    본문 텍스트 바로 아래 여백 없이 붙고(margin-top:0), 옅은 노란색 배경/돋움체는 style.css의 .memo-block에서.
    opts.canDelete=true면 각 카드에 삭제(✕) 버튼을 붙이고 opts.onDelete(memo)를 호출한다. */
-function renderMemoCardsInto(container, mine, numMap, opts){
+function renderMemoCardsInto(container, mine, numMap, opts, colorMap){
   const old=container.querySelector(":scope > .memo-block-list"); if(old) old.remove();
   if(!mine.length) return;
   const list=document.createElement("div"); list.className="memo-block-list";
   mine.forEach(m=>{
-    const box=document.createElement("div"); box.className="memo-block";
+    const box=document.createElement("div");
+    box.className="memo-block "+((colorMap&&colorMap.get(m.id))||"memo-c0");
     const marker=document.createElement("span"); marker.className="memo-block-marker";
     marker.textContent = m.start!=null ? String(numMap.get(m.id)||"") : "*";
     box.appendChild(marker);
@@ -5697,16 +5709,16 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
     }
     const changed=p.after!==p.before;
     const split = editable ? splitIds.has(p.id) : changed;
-    const {mine, numMap}=computePairMemoNumbering(memos, p.id);
+    const {mine, numMap, colorMap}=computePairMemoNumbering(memos, p.id);
     const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":""); wrap.dataset.id=p.id;
     let memoTargetEl;
     if(!split){
       const box=document.createElement("div"); box.className="plan-block review-before";
       const lbl=document.createElement("label"); lbl.textContent=p.label;
       const txt=document.createElement("div"); txt.className="review-before-text";
-      renderMemoTargetText(txt, p.before, mine, numMap);
+      renderMemoTargetText(txt, p.before, mine, numMap, colorMap);
       box.append(lbl, txt);
-      renderMemoCardsInto(box, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit});
+      renderMemoCardsInto(box, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
       wrap.appendChild(box);
       memoTargetEl=txt;
     }else{
@@ -5735,9 +5747,9 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       }
       /* 이 블록에 메모가 있으면 "이전 버전" 패널은 첨삭 diff 강조 대신 메모 강조(하이라이트+각주번호)를
          보여준다 — 같은 텍스트 위에 두 강조를 함께 표시하기 어려워, 메모가 달린 블록은 메모 표시를 우선한다 */
-      if(mine.length) renderMemoTargetText(prevText, p.before, mine, numMap);
+      if(mine.length) renderMemoTargetText(prevText, p.before, mine, numMap, colorMap);
       else prevText.innerHTML=diffPrevHtml(p.before, getAfter());
-      renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit});
+      renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
       wrap.append(prev, cur);
       memoTargetEl=prevText;
     }
@@ -5852,8 +5864,8 @@ function buildAppliedMemoList(type, key, onChanged){
   const mine=getAppliedMemos(type,key);
   if(!mine.length) return null;
   const list=document.createElement("div"); list.className="memo-block-list";
-  mine.forEach(m=>{
-    const box=document.createElement("div"); box.className="memo-block";
+  mine.forEach((m,i)=>{
+    const box=document.createElement("div"); box.className="memo-block "+memoColorClass(i);
     const marker=document.createElement("span"); marker.className="memo-block-marker"; marker.textContent="교수님 메모";
     const txt=document.createElement("div"); txt.className="memo-block-text"; txt.textContent=m.text;
     const del=document.createElement("button"); del.type="button"; del.className="memo-block-del"; del.textContent="✕"; del.title="메모 삭제";

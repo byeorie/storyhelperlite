@@ -2118,3 +2118,18 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
 - 아이디어 카드에 달린 교수 메모도 카드 안에 표시(`plotIdeaCard`에 secId 전달 → `renderAppliedMemoBlock`).
 - PDF 내보내기 라벨에도 섹션/그룹 이름을 함께 찍는다.
 - 예전에 제출된 과제는 그대로 열리며, 아이디어 카드 구분 정보가 없어 예전처럼 섹션 블럭 하나로 보인다.
+
+## 2026-09-11 (6) — 메모마다 다른 색 (7색 로테이션)
+
+메모가 여러 개 달린 블록에서 선택 범위 하이라이트가 전부 노란색이라 어느 메모가 어느 부분에 대한
+것인지 각주 번호를 일일이 대조해야 했다.
+
+- `computePairMemoNumbering`이 `colorMap`(메모 id → `memo-c0`~`memo-c6`)을 함께 반환한다.
+  색 순서 = 각주 번호 순서(선택 범위가 있는 메모는 시작 위치 순 → 범위 없는 메모는 등록 순).
+- `renderMemoTargetText` / `renderMemoCardsInto`가 colorMap을 받아 `mark.memo-hl`, `sup.memo-fn-num`,
+  `sup.memo-star`, `.memo-block`에 같은 색 클래스를 붙인다. 학생 작업물에 반영된 메모 목록
+  (`buildAppliedMemoList`)도 같은 7색을 순서대로 쓴다.
+- `style.css` — `.memo-c0`~`.memo-c6`이 자기 자신에게 쓸 변수 3개(`--memo-hl` 선택 범위 배경 /
+  `--memo-bg` 카드 배경 / `--memo-ink` 번호·마커 글자색)만 정의하고, 기존 규칙들은 그 변수를 참조한다.
+  색을 늘리거나 바꾸려면 이 7줄과 `MEMO_COLOR_COUNT`만 고치면 된다.
+  메모 카드에는 왼쪽 3px 색 띠를 추가해 하이라이트 색과 짝이 더 잘 보이게 했다.
