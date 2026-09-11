@@ -598,13 +598,19 @@ body.logged-in .login-overlay { display: none; }
   background: var(--accent2); border-radius: 999px; padding: 2px 9px; }
 
 /* 교수 — 과제 폴더 제출함 목록의 각 줄: 제출물 버튼 + (버전이 2개 이상이면) 작은 버전 드롭다운 */
-.submit-assign-row { display: flex; align-items: center; gap: 6px; }
+/* 2026-09-11: flex-wrap 추가 — 좁은 화면에서는 [확인] 버튼과 버전 드롭다운이 아랫줄로 내려가고,
+   학생 이름 칸이 글자 한 자 폭으로 찌그러지지 않는다. */
+.submit-assign-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 /* 2026-09-08: "과제 확인" 버튼 — 첨삭과 별개로 교수가 제출물을 확인했음을 표시 */
 .submit-check-btn { flex-shrink: 0; white-space: nowrap; font-size: 12px; }
 .submit-check-btn.checked { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .submit-check-state { color: var(--accent); font-weight: 600; }
-.submit-assign-row .submit-assign-item { flex: 1; min-width: 0; }
-.submit-version-select { flex-shrink: 0; font-size: 11px; padding: 3px 4px; border: 1px solid var(--line);
+.submit-assign-row .submit-assign-item { flex: 1 1 260px; min-width: 240px; }
+/* 2026-09-11 버그 수정: 전역 규칙(input,textarea,select{width:100%})이 이 드롭다운에도 걸려서
+   버전이 2개 이상인 제출물 줄에서 드롭다운이 가로 전체를 차지하고, 그 바람에 학생 이름 칸이
+   한 글자만 보일 만큼 눌리고 목록에 가로 스크롤바가 생겼다. 내용 크기에 맞게 되돌린다. */
+.submit-version-select { flex: 0 0 auto; width: auto; max-width: 130px;
+  font-size: 11px; padding: 3px 4px; border: 1px solid var(--line);
   border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }
 
 /* 교수 — 과제 폴더 그리드 */

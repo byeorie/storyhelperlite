@@ -2073,3 +2073,15 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
    - 펜 굵기를 캔버스 해상도 비율로 보정(`strokeW()`) — 큰 이미지를 축소해 볼 때 선이 실처럼 얇아지지 않는다.
    - "전체 지우기" → "그린 것 지우기"로 바꾸고, 흰 종이로 밀어버리는 대신 **학생이 낸 원래 그림으로 되돌린다**.
    - `style.css` — `.sb-view-modal` / `.sb-view-img` / `.sb-fb-img-zoom` 추가.
+
+## 2026-09-11 (3) — 제출함 목록 레이아웃 깨짐 수정
+
+피드백을 두 번 이상 준 제출물에서 [버전 N] 드롭다운이 줄 전체를 차지하고 학생 이름 칸이 한 글자 폭으로
+눌리며 목록에 가로 스크롤바가 생기던 문제.
+
+- 원인: `style.css`의 전역 규칙 `input[type=text],textarea,select{width:100%}`가 `.submit-version-select`에도
+  적용됐다. 거기에 `flex-shrink:0`이 걸려 있어 줄어들지도 않았고, 옆의 `.submit-assign-item`(`min-width:0`)만
+  끝까지 찌그러졌다.
+- 수정: `.submit-version-select`에 `width:auto; max-width:130px; flex:0 0 auto`를 명시.
+  `.submit-assign-row`에 `flex-wrap:wrap`, `.submit-assign-item`에 `flex:1 1 260px; min-width:240px`를 줘서
+  좁은 화면에서는 버튼·드롭다운이 아랫줄로 내려가도록 했다.
