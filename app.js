@@ -2628,7 +2628,7 @@ function blockGroupWrap(gid, list){
   const ungroupBtn=document.createElement("button"); ungroupBtn.title="그룹 해제"; ungroupBtn.innerHTML=ICONS.ungroup;
   ungroupBtn.onclick=()=>ungroupBlocks(gid);
   /* 2026-09-10: 이 섹션 블럭 안에 칸 블록을 바로 추가 */
-  const addBtn=document.createElement("button"); addBtn.title="이 섹션 블럭 안에 칸 추가"; addBtn.innerHTML=ICONS.plus;
+  const addBtn=document.createElement("button"); addBtn.title="이 아이디어에서 블럭추가"; addBtn.innerHTML=ICONS.plus;
   addBtn.onclick=()=>addBlockToGroup(gid);
   actions.append(addBtn, renameBtn, ungroupBtn);
   head.append(title, actions);
