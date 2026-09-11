@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check app.js)",
+      "Bash(node --check index.html)",
+      "Bash(node \"C:\\\\Users\\\\byeor\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-byeor-Claude-Projects--------\\\\c17c1f40-32ea-4760-be64-7c3bb65e2d13\\\\scratchpad\\\\test_export.js\")",
+      "Bash(node \"C:\\\\Users\\\\byeor\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-byeor-Claude-Projects--------\\\\c17c1f40-32ea-4760-be64-7c3bb65e2d13\\\\scratchpad\\\\test_export2.js\")",
+      "Bash(node -e \"console.log\\(process.version\\)\")"
+    ]
+  }
+}

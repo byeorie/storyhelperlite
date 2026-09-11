@@ -2064,7 +2064,7 @@ function plotSectionCard(sec, idx, secWrap){
   /* 배치된 아이디어 (드롭존) */
   const body=document.createElement("div"); body.className="plot-drop plot-section-body"; body.dataset.sec=sec.id;
   const ids=(sec.ideaIds||[]);
-  ids.forEach(id=>{ const b=findIdea(id); if(b) body.appendChild(plotIdeaCard(b, secWrap)); });
+  ids.forEach(id=>{ const b=findIdea(id); if(b) body.appendChild(plotIdeaCard(b, secWrap, sec.id)); });
   card.appendChild(body);
   // 아이디어 카드 드래그(섹션 간 이동/정렬)
   body.addEventListener("dragover", e=>{
@@ -2268,7 +2268,7 @@ function commitPlotIdeaOrder(secWrap){
   save(); render();
 }
 /* 플롯용 아이디어 미니 카드 (드래그 가능, × 로 배치 해제) */
-function plotIdeaCard(b, secWrap){
+function plotIdeaCard(b, secWrap, secId){
   const d=document.createElement("div"); d.className="plot-idea"; d.dataset.id=b.id; d.draggable=false;
   const color=(b.tags&&b.tags.length)?getTagColor(b.tags[0]):"var(--line)";
   d.style.borderLeftColor=color;
@@ -2314,6 +2314,8 @@ function plotIdeaCard(b, secWrap){
     P.plotDoc.sections.forEach(s=>{ s.ideaIds=(s.ideaIds||[]).filter(x=>x!==b.id); });
     save(); render();
   };
+  /* 교수님이 이 아이디어 카드에 남긴 메모(첨삭 반영 시 저장됨) */
+  if(secId) renderAppliedMemoBlock(content,"plot",secId+"::"+b.id);
   d.appendChild(handle); d.appendChild(content); d.appendChild(editBtn); d.appendChild(rm);
   return d;
 }
@@ -4386,10 +4388,13 @@ async function buildSubmissionData(type){
   }
   if(type==="plan") return P.planDoc || blankPlanDoc();
   if(type==="plot"){
-    const sections=(P.plotDoc.sections||[]).map(s=>({
-      id:s.id, name:s.name, desc:s.desc,
-      ideaTexts:(s.ideaIds||[]).map(id=>plotIdeaText(id)).filter(t=>t&&t.trim()),
-    }));
+    /* 2026-09-11: 아이디어를 하나의 덩어리 텍스트로 합치지 않고 카드별(id+text)로 보낸다 —
+       교수 첨삭 화면에서도 학생 화면처럼 섹션 안의 아이디어 카드가 각각 따로 보이게 하기 위함.
+       ideaTexts는 예전 버전 호환용으로 함께 남긴다. */
+    const sections=(P.plotDoc.sections||[]).map(s=>{
+      const ideas=(s.ideaIds||[]).map(id=>({id, text:plotIdeaText(id)})).filter(it=>it.text&&it.text.trim());
+      return {id:s.id, name:s.name, desc:s.desc, ideas, ideaTexts:ideas.map(it=>it.text)};
+    });
     return {structure:P.plotDoc.structure||"", sections};
   }
   if(type==="write"){
@@ -4574,7 +4579,7 @@ async function rFeedbackDetail(type, id, version){
   }
   const caveat={
     plan:"",
-    plot:" 섹션 설명(예시 설명)에 첨삭 내용 전체가 반영되고, 배치된 아이디어 카드는 그대로 유지됩니다.",
+    plot:" 섹션 설명과 아이디어 카드가 각각 따로 반영됩니다(아이디어 문구는 플롯 화면에서만 바뀌고 아이디어 수집의 원본은 그대로입니다).",
     write:" \"이름: 대사\" 형식의 줄만 대사로 인식해서 되돌리며, 분기 블록은 복원되지 않습니다.",
     background:"", event:"",
     character:" \"항목명: 내용\" 형식의 줄로 각 항목을 인식해 되돌립니다.",
@@ -5167,7 +5172,7 @@ async function submissionToPdfBlob(sub){
     <p style="margin:0 0 18px;color:#666">${esc(sub.assignmentTitle)} · ${esc(TYPE_LABEL[sub.type]||sub.type)} · 제출 ${esc(fmtDate(sub.submittedAt))}</p>
     ${(sub.evaluation||"").trim() ? `<div style="margin:0 0 18px;padding:10px 12px;background:#fdf6e3;border-left:3px solid #c9a227;white-space:pre-wrap"><b>평가:</b> ${esc(sub.evaluation)}</div>` : ""}
     ${pairs.length ? pairs.map(p=>`<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #ddd">
-        <div style="font-weight:700;margin-bottom:6px">${esc(p.label)}</div>
+        <div style="font-weight:700;margin-bottom:6px">${esc((p.group?p.group.name+" · ":"")+p.label)}</div>
         <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
         ${(p.after && p.after!==p.before) ? `<div style="margin-top:8px;padding:8px 10px;background:#f3f7f4;border-left:3px solid #5a8f6b;white-space:pre-wrap"><b>첨삭:</b> ${esc(p.after)}</div>` : ""}
       </div>`).join("") : '<p style="color:#999">제출된 내용이 없습니다.</p>'}`;
@@ -5369,6 +5374,25 @@ async function rProfSubmissionReview(id, version){
   };
 }
 
+/* 플롯 제출물 → 첨삭 화면에 그릴 항목 목록 (섹션 설명 1개 + 그 섹션에 배치된 아이디어 카드 각각).
+   2026-09-11: 예전에는 한 섹션을 블럭 하나로 합쳐 보여줘서 아이디어를 여러 개 만들어 제출해도
+   교수 화면에서는 하나로 뭉쳐 보였다. 이제 학생 화면과 같이 카드별로 나눈다.
+   항목 id: 섹션은 섹션 id, 아이디어는 "섹션id::아이디어id" (예전 제출물은 "섹션id::i0" 형태로 대체).
+   ideas가 없는 예전 제출물(ideaTexts만 있음)도 같은 모양으로 변환한다. */
+function plotReviewItems(data){
+  const sections=(data&&data.sections)||[];
+  const out=[];
+  sections.forEach((s,i)=>{
+    const secId=String(s.id||("s"+i));
+    const group={id:secId, name:s.name||`섹션 ${i+1}`};
+    out.push({id:secId, label:"섹션 설명", group, before:s.desc||""});
+    const ideas=(Array.isArray(s.ideas)&&s.ideas.length)
+      ? s.ideas.map((it,j)=>({pid:secId+"::"+((it&&it.id)||("i"+j)), text:(it&&it.text)||""}))
+      : (s.ideaTexts||[]).map((t,j)=>({pid:secId+"::i"+j, text:t||""}));
+    ideas.forEach((it,j)=>{ out.push({id:it.pid, label:`아이디어 ${j+1}`, group, before:it.text}); });
+  });
+  return out;
+}
 /* 제출 데이터(data) + 기존 첨삭(feedback) → 화면에 그릴 "블럭 쌍" 배열 (타입별로 모양이 다름) */
 function buildReviewPairs(type, data, feedback){
   if(type==="plan"){
@@ -5379,12 +5403,12 @@ function buildReviewPairs(type, data, feedback){
     }));
   }
   if(type==="plot"){
-    const sections=(data&&data.sections)||[];
-    const fbArr=Array.isArray(feedback)?feedback:[];
-    return sections.map((s,i)=>{
-      const before=(s.desc||"")+((s.ideaTexts&&s.ideaTexts.length)?("\n\n[아이디어]\n"+s.ideaTexts.join("\n")):"");
-      const fbItem=fbArr[i];
-      return { id:s.id||("i"+i), label:s.name||`섹션 ${i+1}`, before, after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : before };
+    const items=plotReviewItems(data);
+    const byId={}; (Array.isArray(feedback)?feedback:[]).forEach(f=>{ if(f&&f.id!=null) byId[String(f.id)]=f; });
+    return items.map(it=>{
+      const f=byId[it.id];
+      return { id:it.id, label:it.label, group:it.group, before:it.before,
+               after: f&&typeof f.text==="string" ? f.text : it.before };
     });
   }
   if(type==="write"){
@@ -5639,7 +5663,15 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
     if(memoOpts.onDelete) memoOpts.onDelete(m);
     rerender();
   };
+  let curGroup=null;
   pairs.forEach(p=>{
+    /* 같은 그룹(플롯 섹션)에 속한 블럭들 앞에 섹션 이름을 한 번 붙여준다 */
+    if(p.group && p.group.id!==curGroup){
+      curGroup=p.group.id;
+      const gh=document.createElement("div"); gh.className="review-group-head";
+      gh.textContent=p.group.name||"";
+      container.appendChild(gh);
+    }else if(!p.group){ curGroup=null; }
     const changed=p.after!==p.before;
     const split = editable ? splitIds.has(p.id) : changed;
     const {mine, numMap}=computePairMemoNumbering(memos, p.id);
@@ -5738,8 +5770,7 @@ function buildFeedbackFromPairs(type, data, afterList){
     return fb;
   }
   if(type==="plot"){
-    const sections=(data&&data.sections)||[];
-    return sections.map((s,i)=>({ id:s.id, text:afterList[i]||"" }));
+    return plotReviewItems(data).map((it,i)=>({ id:it.id, text:afterList[i]||"" }));
   }
   if(type==="write"){
     const blocks=Array.isArray(data)?data:[];
@@ -5837,8 +5868,20 @@ function applyFeedbackToProject(type, feedback, memos){
   }else if(type==="plot"){
     if(!P.plotDoc || !Array.isArray(P.plotDoc.sections)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
-      const sec=P.plotDoc.sections.find(s=>s.id===fb.id);
-      if(sec){ sec.desc=fb.text||""; setAppliedMemos("plot",fb.id,memos); }
+      const key=String(fb.id||"");
+      const sep=key.indexOf("::");
+      if(sep<0){                       /* 섹션 설명 */
+        const sec=P.plotDoc.sections.find(s=>s.id===key);
+        if(sec){ sec.desc=fb.text||""; setAppliedMemos("plot",key,memos); }
+        return;
+      }
+      /* 아이디어 카드 첨삭 → 그 아이디어의 플롯 전용 문구(ideaOverrides)에 반영.
+         예전 제출물("섹션id::i0")은 아이디어 id를 알 수 없어 되돌리지 않는다. */
+      const ideaId=key.slice(sep+2);
+      if(/^i\d+$/.test(ideaId)) return;
+      if(!P.plotDoc.ideaOverrides) P.plotDoc.ideaOverrides={};
+      P.plotDoc.ideaOverrides[ideaId]=fb.text||"";
+      setAppliedMemos("plot",key,memos);
     });
   }else if(type==="write"){
     if(!P.writeDoc || !Array.isArray(P.writeDoc.blocks)) return;
