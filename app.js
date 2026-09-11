@@ -2670,6 +2670,27 @@ function blockGroupWrap(gid, list){
   actions.append(addBtn, renameBtn, ungroupBtn);
   head.append(title, actions);
   const body=document.createElement("div"); body.className="wg-body";
+  /* 2026-09-11: 그룹 밖 칸 블록을 이 안으로 끌어다 넣을 수 있게 하는 드롭존.
+     stopPropagation으로 바깥 목록(.write-blocklist) 핸들러가 다시 꺼내가지 않도록 막는다. */
+  body.addEventListener("dragover", e=>{
+    const dragging=document.querySelector(".scene-block.dragging");
+    if(!dragging) return;
+    e.preventDefault(); e.stopPropagation();
+    wrap.classList.add("wg-drop");
+    const after=getDragAfterEl(body, e.clientY, ".scene-block:not(.dragging)");
+    if(after==null) body.appendChild(dragging);
+    else body.insertBefore(dragging, after);
+  });
+  body.addEventListener("dragleave", e=>{
+    if(!body.contains(e.relatedTarget)) wrap.classList.remove("wg-drop");
+  });
+  body.addEventListener("drop", e=>{
+    if(!document.querySelector(".scene-block.dragging")) return;
+    e.preventDefault(); e.stopPropagation();
+    wrap.classList.remove("wg-drop");
+    const main=list.closest(".write-main")||document.querySelector(".write-main");
+    if(main) commitWriteBlockOrder(main);
+  });
   wrap.append(head, body);
   list.appendChild(wrap);
   return wrap;
@@ -2991,12 +3012,26 @@ function subBlockEl(bl, it, liveRefresh, main){
 }
 
 /* 장면 블록 드래그앤드롭 (섹션 간 이동/정렬) */
+/* 목록의 직계 자식(낱개 칸 블록 + 섹션 블럭 상자)만 보고 삽입 위치를 정한다.
+   (그룹 안쪽 블록까지 후보로 잡으면 insertBefore가 실패한다 — 직계 자식이 아니기 때문) */
+function getDragAfterChild(container, y){
+  const els=[...container.children].filter(el=>
+    (el.classList.contains("scene-block") || el.classList.contains("write-blockgroup")) && !el.classList.contains("dragging"));
+  return els.reduce((closest, child)=>{
+    const box=child.getBoundingClientRect();
+    const offset=y-box.top-box.height/2;
+    if(offset<0 && offset>closest.offset) return {offset, element:child};
+    return closest;
+  }, {offset:-Infinity, element:null}).element;
+}
 function setupBlockDnD(list, main){
   list.addEventListener("dragover", e=>{
     const dragging=main.querySelector(".scene-block.dragging");
     if(!dragging) return;
     e.preventDefault();
-    const after=getDragAfterEl(list, e.clientY, ".scene-block:not(.dragging)");
+    /* 섹션 블럭(그룹) 상자 위에서는 그쪽 핸들러가 처리하고 여기까지 오지 않는다(stopPropagation).
+       여기로 왔다는 건 그룹 밖에 놓겠다는 뜻이므로, 목록의 직계 자식으로 꺼낸다. */
+    const after=getDragAfterChild(list, e.clientY);
     if(after==null) list.appendChild(dragging);
     else list.insertBefore(dragging, after);
   });
@@ -3011,7 +3046,16 @@ function rebuildWriteFromDOM(main){
   const arr=[];
   main.querySelectorAll(".write-blocklist").forEach(list=>{
     const secId=list.dataset.sec;
-    list.querySelectorAll(".scene-block").forEach(el=>{ const b=map[el.dataset.id]; if(b){ b.sectionId=secId; arr.push(b); } });
+    list.querySelectorAll(".scene-block").forEach(el=>{
+      const b=map[el.dataset.id];
+      if(b){
+        b.sectionId=secId;
+        /* 2026-09-11: 그룹 상자 안/밖으로 옮긴 결과를 반영 (밖으로 뺐으면 groupId 제거) */
+        const gw=el.closest(".write-blockgroup");
+        if(gw) b.groupId=gw.dataset.group; else delete b.groupId;
+        arr.push(b);
+      }
+    });
   });
   (P.writeDoc.blocks||[]).forEach(b=>{ if(arr.indexOf(b)<0) arr.push(b); });
   P.writeDoc.blocks=arr;

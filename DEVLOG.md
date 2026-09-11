@@ -17,6 +17,17 @@
 - 스크롤 대상은 커서 아래 요소의 가장 가까운 **스크롤 가능한 조상**(미리보기·목차 패널 등 overflow-y:auto 요소),
   없으면 window. 덕분에 모든 탭의 드래그(아이디어·플롯 섹션/카드·글쓰기 블록·콘티 등)에 한 번에 적용된다.
 
+### 3) 칸 블록을 섹션 블럭(그룹) 안팎으로 드래그 이동
+그룹 밖의 칸 블록을 그룹 안으로, 그룹 안의 칸 블록을 밖으로 끌어다 옮길 수 있다.
+- `blockGroupWrap()`의 `.wg-body`에 dragover/dragleave/drop 추가. dragover에서 `stopPropagation()`으로
+  바깥 목록 핸들러가 블록을 다시 꺼내가지 않게 막고, 드롭 시 `commitWriteBlockOrder(main)` 호출.
+- `setupBlockDnD()`의 목록 dragover는 새 `getDragAfterChild()`로 **직계 자식**(낱개 블록 + 그룹 상자)만 보고
+  삽입 위치를 정한다. 예전처럼 `querySelectorAll`로 그룹 안쪽 블록까지 후보로 잡으면 `insertBefore`가
+  "not a child" 오류를 낼 수 있었다. 그룹 위가 아닌 목록 영역에 놓으면 그룹 밖으로 빠진다.
+- `rebuildWriteFromDOM()`: 블록의 `groupId`를 DOM 위치(`el.closest(".write-blockgroup")`)로 다시 계산.
+  그룹 밖으로 나왔으면 `groupId` 삭제. (기존에는 sectionId만 갱신해서 소속이 어긋났다)
+- `style.css`: 빈 그룹에도 떨어뜨릴 수 있게 `.wg-body{min-height:22px}`, 드롭 중 강조 `.wg-drop`.
+
 
 ## 2026-09-10 — 평가 입력창 · 콘티 대사 번호 · 아이디어를 섹션 블럭(그룹)으로
 

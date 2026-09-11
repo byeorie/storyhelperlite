@@ -855,7 +855,9 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
   cursor:pointer;font-size:11px;padding:3px 7px;color:var(--muted)}
 .wg-actions button:hover{border-color:var(--accent);color:var(--accent)}
 .wg-actions button.wg-add{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
-.write-blockgroup .wg-body{display:flex;flex-direction:column;gap:8px}
+.write-blockgroup .wg-body{display:flex;flex-direction:column;gap:8px;min-height:22px}
+/* 칸 블록을 끌어다 놓는 중인 섹션 블럭 상자 강조 */
+.write-blockgroup.wg-drop{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,0,0,.04) inset}
 
 /* ===== 우클릭 컨텍스트 메뉴 ===== */
 .ctx-menu{position:fixed;z-index:200;background:#fff;border:1px solid var(--line);
