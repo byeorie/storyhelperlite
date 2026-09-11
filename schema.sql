@@ -227,3 +227,7 @@ ALTER TABLE classes ADD COLUMN class_time TEXT;
 -- 서버 코드(functions/api/_utils.js ensureSubmissionSchema)가 필요할 때 자동으로 실행하므로
 -- 보통은 손댈 필요가 없습니다. 수동으로 미리 넣어두고 싶다면 아래 한 줄만 실행하세요.
 ALTER TABLE submissions ADD COLUMN checked_at INTEGER;
+
+-- ===== 2026-09-11: 제출/첨삭 알림 =====
+-- 학생이 교수님의 첨삭·확인 알림을 열어본 시각. 서버 코드가 자동으로 추가하므로 보통 손댈 필요 없음.
+ALTER TABLE submissions ADD COLUMN feedback_seen_at INTEGER;

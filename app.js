@@ -64,6 +64,7 @@ function onAuthChanged(){
   if(activeTab==="profClasses" && !isProfessor()) forceTab("idea");
   render();
   maybeShowWipeNotice();
+  refreshNotifyPolling();  // 2026-09-11: 제출/첨삭 알림 폴링 시작·중단
 }
 /* 2026-08-20(3): 서버 데이터 초기화(매년 3/1·9/1) 1주일 전부터, 로그인 시(또는 접속 유지 상태 확인 시)마다
    자동으로 안내 팝업을 띄운다. "다시 보지 않음"을 누르면 이번 기준일까지는 다시 뜨지 않고,
@@ -3849,8 +3850,42 @@ function openDrawModal(bl, sizeKey){
    반영하는 대신 onSave(newKey)로 새로 만들어진 이미지 key만 돌려준다(이 key를 어떻게 쓸지는
    호출한 쪽 — rProfSubmissionReview — 이 첨삭 버전으로 저장). 학생용과 달리 취소하고 닫을 수 있다
    (첨삭은 저장 전까지 아무것도 바뀌지 않으므로 취소해도 안전). */
+/* 콘티 이미지 크게 보기 (2026-09-11 추가).
+   제출한 콘티(직접 그린 것이든 업로드한 이미지든)를 클릭하면 화면 크기에 맞춰 크게 띄운다.
+   교수 화면에서는 이 창에서 바로 [이 그림에 피드백 그리기]로 넘어갈 수 있다. */
+function openStoryboardImageViewer(title, key, onDraw){
+  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  const box=document.createElement("div"); box.className="draw-modal sb-view-modal";
+
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=title||"콘티 크게 보기";
+  top.append(ttl, iconBtn(ICONS.close, "닫기", close));
+  box.appendChild(top);
+
+  const img=document.createElement("img"); img.className="sb-view-img";
+  img.alt=title||"콘티"; img.src="/api/storyboard-image?key="+encodeURIComponent(key);
+  box.appendChild(img);
+
+  if(typeof onDraw==="function"){
+    const actions=document.createElement("div"); actions.className="dlg-modal-actions";
+    const drawBtn=document.createElement("button"); drawBtn.type="button"; drawBtn.className="btn icon-btn";
+    drawBtn.innerHTML=ICONS.pencil+" 이 그림에 피드백 그리기";
+    drawBtn.onclick=()=>{ close(); onDraw(); };
+    actions.appendChild(drawBtn);
+    box.appendChild(actions);
+  }
+  overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+/* 콘티 피드백 그리기 모달.
+   (2026-09-11) 예전에는 캔버스를 항상 SB_SIZES(350x350 등) 고정 크기로 만들어서, 학생이 "직접 그리기"가
+   아니라 "이미지 업로드"로 낸 콘티(세로로 긴 스캔본 등)는 작게 찌그러진 채로 열렸고 그 위에 첨삭을
+   그려야 했다. 이제는 실제 이미지의 가로세로 비율과 해상도를 그대로 쓰고, 화면에 맞게 크게 띄운다. */
 function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
+  const FB_MAX_DIM=1600;   // 저장 해상도 상한(너무 큰 원본은 이 크기로 줄여서 다룬다)
   const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
   const box=document.createElement("div"); box.className="draw-modal";
@@ -3894,7 +3929,7 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   box.appendChild(toolbar);
 
   const hint=document.createElement("p"); hint.className="hint"; hint.style.margin="0 0 8px";
-  hint.textContent="학생이 제출한(또는 지금까지의) 콘티 위에 바로 첨삭을 그립니다.";
+  hint.textContent="학생이 제출한(또는 지금까지의) 콘티 위에 바로 피드백을 그립니다. 지우개로 지우면 원래 그림도 함께 지워집니다.";
   box.appendChild(hint);
 
   const canvasWrap=document.createElement("div"); canvasWrap.className="draw-canvas-wrap";
@@ -3902,30 +3937,71 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   canvas.width=sz.w; canvas.height=sz.h;
   canvas.style.width=sz.w+"px"; canvas.style.height=sz.h+"px";
   const ctx=canvas.getContext("2d");
-  function resetCanvas(){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
-  resetCanvas();
-  clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")) resetCanvas(); };
-  const preload=new Image();
-  preload.onload=()=>{ ctx.drawImage(preload,0,0,canvas.width,canvas.height); };
-  preload.src="/api/storyboard-image?key="+encodeURIComponent(refKey);
+  let baseImg=null, ready=false;
+  function paintBase(){
+    ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    if(baseImg) ctx.drawImage(baseImg,0,0,canvas.width,canvas.height);
+  }
+  paintBase();
+  /* "전체 지우기"는 내가 그린 피드백만 없애고 학생의 원래 그림은 되살린다
+     (학생 그림까지 흰 종이로 지워버리면 피드백의 의미가 없어지므로 — 2026-09-11) */
+  clearBtn.innerHTML=ICONS.trash+" 그린 것 지우기";
+  clearBtn.title="내가 그린 피드백만 지우고 학생이 낸 원래 그림으로 되돌립니다";
+  clearBtn.onclick=()=>{ if(confirm("그린 피드백을 모두 지우고 학생이 낸 원래 그림으로 되돌릴까요?")) paintBase(); };
+
+  const loadingMsg=document.createElement("p"); loadingMsg.className="hint"; loadingMsg.textContent="그림을 불러오는 중…";
   canvasWrap.appendChild(canvas);
-  box.appendChild(canvasWrap);
+  box.append(loadingMsg, canvasWrap);
+
+  /* 화면 크기에 맞춰 캔버스를 최대한 크게 보여준다(비율은 원본 그대로 유지) */
+  function fitCanvasToScreen(){
+    if(!overlay.isConnected){ window.removeEventListener("resize", fitCanvasToScreen); return; }
+    const availW=Math.min(window.innerWidth*0.86, 1100);
+    const availH=Math.max(240, window.innerHeight*0.58);
+    let fit=Math.min(availW/canvas.width, availH/canvas.height);
+    if(fit>2) fit=2;   // 아주 작은 그림을 지나치게 확대해 뭉개지 않도록
+    canvas.style.width=Math.round(canvas.width*fit)+"px";
+    canvas.style.height=Math.round(canvas.height*fit)+"px";
+  }
+  const preload=new Image();
+  preload.onload=()=>{
+    const nw=preload.naturalWidth||sz.w, nh=preload.naturalHeight||sz.h;
+    const cap=Math.min(1, FB_MAX_DIM/Math.max(nw,nh,1));
+    canvas.width=Math.max(1,Math.round(nw*cap));
+    canvas.height=Math.max(1,Math.round(nh*cap));
+    baseImg=preload;
+    paintBase();
+    fitCanvasToScreen();
+    loadingMsg.remove();
+    ready=true;
+  };
+  preload.onerror=()=>{ loadingMsg.textContent="그림을 불러오지 못했습니다. 빈 종이 위에 그릴 수 있습니다."; ready=true; };
+  preload.src="/api/storyboard-image?key="+encodeURIComponent(refKey);
+  window.addEventListener("resize", fitCanvasToScreen);
 
   let drawing=false, lastX=0, lastY=0;
   function pos(e){
     const r=canvas.getBoundingClientRect();
     return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
   }
+  /* 화면에 보이는 굵기가 캔버스 해상도와 상관없이 일정하게 보이도록 보정
+     (큰 이미지를 축소해서 볼 때 선이 실처럼 얇아지는 것을 막는다) */
+  function strokeW(){
+    const r=canvas.getBoundingClientRect();
+    const ratio = r.width ? (canvas.width/r.width) : 1;
+    return Math.max(1, curWidth*ratio);
+  }
   canvas.addEventListener("pointerdown", e=>{
+    if(!ready) return;
     drawing=true; canvas.setPointerCapture(e.pointerId);
     const p=pos(e); lastX=p.x; lastY=p.y;
-    ctx.beginPath(); ctx.arc(p.x,p.y,curWidth/2,0,Math.PI*2);
+    ctx.beginPath(); ctx.arc(p.x,p.y,strokeW()/2,0,Math.PI*2);
     ctx.fillStyle=erasing?"#fff":curColor; ctx.fill();
   });
   canvas.addEventListener("pointermove", e=>{
     if(!drawing) return;
     const p=pos(e);
-    ctx.strokeStyle=erasing?"#fff":curColor; ctx.lineWidth=curWidth; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.strokeStyle=erasing?"#fff":curColor; ctx.lineWidth=strokeW(); ctx.lineCap="round"; ctx.lineJoin="round";
     ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
     lastX=p.x; lastY=p.y;
   });
@@ -4059,6 +4135,142 @@ async function doAdminReset(mode){
    professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
 const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정", storyboard:"콘티"};
 /* "과제 관리" 탭 안의 현재 화면 상태(팝업 대신 같은 탭 안에서 페이지처럼 전환) */
+/* ===== 제출 / 첨삭 알림 토스트 (2026-09-11 추가) =====
+   상단바 아래 오른쪽 구석에 [과목명-과제명 제출 n개] 형태의 팝업을 띄운다.
+   - 20초마다 /api/notifications를 불러 "가능한 실시간"으로 갱신한다(브라우저 탭이 숨겨져 있으면 쉰다).
+   - 교수: 아직 "과제 확인"도 첨삭도 하지 않은 제출물이 과제 단위로 묶여서 뜬다.
+           전부 확인하면 자동으로 사라지고, [x]를 누르면 그 과제에 새 제출이 들어올 때까지만 숨긴다.
+   - 학생: 교수님이 첨삭을 보냈거나 과제 확인을 한 제출물이 뜬다. 첨삭을 열어보거나 [x]를 누르면 사라진다
+           (이쪽은 서버에 기록되므로 다른 컴퓨터에서도 다시 뜨지 않는다).
+   - 팝업 바깥은 클릭이 그대로 통과해서(style.css .notify-stack) 알림이 떠 있어도 작업을 계속할 수 있다. */
+const NOTIFY_POLL_MS = 20000;
+const NOTIFY_MAX_TOASTS = 6;          // 한 번에 보여줄 최대 개수(나머지는 "외 N개"로 묶음)
+const NOTIFY_DISMISS_KEY = "storyhelper_notify_dismissed";
+let notifyTimer = null;
+let notifySignature = "";             // 같은 내용이면 다시 그리지 않아 깜빡임을 막는다
+let notifyDismissed = null;           // 교수용 [x] 기억 { "a12": 마지막제출물id }
+
+function notifyLoadDismissed(){
+  if(notifyDismissed) return notifyDismissed;
+  try{ notifyDismissed = JSON.parse(localStorage.getItem(NOTIFY_DISMISS_KEY) || "{}") || {}; }
+  catch(e){ notifyDismissed = {}; }
+  return notifyDismissed;
+}
+function notifySaveDismissed(){
+  try{ localStorage.setItem(NOTIFY_DISMISS_KEY, JSON.stringify(notifyDismissed || {})); }catch(e){}
+}
+function notifyStackEl(){ return document.getElementById("notifyStack"); }
+
+/* 로그인/로그아웃 때마다 폴링을 켜고 끈다 */
+function refreshNotifyPolling(){
+  if(notifyTimer){ clearInterval(notifyTimer); notifyTimer=null; }
+  if(typeof currentUser==="undefined" || !currentUser){ notifyClearToasts(); return; }
+  fetchNotifications();
+  notifyTimer = setInterval(fetchNotifications, NOTIFY_POLL_MS);
+}
+function notifyClearToasts(){
+  const st=notifyStackEl(); if(st) st.innerHTML="";
+  notifySignature="";
+}
+/* 다른 탭을 보다가 돌아오면 기다리지 않고 바로 한 번 갱신한다 */
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) fetchNotifications(); });
+
+async function fetchNotifications(){
+  if(typeof currentUser==="undefined" || !currentUser) return;
+  if(document.hidden) return;  // 숨겨진 탭에서는 서버를 부르지 않는다
+  const res=await apiFetch("notifications");
+  if(!res.ok || !res.body) return;   // 서버가 잠시 안 될 때는 조용히 넘어간다(직전 알림 유지)
+  renderNotifyToasts(res.body.role, res.body.items||[]);
+}
+
+function renderNotifyToasts(role, itemsRaw){
+  const stack=notifyStackEl(); if(!stack) return;
+  const isProf = role==="professor";
+  const dismissed = notifyLoadDismissed();
+
+  /* 교수 쪽 [x]는 "그 과제에 새 제출이 들어오기 전까지" 숨기는 의미 — 마지막 제출물 id로 판단한다 */
+  const items=(itemsRaw||[]).filter(it=> isProf ? !(Number(dismissed[it.key])>=Number(it.lastId)) : true);
+
+  const shown=items.slice(0, NOTIFY_MAX_TOASTS);
+  const rest=items.length-shown.length;
+  const sig=role+"|"+shown.map(it=>it.key+":"+it.count+":"+(it.lastId||it.lastAt||0)).join(",")+"|"+rest;
+  if(sig===notifySignature) return;
+  notifySignature=sig;
+
+  stack.innerHTML="";
+  /* 상단바 높이에 맞춰 "상단탭 바로 아래"에 붙인다(화면 폭에 따라 상단바 높이가 달라지므로 매번 계산) */
+  const bar=document.querySelector(".topbar");
+  if(bar) stack.style.top=(bar.getBoundingClientRect().height+8)+"px";
+
+  shown.forEach(it=>{
+    const el=document.createElement("div");
+    el.className="notify-toast";
+    el.dataset.notifyKey=it.key;
+    const main=document.createElement("button");
+    main.type="button"; main.className="notify-toast-main";
+    if(isProf){
+      main.innerHTML=`<span class="notify-title">${esc(it.className)}-${esc(it.assignmentTitle)} 제출 ${it.count}개</span>
+        <span class="notify-sub">클릭하면 제출함이 열립니다</span>`;
+      main.onclick=()=>notifyOpenProfessor(it);
+    }else{
+      const what = it.kind==="feedback" ? "피드백이 도착했습니다" : "교수님이 확인했습니다";
+      main.innerHTML=`<span class="notify-title">${esc(it.className)}-${esc(it.assignmentTitle)} ${esc(what)}</span>
+        <span class="notify-sub">${esc(TYPE_LABEL[it.type]||it.type)} · 클릭하면 바로 볼 수 있습니다</span>`;
+      main.onclick=()=>notifyOpenStudent(it);
+    }
+    const close=document.createElement("button");
+    close.type="button"; close.className="notify-toast-close"; close.title="닫기";
+    close.textContent="×";
+    close.onclick=(e)=>{ e.stopPropagation(); notifyDismiss(isProf, it); };
+    el.append(main, close);
+    stack.appendChild(el);
+  });
+
+  if(rest>0){
+    const more=document.createElement("div");
+    more.className="notify-toast notify-more";
+    more.innerHTML=`<span class="notify-toast-main">외 ${rest}개 과제에도 알림이 있습니다</span>`;
+    stack.appendChild(more);
+  }
+}
+
+function notifyDismiss(isProf, it){
+  if(isProf){
+    /* 교수: 브라우저에만 기억 — 이 과제에 새 제출(id가 더 큰 것)이 들어오면 다시 뜬다 */
+    notifyLoadDismissed()[it.key]=Number(it.lastId)||0;
+    notifySaveDismissed();
+  }else{
+    /* 학생: 서버에 "확인함"으로 기록해서 다른 컴퓨터에서도 다시 뜨지 않게 한다 */
+    apiFetch("notifications", {method:"POST", body:JSON.stringify({ids:[it.submissionId]})});
+  }
+  notifyRemoveByKey(it.key);       // 서버 응답을 기다리지 않고 화면에서 바로 없앤다
+  notifySignature="";              // 다음 폴링 때 다시 그리도록 서명 초기화
+}
+function notifyRemoveByKey(key){
+  const stack=notifyStackEl(); if(!stack) return;
+  const el=stack.querySelector('.notify-toast[data-notify-key="'+key+'"]');
+  if(el) el.remove();
+}
+
+/* 교수 — 알림을 누르면 그 과제의 제출함 화면으로 이동 */
+function notifyOpenProfessor(it){
+  forceTab("profClasses");
+  profClassId = it.classId!=null ? it.classId : "none";
+  profClassTab = "assignments";
+  profAssignFolderId = it.assignmentId;
+  profReviewId = null; profReviewVersion = null;
+  render();
+}
+/* 학생 — 알림을 누르면 해당 과제의 첨삭 보기 화면으로 이동 (열면 서버가 "확인함"으로 기록한다) */
+function notifyOpenStudent(it){
+  const type=it.type;
+  forceTab(type);
+  feedbackPage={type, mode:"detail", id:it.submissionId};
+  render();
+  notifySignature="";
+  setTimeout(fetchNotifications, 800);
+}
+
 let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
 let profReviewVersion=null;  // 과제 관리 목록의 버전 드롭다운으로 옛 버전을 골랐을 때 그 버전 번호 — null이면 최신(=이어서 편집 가능)
@@ -4922,6 +5134,8 @@ function bindSubmitCheckBtns(root){
       btn.classList.toggle("checked", next);
       btn.innerHTML=next?(ICONS.check+" 확인함"):"과제 확인";
       root.querySelectorAll(`.submit-check-state[data-id="${id}"]`).forEach(el=>{ el.textContent=next?" · 확인함":""; });
+      /* 2026-09-11: 확인하자마자 오른쪽 위 알림도 바로 줄어들게(20초 폴링을 기다리지 않도록) */
+      notifySignature=""; fetchNotifications();
     };
   });
 }
@@ -5207,29 +5421,39 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     const lbl=document.createElement("div"); lbl.className="sb-fb-label"; lbl.textContent=b.title||"(제목 없음)";
     row.appendChild(lbl);
     const imgsWrap=document.createElement("div"); imgsWrap.className="sb-fb-images";
-    const mk=(key,label)=>{
+    /* 지금 피드백을 그릴 기준이 되는 그림(첨삭 전이면 학생이 낸 원본, 뒤면 지금까지의 피드백본) */
+    const baseKey = fb ? fb.afterKey : b.key;
+    const startDraw = opts.editable ? ()=>{
+      openStoryboardFeedbackDrawModal(b.title||"", b.size||"medium", baseKey, async (newKey)=>{
+        const r=await opts.onFeedback(b.id, baseKey, newKey);
+        if(!r || !r.ok) alert((r&&r.body&&r.body.error)||"저장에 실패했습니다.");
+      });
+    } : null;
+    /* (2026-09-11) 이미지를 클릭하면 크게 볼 수 있다. 업로드한 이미지도 여기서 크게 띄운 뒤
+       교수는 [이 그림에 피드백 그리기]로 바로 그 위에 그릴 수 있다. */
+    const mk=(key,label,drawable)=>{
       const box=document.createElement("div"); box.className="sb-fb-imgbox";
       const cap=document.createElement("span"); cap.className="sb-fb-imglabel"; cap.textContent=label;
       const img=document.createElement("img");
       img.src="/api/storyboard-image?key="+encodeURIComponent(key);
       img.style.width=sz.w+"px"; img.style.height=sz.h+"px"; img.alt=label;
+      img.classList.add("sb-fb-img-zoom");
+      img.title=(drawable && startDraw) ? "클릭하면 크게 보고 바로 피드백을 그릴 수 있습니다" : "클릭하면 크게 볼 수 있습니다";
+      img.onclick=()=>openStoryboardImageViewer(
+        (b.title||"콘티")+" — "+label, key,
+        (drawable && startDraw) ? startDraw : null
+      );
       box.append(cap,img);
       return box;
     };
-    if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전"), mk(fb.afterKey,"피드백")); }
-    else if(fb){ imgsWrap.appendChild(mk(fb.afterKey,"현재")); }
-    else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티")); }
+    if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전",false), mk(fb.afterKey,"피드백",true)); }
+    else if(fb){ imgsWrap.appendChild(mk(fb.afterKey,"현재",true)); }
+    else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티",true)); }
     row.appendChild(imgsWrap);
     if(opts.editable){
       const fbBtn=document.createElement("button"); fbBtn.type="button"; fbBtn.className="btn ghost sm icon-btn";
       fbBtn.innerHTML=ICONS.chat+" 피드백 그리기";
-      fbBtn.onclick=()=>{
-        const baseKey = fb ? fb.afterKey : b.key;
-        openStoryboardFeedbackDrawModal(b.title||"", b.size||"medium", baseKey, async (newKey)=>{
-          const r=await opts.onFeedback(b.id, baseKey, newKey);
-          if(!r || !r.ok) alert((r&&r.body&&r.body.error)||"저장에 실패했습니다.");
-        });
-      };
+      fbBtn.onclick=startDraw;
       row.appendChild(fbBtn);
     }
     container.appendChild(row);

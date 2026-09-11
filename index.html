@@ -9,6 +9,9 @@
 </head>
 <body>
 <div id="saveToast" class="save-toast" hidden></div>
+<!-- 2026-09-11: 제출/첨삭 알림 토스트가 쌓이는 자리 (상단바 아래 오른쪽). 알림이 떠 있어도
+     다른 작업을 계속할 수 있도록 바깥 영역은 클릭이 그대로 통과한다(pointer-events:none). -->
+<div id="notifyStack" class="notify-stack"></div>
 <div id="loginOverlay" class="login-overlay">
   <div class="login-box">
     <p class="login-sub">웹툰 전공 스토리 제작 도구</p>

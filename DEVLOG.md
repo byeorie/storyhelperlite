@@ -2033,3 +2033,43 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
 - **schema-ensure.sql** 신규: schema.sql의 CREATE TABLE/INDEX IF NOT EXISTS만 모은 파일. D1 콘솔에 붙여넣어
   누락된 표를 만든다(여러 번 실행해도 안전, 기존 데이터 삭제 없음).
 - 검증: node --check 통과(auth.js/app.js/_utils.js/data.js). 사용 중인 학생 데이터에 영향 주는 삭제 동작은 없음.
+
+## 2026-09-11 — 제출 / 첨삭 알림 토스트
+
+학생이 과제를 제출하면 교수 화면 오른쪽 위(상단바 바로 아래)에 `[과목명-과제명 제출 n개]` 팝업이 뜨고,
+교수가 첨삭을 보내면 학생 화면에도 같은 자리에 알림이 뜨도록 했다. 과제가 여러 개면 세로로 나란히 쌓인다.
+
+### 동작
+- 20초마다 `/api/notifications`를 폴링한다. 브라우저 탭이 숨겨져 있으면 요청을 건너뛰고, 다시 돌아오면 즉시 한 번 부른다.
+- 알림 팝업이 떠 있어도 화면 아래 작업은 그대로 할 수 있다 (`.notify-stack`에 `pointer-events:none`, 팝업 자체만 `auto`).
+- 교수: `checked_at`도 `feedback`도 없는 제출물을 과제 단위로 묶어서 보여준다. "과제 확인"을 누르거나 첨삭을 전달하면 사라진다.
+  `[x]`는 브라우저(localStorage `storyhelper_notify_dismissed`)에만 기억되며, 그 과제에 새 제출이 들어오면(마지막 제출물 id가 커지면) 다시 뜬다.
+- 학생: 교수가 첨삭을 보냈거나(`feedback_at`) 과제 확인을 한(`checked_at`) 제출물 중 아직 안 본 것을 보여준다.
+  첨삭 상세를 열거나 `[x]`를 누르면 서버에 `feedback_seen_at`이 기록되어 다른 컴퓨터에서도 다시 뜨지 않는다.
+- 한 번에 최대 6개까지 띄우고 나머지는 "외 N개 과제에도 알림이 있습니다"로 묶는다.
+- 알림을 클릭하면 교수는 그 과제의 제출함으로, 학생은 그 과제의 첨삭 보기 화면으로 바로 이동한다.
+
+### 변경 파일
+- `functions/api/notifications.js` (신규) — GET(알림 목록) / POST(학생 알림 확인 기록)
+- `functions/api/_utils.js` — `ensureSubmissionSchema`에 `ALTER TABLE submissions ADD COLUMN feedback_seen_at INTEGER` 추가
+- `functions/api/student-submission.js` — 학생이 첨삭 상세를 열면 `feedback_seen_at` 기록
+- `schema.sql` / `schema-ensure.sql` — `feedback_seen_at` 컬럼 문서화
+- `index.html` — `#notifyStack` 컨테이너 추가
+- `style.css` — `.notify-stack` / `.notify-toast` 스타일 (모바일에서는 좌우 꽉 차게)
+- `app.js` — 알림 모듈(폴링·렌더·이동·닫기), `onAuthChanged`에서 `refreshNotifyPolling()` 호출, "과제 확인" 직후 즉시 갱신
+
+## 2026-09-11 (2) — 알림 문구 수정 + 콘티 이미지 크게 보기/피드백
+
+1. 학생 알림 토스트 문구를 `[과목명-과제명 첨삭이 도착했습니다]` → `[과목명-과제명 피드백이 도착했습니다]`로 변경 (`app.js` `renderNotifyToasts`).
+
+2. 콘티 첨삭 화면에서 이미지를 클릭하면 크게 볼 수 있게 했다. 학생이 "직접 그리기"가 아닌 "이미지 업로드"로
+   제출한 콘티도 똑같이 크게 보고 그 위에 바로 피드백을 그릴 수 있다.
+   - `openStoryboardImageViewer(title, key, onDraw)` 신규 — 원본 비율 그대로 화면에 맞춰 확대. 교수 화면에서는
+     `[이 그림에 피드백 그리기]` 버튼이 함께 뜬다(학생 화면은 보기 전용).
+   - `renderSbFeedbackBlocks` — 모든 콘티 썸네일에 클릭(확대) 연결(`.sb-fb-img-zoom`). "이전" 이미지는 보기 전용.
+   - `openStoryboardFeedbackDrawModal` 개선 — **캔버스를 SB_SIZES 고정 크기(350x350 등)로 만들던 것을
+     실제 이미지의 가로세로 비율·해상도(최대 1600px)로 바꿨다.** 업로드한 세로 스캔본 등이 찌그러진 채
+     작게 열리던 문제 해결. 화면 크기에 맞춰(최대 1100px / 화면 높이 58%) 크게 띄우고, 창 크기가 바뀌면 다시 맞춘다.
+   - 펜 굵기를 캔버스 해상도 비율로 보정(`strokeW()`) — 큰 이미지를 축소해 볼 때 선이 실처럼 얇아지지 않는다.
+   - "전체 지우기" → "그린 것 지우기"로 바꾸고, 흰 종이로 밀어버리는 대신 **학생이 낸 원래 그림으로 되돌린다**.
+   - `style.css` — `.sb-view-modal` / `.sb-view-img` / `.sb-fb-img-zoom` 추가.

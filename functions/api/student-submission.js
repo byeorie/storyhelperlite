@@ -21,6 +21,13 @@ export async function onRequestGet({ request, env }) {
   ).bind(id, auth.user.id).first();
   if (!row) return jsonResponse({ error: "제출물을 찾을 수 없습니다." }, 404);
 
+  /* 2026-09-11: 학생이 이 첨삭을 열어봤음을 기록 — 오른쪽 위 알림 토스트가 사라지는 기준이 된다.
+     (실패해도 첨삭 보기 자체는 그대로 동작해야 하므로 조용히 넘어간다) */
+  try {
+    await env.DB.prepare("UPDATE submissions SET feedback_seen_at = ? WHERE id = ? AND student_id = ?")
+      .bind(Math.floor(Date.now() / 1000), id, auth.user.id).run();
+  } catch (e) {}
+
   let versionRows = [];
   try {
     const r = await env.DB.prepare(

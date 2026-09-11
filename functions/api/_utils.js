@@ -36,6 +36,9 @@ export async function ensureSubmissionSchema(env) {
     "ALTER TABLE submissions ADD COLUMN checked_at INTEGER",
     /* 2026-09-10: "평가" — 첨삭/메모와 별개로 교수가 남기는 총평(선택 입력). 최신 것만 보관한다. */
     "ALTER TABLE submissions ADD COLUMN evaluation TEXT",
+    /* 2026-09-11: 알림 — 학생이 교수님의 첨삭/확인 알림을 열어본 시각(unix초). 이 값이 feedback_at
+       (또는 checked_at)보다 오래되면 "아직 안 본 알림"으로 보고 토스트를 다시 띄운다. */
+    "ALTER TABLE submissions ADD COLUMN feedback_seen_at INTEGER",
   ];
   for (const sql of stmts) {
     try { await env.DB.prepare(sql).run(); } catch (e) {}

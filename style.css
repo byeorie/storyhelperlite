@@ -31,6 +31,32 @@ a{color:var(--accent)}
 .save-toast.saving{background:#d9a441}
 .save-toast.saved{background:var(--ok)}
 .save-toast.error{background:#e05050}
+
+/* ===== 제출/첨삭 알림 토스트 (2026-09-11) =====
+   상단바 아래 오른쪽에 세로로 쌓인다. 바깥 영역은 클릭이 통과하므로(pointer-events:none)
+   알림이 떠 있어도 화면 아래의 작업을 그대로 이어서 할 수 있다. */
+.notify-stack{position:fixed;top:60px;right:14px;z-index:1500;display:flex;flex-direction:column;
+  gap:8px;align-items:flex-end;pointer-events:none;max-width:min(340px,calc(100vw - 28px))}
+.notify-toast{pointer-events:auto;display:flex;align-items:stretch;gap:0;
+  background:#fff;border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.16);overflow:hidden;
+  animation:notifyIn .22s ease-out}
+@keyframes notifyIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.notify-toast-main{flex:1;min-width:0;display:block;text-align:left;background:none;border:none;
+  cursor:pointer;padding:10px 12px;font-size:13px;color:var(--text);line-height:1.45}
+.notify-toast-main:hover{background:var(--accent2)}
+.notify-toast-main .notify-title{display:block;font-weight:700;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.notify-toast-main .notify-sub{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.notify-toast-close{flex-shrink:0;width:34px;background:none;border:none;border-left:1px solid var(--line);
+  cursor:pointer;color:var(--muted);font-size:17px;line-height:1}
+.notify-toast-close:hover{background:var(--accent2);color:var(--text)}
+.notify-toast.notify-more{border-left-color:var(--muted)}
+.notify-toast.notify-more .notify-toast-main{cursor:default;font-size:12px;color:var(--muted)}
+.notify-toast.notify-more .notify-toast-main:hover{background:none}
+@media (max-width:700px){
+  .notify-stack{right:8px;left:8px;max-width:none;align-items:stretch}
+}
 .user-auth{display:flex;align-items:center;gap:8px;margin-left:8px;flex-shrink:0}
 .prof-bar-wrap{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);
   white-space:nowrap;flex-shrink:0}
@@ -901,6 +927,13 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--accent);margin:0 1px}
 .draw-toolbar .icon-btn.on{background:var(--accent2);border-color:var(--accent);color:var(--accent)}
 .draw-canvas-wrap{border:1px solid var(--line);background:#fff;align-self:center;border-radius:4px;overflow:hidden}
 canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
+
+/* 콘티 이미지 크게 보기 (2026-09-11) — 업로드한 이미지도 원본 비율 그대로 화면에 맞춰 크게 띄운다 */
+.sb-view-modal{max-width:94vw}
+.sb-view-img{display:block;max-width:min(88vw,1100px);max-height:76vh;width:auto;height:auto;
+  object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px;align-self:center}
+.sb-fb-img-zoom{cursor:zoom-in}
+.sb-fb-img-zoom:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
 
 /* ===== 📚 학습 메뉴 (스토리텔링 구성요소 & 로그라인 카드) ===== */
 .learn-section{margin-top:22px}
