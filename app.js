@@ -2667,7 +2667,10 @@ function blockGroupWrap(gid, list){
   /* 2026-09-10: 이 섹션 블럭 안에 칸 블록을 바로 추가 */
   const addBtn=document.createElement("button"); addBtn.className="wg-add"; addBtn.title="이 아이디어에서 칸 블럭 추가"; addBtn.innerHTML=ICONS.plus+'<span>칸 블럭 추가</span>';
   addBtn.onclick=()=>addBlockToGroup(gid);
-  actions.append(addBtn, renameBtn, ungroupBtn);
+  /* 2026-09-11: 아이디어(섹션 블럭) 통째로 삭제 — 안에 든 칸 블록도 함께 지운다 */
+  const delBtn=document.createElement("button"); delBtn.className="wg-del"; delBtn.title="이 아이디어 삭제(칸 블록 포함)"; delBtn.innerHTML=ICONS.trash;
+  delBtn.onclick=()=>deleteBlockGroup(gid);
+  actions.append(addBtn, renameBtn, ungroupBtn, delBtn);
   head.append(title, actions);
   const body=document.createElement("div"); body.className="wg-body";
   /* 2026-09-11: 그룹 밖 칸 블록을 이 안으로 끌어다 넣을 수 있게 하는 드롭존.
@@ -2713,6 +2716,20 @@ function groupSelectedBlocks(){
   rest.splice(insertAt, 0, ...picked);
   P.writeDoc.blocks=rest;
   writeSelectedIds.clear(); writeSelectMode=false;
+  save(); render();
+}
+/* 아이디어(섹션 블럭) 삭제 — 그룹과 그 안의 칸 블록을 모두 지운다.
+   플롯 생성 탭의 아이디어 자체는 그대로 남으므로, [플롯 불러오기]로 다시 가져올 수 있다. */
+function deleteBlockGroup(gid){
+  const g=(P.writeDoc.groups||[]).find(x=>x.id===gid);
+  const cnt=(P.writeDoc.blocks||[]).filter(b=>b.groupId===gid).length;
+  const name=(g&&g.name)||"아이디어";
+  const msg=cnt
+    ? `"${name}"를 삭제할까요?\n안에 있는 칸 블록 ${cnt}개도 함께 지워집니다.`
+    : `"${name}"를 삭제할까요?`;
+  if(!confirm(msg)) return;
+  P.writeDoc.blocks=(P.writeDoc.blocks||[]).filter(b=>b.groupId!==gid);
+  P.writeDoc.groups=(P.writeDoc.groups||[]).filter(x=>x.id!==gid);
   save(); render();
 }
 /* 그룹 해제 (그룹 자체 삭제, 소속 블록은 그대로 남음) */
