@@ -8,6 +8,8 @@
 아이콘만 있어 기능을 알기 어려웠던 버튼을 "칸 블럭 추가"로 표시.
 - `app.js` `blockGroupWrap()`: addBtn에 `wg-add` 클래스, `ICONS.plus + <span>칸 블럭 추가</span>`, title도 동일 문구로.
 - `style.css`: `.wg-actions button.wg-add{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}` 1줄 추가.
+- 막(섹션) 머리줄의 `[＋]`(wd-icon)도 같은 방식으로 "칸 블럭 추가" 라벨 표시(title도 "블럭 생성"→"칸 블럭 추가").
+  `style.css`에 `.wd-icon.wd-add{display:inline-flex;...}` 1줄 추가.
 
 ### 2) 블록 드래그 중 화면 자동 스크롤
 블록을 화면 위/아래 가장자리로 끌고 가면 스크롤이 따라 움직여, 멀리 떨어진 위치로도 옮길 수 있다.

@@ -2468,7 +2468,7 @@ function rWrite(){
     div.innerHTML=`<span class="wd-num">${i+1}</span><span class="wd-name">${esc(sec.name)}</span><span class="wd-spacer"></span>`;
     const loadBtn=document.createElement("button"); loadBtn.className="wd-icon"; loadBtn.innerHTML=ICONS.load; loadBtn.title="아이디어 불러오기";
     loadBtn.onclick=()=>loadSectionIdeas(sec);
-    const createBtn=document.createElement("button"); createBtn.className="wd-icon"; createBtn.innerHTML=ICONS.plus; createBtn.title="블럭 생성";
+    const createBtn=document.createElement("button"); createBtn.className="wd-icon wd-add"; createBtn.innerHTML=ICONS.plus+'<span>칸 블럭 추가</span>'; createBtn.title="칸 블럭 추가";
     createBtn.onclick=()=>addSceneBlock(sec);
     div.append(loadBtn, createBtn);
     group.appendChild(div);

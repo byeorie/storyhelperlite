@@ -376,6 +376,7 @@ body.sb-collapsed .plot-modal-overlay.center-content{left:44px}
 .wd-icon{background:transparent;border:1px solid var(--line);border-radius:6px;cursor:pointer;
   font-size:13px;line-height:1;padding:3px 8px;color:var(--muted);flex-shrink:0}
 .wd-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
+.wd-icon.wd-add{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .write-blocklist{display:flex;flex-direction:column;gap:10px;min-height:20px}
 .scene-block{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--accent2);
   border-radius:10px;padding:10px 12px;transition:opacity .15s}
