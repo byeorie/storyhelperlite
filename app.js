@@ -760,6 +760,43 @@ function learnDetailPage(sec,card){
    드래그 하나당 하나씩만 처리되도록 dragstart에서 false로 초기화, drop에서 true로 표시 */
 let dndDropHandled=false;
 
+/* ===== 드래그 중 화면 자동 스크롤 (2026-09-11) =====
+   블록을 화면 위/아래 가장자리로 끌고 가면 자연스럽게 스크롤되어, 멀리 떨어진 위치로도 쉽게 옮길 수 있다.
+   스크롤 대상은 커서 아래 요소의 가장 가까운 스크롤 가능한 조상(미리보기·목차 패널 등),
+   없으면 화면(window) 전체. 가장자리에 가까울수록 빨라진다. */
+const DND_EDGE=80, DND_MAX_SPEED=24;
+let dndScrollRAF=null, dndScrollSpeed=0, dndScrollBox=null;
+function dndScrollableAncestor(el){
+  for(let n=el; n && n!==document.body && n!==document.documentElement; n=n.parentElement){
+    const ov=getComputedStyle(n).overflowY;
+    if((ov==="auto"||ov==="scroll") && n.scrollHeight>n.clientHeight+4) return n;
+  }
+  return null;
+}
+function dndScrollStep(){
+  if(!dndScrollSpeed){ dndScrollRAF=null; return; }
+  if(dndScrollBox) dndScrollBox.scrollTop+=dndScrollSpeed;
+  else window.scrollBy(0,dndScrollSpeed);
+  dndScrollRAF=requestAnimationFrame(dndScrollStep);
+}
+function dndStopScroll(){
+  dndScrollSpeed=0; dndScrollBox=null;
+  if(dndScrollRAF){ cancelAnimationFrame(dndScrollRAF); dndScrollRAF=null; }
+}
+document.addEventListener("dragover", e=>{
+  const under=document.elementFromPoint(e.clientX,e.clientY);
+  const box=under?dndScrollableAncestor(under):null;
+  let top=0, bottom=window.innerHeight;
+  if(box){ const r=box.getBoundingClientRect(); top=r.top; bottom=r.bottom; }
+  let sp=0;
+  if(e.clientY<top+DND_EDGE) sp=-Math.ceil(DND_MAX_SPEED*Math.min(1,(top+DND_EDGE-e.clientY)/DND_EDGE));
+  else if(e.clientY>bottom-DND_EDGE) sp=Math.ceil(DND_MAX_SPEED*Math.min(1,(e.clientY-(bottom-DND_EDGE))/DND_EDGE));
+  dndScrollBox=box; dndScrollSpeed=sp;
+  if(sp && !dndScrollRAF) dndScrollRAF=requestAnimationFrame(dndScrollStep);
+}, true);
+document.addEventListener("drop", dndStopScroll, true);
+document.addEventListener("dragend", dndStopScroll, true);
+
 let ideaFilterTags=[];
 let ideaPendingTags=[];
 let ideaTagPickerFor=null;
@@ -2628,7 +2665,7 @@ function blockGroupWrap(gid, list){
   const ungroupBtn=document.createElement("button"); ungroupBtn.title="그룹 해제"; ungroupBtn.innerHTML=ICONS.ungroup;
   ungroupBtn.onclick=()=>ungroupBlocks(gid);
   /* 2026-09-10: 이 섹션 블럭 안에 칸 블록을 바로 추가 */
-  const addBtn=document.createElement("button"); addBtn.title="이 아이디어에서 블럭추가"; addBtn.innerHTML=ICONS.plus;
+  const addBtn=document.createElement("button"); addBtn.className="wg-add"; addBtn.title="이 아이디어에서 칸 블럭 추가"; addBtn.innerHTML=ICONS.plus+'<span>칸 블럭 추가</span>';
   addBtn.onclick=()=>addBlockToGroup(gid);
   actions.append(addBtn, renameBtn, ungroupBtn);
   head.append(title, actions);

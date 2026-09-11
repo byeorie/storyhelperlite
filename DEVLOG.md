@@ -2,6 +2,22 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-09-11 — 섹션 블럭 추가 버튼 라벨 · 드래그 중 자동 스크롤
+
+### 1) 글쓰기 섹션(그룹) 헤더의 '+' 버튼에 라벨 추가
+아이콘만 있어 기능을 알기 어려웠던 버튼을 "칸 블럭 추가"로 표시.
+- `app.js` `blockGroupWrap()`: addBtn에 `wg-add` 클래스, `ICONS.plus + <span>칸 블럭 추가</span>`, title도 동일 문구로.
+- `style.css`: `.wg-actions button.wg-add{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}` 1줄 추가.
+
+### 2) 블록 드래그 중 화면 자동 스크롤
+블록을 화면 위/아래 가장자리로 끌고 가면 스크롤이 따라 움직여, 멀리 떨어진 위치로도 옮길 수 있다.
+- `app.js`(아이디어 모음 섹션 상단, `dndDropHandled` 선언 직후)에 공통 로직 추가.
+  document 레벨 `dragover`(capture)에서 커서 위치를 보고, 가장자리 80px 안이면 requestAnimationFrame 루프로 스크롤.
+  가장자리에 가까울수록 빨라짐(최대 24px/frame). `drop`·`dragend`에서 정지.
+- 스크롤 대상은 커서 아래 요소의 가장 가까운 **스크롤 가능한 조상**(미리보기·목차 패널 등 overflow-y:auto 요소),
+  없으면 window. 덕분에 모든 탭의 드래그(아이디어·플롯 섹션/카드·글쓰기 블록·콘티 등)에 한 번에 적용된다.
+
+
 ## 2026-09-10 — 평가 입력창 · 콘티 대사 번호 · 아이디어를 섹션 블럭(그룹)으로
 
 ### 1) 피드백(첨삭) 화면에 "평가" 입력창 추가 — 선택 사항
