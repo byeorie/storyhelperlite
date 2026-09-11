@@ -2098,3 +2098,23 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
 - `app.js` — storyboard 분기에서 `saveBtn`을 숨기지 않고 [피드백 전달]로 살려서 `{deliver:true, evaluation}`을 보낸다.
   그림 한 장 저장 시 뜨던 "피드백을 학생에게 전달했습니다." 알림은 제거(그건 저장일 뿐이라 오해를 줬다).
   안내 문구도 함께 수정.
+
+## 2026-09-11 (5) — 첨삭 화면을 학생 원본과 같은 블럭 구성으로 (플롯·글쓰기)
+
+학생이 플롯 섹션 안에 아이디어를 여러 개 만들어 제출해도, 교수 첨삭 화면에서는 섹션 하나가 블럭
+하나로 합쳐져(아이디어가 `[아이디어]` 목록으로 본문에 붙음) 카드별 첨삭이 불가능했다. 글쓰기도
+마찬가지로 칸 블록만 평평하게 나열돼 어느 섹션/섹션 블럭 소속인지 알 수 없었다.
+
+- `buildSubmissionData` — 플롯: `sections[].ideas=[{id,text}]` 추가(`ideaTexts`는 예전 버전 호환용 유지).
+  글쓰기: 각 블록에 `sectionId/sectionName/groupId/groupName` 추가.
+- 새 함수 `plotReviewItems(data)` — 플롯 제출물을 "섹션 설명 1개 + 아이디어 카드 각각"으로 펼친다.
+  `buildReviewPairs`와 `buildFeedbackFromPairs`가 **둘 다 이 함수를 순서 기준으로** 쓰므로 한쪽만
+  고치면 첨삭이 엉뚱한 블럭에 저장된다. 블럭 id는 섹션=`섹션id`, 아이디어=`섹션id::아이디어id`.
+  플롯 첨삭 매칭을 index 기준에서 id 기준으로 바꿔 예전 첨삭(섹션 id만 있음)도 그대로 붙는다.
+- `renderReviewPairs` — pair의 `group`/`subgroup`에 따라 `.review-group-head`(플롯 섹션 이름)와
+  `.review-subgroup-head`(글쓰기 섹션 블럭 이름) 머리말을 한 번씩 넣는다. 다른 과제 타입은 영향 없음.
+- 학생 [내 작업물에 반영] — 플롯: 섹션 설명은 `sec.desc`, 아이디어 첨삭은 `plotDoc.ideaOverrides[id]`로
+  (아이디어 수집의 원본 글은 건드리지 않음). 예전 제출물(`섹션id::i0`)은 아이디어 id를 알 수 없어 건너뛴다.
+- 아이디어 카드에 달린 교수 메모도 카드 안에 표시(`plotIdeaCard`에 secId 전달 → `renderAppliedMemoBlock`).
+- PDF 내보내기 라벨에도 섹션/그룹 이름을 함께 찍는다.
+- 예전에 제출된 과제는 그대로 열리며, 아이디어 카드 구분 정보가 없어 예전처럼 섹션 블럭 하나로 보인다.

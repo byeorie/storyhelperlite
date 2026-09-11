@@ -4398,8 +4398,14 @@ async function buildSubmissionData(type){
     return {structure:P.plotDoc.structure||"", sections};
   }
   if(type==="write"){
+    /* 2026-09-11: 블록만 평평하게 보내던 것을 소속 플롯 섹션·섹션 블럭(그룹) 정보와 함께 보낸다 —
+       교수 첨삭 화면에서도 학생 글쓰기 화면과 같은 블럭 구성으로 보이게 하기 위함. */
+    const secName={}; (P.plotDoc.sections||[]).forEach(s=>{ secName[s.id]=s.name||""; });
+    const grpName={}; (P.writeDoc.groups||[]).forEach(g=>{ grpName[g.id]=g.name||""; });
     return allWriteBlocksOrdered().map(bl=>({
       id:bl.id, title:bl.title||"",
+      sectionId:bl.sectionId||"", sectionName:secName[bl.sectionId]||"",
+      groupId:bl.groupId||"", groupName:bl.groupId?(grpName[bl.groupId]||"그룹"):"",
       text:(bl.items||[]).filter(it=>(it.text||"").trim())
         .map(it=> it.type==="line" ? `${it.char||"(미지정)"}: ${it.text.trim()}` : it.text.trim()).join("\n"),
     }));
@@ -5172,7 +5178,7 @@ async function submissionToPdfBlob(sub){
     <p style="margin:0 0 18px;color:#666">${esc(sub.assignmentTitle)} · ${esc(TYPE_LABEL[sub.type]||sub.type)} · 제출 ${esc(fmtDate(sub.submittedAt))}</p>
     ${(sub.evaluation||"").trim() ? `<div style="margin:0 0 18px;padding:10px 12px;background:#fdf6e3;border-left:3px solid #c9a227;white-space:pre-wrap"><b>평가:</b> ${esc(sub.evaluation)}</div>` : ""}
     ${pairs.length ? pairs.map(p=>`<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #ddd">
-        <div style="font-weight:700;margin-bottom:6px">${esc((p.group?p.group.name+" · ":"")+p.label)}</div>
+        <div style="font-weight:700;margin-bottom:6px">${esc((p.group?p.group.name+" · ":"")+(p.subgroup?p.subgroup.name+" · ":"")+p.label)}</div>
         <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
         ${(p.after && p.after!==p.before) ? `<div style="margin-top:8px;padding:8px 10px;background:#f3f7f4;border-left:3px solid #5a8f6b;white-space:pre-wrap"><b>첨삭:</b> ${esc(p.after)}</div>` : ""}
       </div>`).join("") : '<p style="color:#999">제출된 내용이 없습니다.</p>'}`;
@@ -5416,7 +5422,14 @@ function buildReviewPairs(type, data, feedback){
     const fbArr=Array.isArray(feedback)?feedback:[];
     return blocks.map((b,i)=>{
       const fbItem=fbArr[i];
-      return { id:b.id||("i"+i), label:b.title||`블록 ${i+1}`, before:b.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||"") };
+      return {
+        id:b.id||("i"+i),
+        label:`${i+1}. ${b.title||"(제목 없음)"}`,
+        group: b.sectionId ? {id:b.sectionId, name:b.sectionName||"섹션"} : null,
+        subgroup: b.groupId ? {id:b.groupId, name:b.groupName||"그룹"} : null,
+        before:b.text||"",
+        after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||""),
+      };
     });
   }
   if(type==="background"){
@@ -5663,15 +5676,25 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
     if(memoOpts.onDelete) memoOpts.onDelete(m);
     rerender();
   };
-  let curGroup=null;
+  let curGroup=null, curSub=null;
   pairs.forEach(p=>{
-    /* 같은 그룹(플롯 섹션)에 속한 블럭들 앞에 섹션 이름을 한 번 붙여준다 */
+    /* 원본 화면과 같은 묶음 구조를 보여주기 위한 머리말
+       (플롯: 섹션 / 글쓰기: 플롯 섹션 + 그 안의 섹션 블럭(그룹)) */
     if(p.group && p.group.id!==curGroup){
-      curGroup=p.group.id;
+      curGroup=p.group.id; curSub=null;
       const gh=document.createElement("div"); gh.className="review-group-head";
       gh.textContent=p.group.name||"";
       container.appendChild(gh);
-    }else if(!p.group){ curGroup=null; }
+    }else if(!p.group){ curGroup=null; curSub=null; }
+    const subId=p.subgroup?p.subgroup.id:null;
+    if(subId!==curSub){
+      curSub=subId;
+      if(subId){
+        const sh=document.createElement("div"); sh.className="review-subgroup-head";
+        sh.textContent=p.subgroup.name||"그룹";
+        container.appendChild(sh);
+      }
+    }
     const changed=p.after!==p.before;
     const split = editable ? splitIds.has(p.id) : changed;
     const {mine, numMap}=computePairMemoNumbering(memos, p.id);

@@ -1044,3 +1044,9 @@ canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
   font-weight:700; font-size:14px;
 }
 .review-group-head:first-child{ margin-top:0; }
+/* 첨삭 화면 — 글쓰기의 섹션 블럭(그룹) 이름, 섹션 머리말 아래 한 단계 들어간 머리말 */
+.review-subgroup-head{
+  margin:10px 0 6px 12px; padding:4px 9px; border-radius:7px;
+  background:var(--card,#fff); border:1px solid var(--line);
+  font-weight:600; font-size:13px; color:var(--muted,#6b6257); display:inline-block;
+}
