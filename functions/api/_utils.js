@@ -46,6 +46,16 @@ export async function ensureSubmissionSchema(env) {
   submissionSchemaEnsured = true;
 }
 
+/* ===== (2026-09-12) 과제 종류(type) 컬럼 =====
+   과제 폴더에 "이 과제는 글쓰기 과제" 처럼 종류를 지정할 수 있게 하면서 추가한 컬럼.
+   NULL이면 종류 미지정(예전 과제들 = 모든 종류 제출 가능)이라 기존 데이터는 그대로 동작한다. */
+let assignmentSchemaEnsured = false;
+export async function ensureAssignmentSchema(env) {
+  if (assignmentSchemaEnsured) return;
+  try { await env.DB.prepare("ALTER TABLE assignments ADD COLUMN type TEXT").run(); } catch (e) {}
+  assignmentSchemaEnsured = true;
+}
+
 /* ===== (2026-09-08) 수강 등록 표 정리 =====
    "수업 코드 입력이 꼬여서 같은 수업에 두 번 등록된 학생이 생겼다"는 신고에 대한 대응.
    원래 schema.sql에는 중복을 막는 UNIQUE 인덱스가 있지만, 그 SQL을 운영 DB에 실행하지 않았다면

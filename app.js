@@ -4591,10 +4591,16 @@ async function openSubmitModal(type){
   if(!overlay.isConnected) return;
   if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const prof=res.body.prof, assignments=res.body.assignments||[];
-  const openList=assignments.filter(a=>a.open);
+  /* 2026-09-12: 과제에 종류가 지정돼 있으면 그 종류의 탭에서만 목록에 보인다(종류 미지정 과제는 늘 보임).
+     "글쓰기 과제"에 플롯을 제출하는 등, 과제 폴더와 다른 형식이 섞여 들어오던 실수를 막는다. */
+  const openAll=assignments.filter(a=>a.open);
+  const openList=openAll.filter(a=>!a.type || a.type===type);
+  const hiddenCount=openAll.length-openList.length;
   body.innerHTML=!openList.length
-    ? `<p class="hint">${esc(prof?prof.name:"교수")}님이 등록한, 제출 가능한(마감되지 않은) 과제가 없습니다.</p>`
-    : `<p class="hint">제출할 과제 폴더를 선택하세요. (${esc(prof?prof.name:"")} 교수님)</p>
+    ? `<p class="hint">${esc(prof?prof.name:"교수")}님이 등록한, 지금 제출할 수 있는 ${esc(TYPE_LABEL[type])} 과제가 없습니다.${
+        hiddenCount?` (다른 종류로 지정된 과제 ${hiddenCount}개는 그 탭에서 제출해주세요.)`:""}</p>`
+    : `<p class="hint">제출할 과제 폴더를 선택하세요. (${esc(prof?prof.name:"")} 교수님)${
+        hiddenCount?` · 다른 종류로 지정된 과제 ${hiddenCount}개는 여기 보이지 않습니다.`:""}</p>
       <div class="submit-assign-list">${openList.map(a=>{
         const mine=(a.mySubmissions||[]).filter(s=>s.type===type);
         const already=mine.length
@@ -5086,7 +5092,7 @@ async function renderProfAssignList(classId){
         <button type="button" class="assign-folder-del" data-id="${a.id}" title="과제 삭제">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
+    <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
   </div>`).join("");
   /* 2026-08-20 보안 점검 후 수정: 아래 stopPropagation을 예전엔 HTML 속성(onclick="...")으로 직접
      넣었는데, 그렇게 하면 XSS를 원천 차단하는 CSP(script-src에서 인라인 스크립트 금지)를 걸 수
@@ -5147,8 +5153,15 @@ function openAssignmentModal(classId, assignment){
   const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=editing?"과제 설정 변경":"과제 등록";
   top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
   box.appendChild(top);
+  /* 2026-09-12: 과제 종류 — 지정해두면 학생은 그 종류의 탭에서만 이 과제에 제출할 수 있다
+     (예: "글쓰기" 과제에 플롯을 제출하던 실수 방지). 미지정이면 예전처럼 모든 종류를 받는다. */
+  const typeOpts=Object.keys(TYPE_LABEL).map(k=>
+    `<option value="${k}"${(editing&&assignment.type===k)?" selected":""}>${esc(TYPE_LABEL[k])}</option>`).join("");
   box.insertAdjacentHTML("beforeend",
     `<label>과제명</label><input type="text" id="newAssignTitle" placeholder="예: 1차 기획서 과제" value="${editing?esc(assignment.title||""):""}">
+     <label>과제 종류</label>
+     <select id="newAssignType"><option value="none"${(editing&&assignment.type)?"":" selected"}>지정 안 함(어느 탭에서든 제출 가능)</option>${typeOpts}</select>
+     <p class="hint" style="margin:4px 0 0">종류를 지정하면 학생이 그 탭에서 제출할 때만 이 과제가 목록에 보입니다.</p>
      <label>제출기한 (선택 · 비워두면 기한 없음)</label><input type="date" id="newAssignDue" value="${editing?unixToDateInput(assignment.due_at):""}">
      ${editing?`<label>소속 수업</label><select id="newAssignClass"><option value="none">수업 미지정(전체 공개)</option></select>
      <label style="display:flex;align-items:center;gap:8px;margin-top:12px">
@@ -5182,12 +5195,15 @@ function openAssignmentModal(classId, assignment){
     let r;
     if(editing){
       const selEl=box.querySelector("#newAssignClass");
-      const payload={id:assignment.id, title, dueAt, open:box.querySelector("#newAssignOpen").checked?1:0};
+      const payload={id:assignment.id, title, dueAt, open:box.querySelector("#newAssignOpen").checked?1:0,
+        type: box.querySelector("#newAssignType").value==="none" ? null : box.querySelector("#newAssignType").value};
       // 수업 목록이 아직 안 채워졌으면(네트워크 지연) 수업은 건드리지 않는다
       if(selEl && selEl.options.length>1) payload.classId = selEl.value==="none" ? null : Number(selEl.value);
       r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify(payload)});
     }else{
-      r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt, classId: classId==="none"?null:classId})});
+      const typeVal=box.querySelector("#newAssignType").value;
+      r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt,
+        classId: classId==="none"?null:classId, type: typeVal==="none"?null:typeVal})});
     }
     btn.disabled=false;
     if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(classId); }

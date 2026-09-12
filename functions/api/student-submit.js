@@ -1,6 +1,7 @@
-import { requireAuth, jsonResponse, nowSec } from "./_utils.js";
+import { requireAuth, jsonResponse, nowSec, ensureAssignmentSchema } from "./_utils.js";
 
 const VALID_TYPES = ["plan", "plot", "write", "character", "background", "event", "storyboard"];
+const TYPE_LABEL = { plan: "기획서", plot: "플롯", write: "글쓰기", character: "캐릭터 설정", background: "배경 설정", event: "사건 설정", storyboard: "콘티" };
 
 /* POST /api/student-submit — 과제 제출  body: { assignmentId, type, projectName, data }
    2026-08-20: 학생이 여러 교수를 등록할 수 있게 되면서, "가입 여부" 확인을 auth.user.profId(기본
@@ -11,6 +12,8 @@ export async function onRequestPost({ request, env }) {
   const auth = await requireAuth(request, env);
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
 
+  await ensureAssignmentSchema(env);
+
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
   const assignmentId = Number(body && body.assignmentId);
@@ -18,9 +21,16 @@ export async function onRequestPost({ request, env }) {
   if (!assignmentId || !VALID_TYPES.includes(type)) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
   if (typeof body.data === "undefined") return jsonResponse({ error: "제출할 내용이 없습니다." }, 400);
 
-  const assignment = await env.DB.prepare(
-    "SELECT id, open, prof_id, class_id FROM assignments WHERE id = ?"
-  ).bind(assignmentId).first();
+  let assignment;
+  try {
+    assignment = await env.DB.prepare(
+      "SELECT id, open, prof_id, class_id, type FROM assignments WHERE id = ?"
+    ).bind(assignmentId).first();
+  } catch (e) {
+    assignment = await env.DB.prepare(
+      "SELECT id, open, prof_id, class_id FROM assignments WHERE id = ?"
+    ).bind(assignmentId).first();
+  }
   if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
   const member = await env.DB.prepare(
@@ -36,6 +46,16 @@ export async function onRequestPost({ request, env }) {
     if (!inClass) return jsonResponse({ error: "이 과제가 속한 수업의 수강생이 아닙니다." }, 403);
   }
   if (!assignment.open) return jsonResponse({ error: "제출이 마감된 과제입니다." }, 403);
+
+  /* 2026-09-12: 과제에 종류가 지정돼 있으면 그 종류만 받는다 — 학생이 다른 탭(예: 플롯)에서
+     글쓰기 과제에 제출해 교수 화면에 엉뚱한 형식이 넘어가던 일을 막는다.
+     종류가 비어 있는(예전) 과제는 예전처럼 모든 종류를 받는다. */
+  if (assignment.type && assignment.type !== type) {
+    return jsonResponse({
+      error: "이 과제는 「" + (TYPE_LABEL[assignment.type] || assignment.type) + "」 과제입니다. "
+        + (TYPE_LABEL[assignment.type] || assignment.type) + " 탭에서 제출해주세요.",
+    }, 400);
+  }
 
   const now = nowSec();
   const result = await env.DB.prepare(

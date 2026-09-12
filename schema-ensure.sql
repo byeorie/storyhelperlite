@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   title TEXT NOT NULL,
   due_at INTEGER,
   open INTEGER NOT NULL DEFAULT 1,
+  type TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_assignments_prof ON assignments(prof_id);
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   title TEXT NOT NULL,
   due_at INTEGER,
   open INTEGER NOT NULL DEFAULT 1,
+  type TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS submissions (
@@ -123,6 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_class_students_student ON class_students(student_
 --  따로 필요합니다. 이미 있는 컬럼을 추가하려 하면 "duplicate column name" 오류가 나는데,
 --  그 줄은 그냥 무시하고 다음 줄을 계속 실행하면 됩니다.)
 ALTER TABLE assignments ADD COLUMN class_id INTEGER;
+ALTER TABLE assignments ADD COLUMN type TEXT;   -- 2026-09-12 과제 종류(NULL=미지정)
 ALTER TABLE classes ADD COLUMN code TEXT;
 ALTER TABLE classes ADD COLUMN school_name TEXT;
 ALTER TABLE classes ADD COLUMN section TEXT;

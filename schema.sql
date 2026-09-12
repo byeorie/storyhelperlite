@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   title TEXT NOT NULL,
   due_at INTEGER,             -- 제출기한(unix seconds), NULL이면 기한 없음
   open INTEGER NOT NULL DEFAULT 1, -- 제출 마감 스위치: 1=제출 가능, 0=마감
+  type TEXT,                 -- 과제 종류(plan/plot/write/...), NULL이면 미지정=모든 종류 제출 가능
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_assignments_prof ON assignments(prof_id);
@@ -93,6 +94,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   title TEXT NOT NULL,
   due_at INTEGER,
   open INTEGER NOT NULL DEFAULT 1,
+  type TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_assignments_prof ON assignments(prof_id);

@@ -1,6 +1,7 @@
-import { requireProfessor, jsonResponse, ensureSubmissionSchema } from "./_utils.js";
+import { requireProfessor, jsonResponse, ensureSubmissionSchema, ensureAssignmentSchema } from "./_utils.js";
 
 const TYPE_LABEL = { plan: "기획서", plot: "플롯", write: "글쓰기", character: "캐릭터 설정", background: "배경 설정", event: "사건 설정", storyboard: "콘티" };
+const VALID_TYPES = Object.keys(TYPE_LABEL);
 
 /* GET /api/professor-assignment?id=123 — 해당 과제 폴더의 제출 목록 (교수 전용, 본인 과제만) */
 export async function onRequestGet({ request, env }) {
@@ -8,14 +9,22 @@ export async function onRequestGet({ request, env }) {
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
 
   await ensureSubmissionSchema(env);
+  await ensureAssignmentSchema(env);
 
   const url = new URL(request.url);
   const id = Number(url.searchParams.get("id"));
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
 
-  const assignment = await env.DB.prepare(
-    "SELECT id, title, due_at, open, created_at FROM assignments WHERE id = ? AND prof_id = ?"
-  ).bind(id, auth.user.id).first();
+  let assignment;
+  try {
+    assignment = await env.DB.prepare(
+      "SELECT id, title, due_at, open, type, created_at FROM assignments WHERE id = ? AND prof_id = ?"
+    ).bind(id, auth.user.id).first();
+  } catch (e) {
+    assignment = await env.DB.prepare(
+      "SELECT id, title, due_at, open, created_at FROM assignments WHERE id = ? AND prof_id = ?"
+    ).bind(id, auth.user.id).first();
+  }
   if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
   /* 2026-09-08: 예전에는 제출 목록 한 쿼리 안에서 submission_feedback_versions를 서브쿼리로 세었기 때문에,
@@ -94,13 +103,15 @@ export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
 
+  await ensureAssignmentSchema(env);
+
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
   const id = Number(body && body.id);
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
 
   const current = await env.DB.prepare(
-    "SELECT id, title, due_at, open, class_id FROM assignments WHERE id = ? AND prof_id = ?"
+    "SELECT id, title, due_at, open, class_id, type FROM assignments WHERE id = ? AND prof_id = ?"
   ).bind(id, auth.user.id).first();
   if (!current) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
@@ -135,6 +146,13 @@ export async function onRequestPost({ request, env }) {
     sets.push("class_id = ?"); binds.push(classId);
   }
 
+  /* 2026-09-12: 과제 종류 — 빈 값/null이면 "종류 미지정"(모든 종류 제출 가능)으로 되돌린다 */
+  if (Object.prototype.hasOwnProperty.call(body, "type")) {
+    const t = (body.type === null || body.type === "" || body.type === "none") ? null : String(body.type);
+    if (t !== null && !VALID_TYPES.includes(t)) return jsonResponse({ error: "과제 종류가 올바르지 않습니다." }, 400);
+    sets.push("type = ?"); binds.push(t);
+  }
+
   if (!sets.length) return jsonResponse({ error: "변경할 내용이 없습니다." }, 400);
 
   binds.push(id, auth.user.id);
@@ -143,7 +161,7 @@ export async function onRequestPost({ request, env }) {
   ).bind(...binds).run();
 
   const updated = await env.DB.prepare(
-    "SELECT id, title, due_at, open, class_id FROM assignments WHERE id = ? AND prof_id = ?"
+    "SELECT id, title, due_at, open, class_id, type FROM assignments WHERE id = ? AND prof_id = ?"
   ).bind(id, auth.user.id).first();
 
   return jsonResponse({ ok: true, assignment: updated, open: updated ? updated.open : null });

@@ -1,4 +1,4 @@
-import { requireAuth, jsonResponse, listStudentClasses, pickDefaultClassEntry } from "./_utils.js";
+import { requireAuth, jsonResponse, listStudentClasses, pickDefaultClassEntry, ensureAssignmentSchema } from "./_utils.js";
 
 /* GET /api/student-assignments[?classId=123 | ?profId=45] — 상단 툴바에서 고른 "수업"(또는 옛 방식
    등록이면 교수) 기준 과제 목록 + 내 제출 현황. 둘 다 안 주면 기본 선택(등록된 것 중 users.prof_id와
@@ -11,6 +11,8 @@ import { requireAuth, jsonResponse, listStudentClasses, pickDefaultClassEntry } 
 export async function onRequestGet({ request, env }) {
   const auth = await requireAuth(request, env);
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
+
+  await ensureAssignmentSchema(env);
 
   const url = new URL(request.url);
   const reqClassId = Number(url.searchParams.get("classId")) || null;
@@ -44,14 +46,23 @@ export async function onRequestGet({ request, env }) {
   /* 2026-08-24: 수업(class) 도입 — class_id가 없는(수업 미지정) 과제는 예전처럼 전체 공개,
      class_id가 있으면 지금 고른 그 수업의 과제만 보여준다(다른 수업 과제는 섞이지 않음). */
   const query = classId
-    ? "SELECT a.id, a.title, a.due_at, a.open, a.created_at, c.name AS class_name " +
+    ? "SELECT a.id, a.title, a.due_at, a.open, a.created_at, a.type, c.name AS class_name " +
       "FROM assignments a LEFT JOIN classes c ON c.id = a.class_id " +
       "WHERE a.prof_id = ? AND (a.class_id = ? OR a.class_id IS NULL) ORDER BY a.created_at DESC"
-    : "SELECT a.id, a.title, a.due_at, a.open, a.created_at, c.name AS class_name " +
+    : "SELECT a.id, a.title, a.due_at, a.open, a.created_at, a.type, c.name AS class_name " +
       "FROM assignments a LEFT JOIN classes c ON c.id = a.class_id " +
       "WHERE a.prof_id = ? AND a.class_id IS NULL ORDER BY a.created_at DESC";
-  const stmt = classId ? env.DB.prepare(query).bind(profId, classId) : env.DB.prepare(query).bind(profId);
-  const { results } = await stmt.all();
+  /* a.type(과제 종류)은 나중에 추가된 컬럼이라, 혹시 운영 DB에 없어 조회가 실패하면 예전 쿼리로
+     되돌아간다 — 컬럼 하나 때문에 과제 목록 전체가 안 열리는 일이 없도록 (2026-09-08 GET 500 교훈). */
+  let results = [];
+  try {
+    const stmt = classId ? env.DB.prepare(query).bind(profId, classId) : env.DB.prepare(query).bind(profId);
+    results = (await stmt.all()).results || [];
+  } catch (e) {
+    const q2 = query.replace("a.created_at, a.type,", "a.created_at,");
+    const stmt2 = classId ? env.DB.prepare(q2).bind(profId, classId) : env.DB.prepare(q2).bind(profId);
+    results = (await stmt2.all()).results || [];
+  }
 
   /* 2026-09-08: 교수가 "과제 확인"만 누른 경우(첨삭 전)도 학생 화면에 표시하기 위해 checked_at을 함께
      내려준다. 아직 컬럼이 없는 DB에서도 목록이 열리도록 실패 시 예전 쿼리로 되돌아간다. */
