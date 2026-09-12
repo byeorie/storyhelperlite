@@ -5512,11 +5512,11 @@ function plotReviewItems(data){
   sections.forEach((s,i)=>{
     const secId=String(s.id||("s"+i));
     const group={id:secId, name:s.name||`섹션 ${i+1}`};
-    out.push({id:secId, label:"섹션 설명", group, before:s.desc||""});
+    out.push({id:secId, label:"섹션 설명", group, kind:"plotSection", before:s.desc||""});
     const ideas=(Array.isArray(s.ideas)&&s.ideas.length)
       ? s.ideas.map((it,j)=>({pid:secId+"::"+((it&&it.id)||("i"+j)), text:(it&&it.text)||""}))
       : (s.ideaTexts||[]).map((t,j)=>({pid:secId+"::i"+j, text:t||""}));
-    ideas.forEach((it,j)=>{ out.push({id:it.pid, label:`아이디어 ${j+1}`, group, before:it.text}); });
+    ideas.forEach((it,j)=>{ out.push({id:it.pid, label:`아이디어 ${j+1}`, group, kind:"plotIdea", before:it.text}); });
   });
   return out;
 }
@@ -5534,7 +5534,7 @@ function buildReviewPairs(type, data, feedback){
     const byId={}; (Array.isArray(feedback)?feedback:[]).forEach(f=>{ if(f&&f.id!=null) byId[String(f.id)]=f; });
     return items.map(it=>{
       const f=byId[it.id];
-      return { id:it.id, label:it.label, group:it.group, before:it.before,
+      return { id:it.id, label:it.label, group:it.group, kind:it.kind, before:it.before,
                after: f&&typeof f.text==="string" ? f.text : it.before };
     });
   }
@@ -5546,6 +5546,7 @@ function buildReviewPairs(type, data, feedback){
       return {
         id:b.id||("i"+i),
         label:`${i+1}. ${b.title||"(제목 없음)"}`,
+        kind:"write",
         group: b.sectionId ? {id:b.sectionId, name:b.sectionName||"섹션"} : null,
         subgroup: b.groupId ? {id:b.groupId, name:b.groupName||"그룹"} : null,
         before:b.text||"",
@@ -5572,7 +5573,7 @@ function buildReviewPairs(type, data, feedback){
     const fbArr=Array.isArray(feedback)?feedback:[];
     return chars.map((ch,i)=>{
       const fbItem=fbArr[i];
-      return { id:ch.id||("i"+i), label:ch.name||`캐릭터 ${i+1}`, before:ch.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (ch.text||"") };
+      return { id:ch.id||("i"+i), label:ch.name||`캐릭터 ${i+1}`, kind:"character", before:ch.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (ch.text||"") };
     });
   }
   return [];
@@ -5709,29 +5710,36 @@ function computePairMemoNumbering(memos, pairId){
 }
 /* rawText를 mine(이 블록의 메모들)의 범위에 따라 일반 텍스트/<mark>(드래그 메모, 각주번호 포함)로
    다시 그리고, 끝에 "일반 메모"(범위 없음) 개수만큼 *를 붙인다. */
+/* rawText의 [from,to) 구간을 el 안에 그린다 — 그 구간과 겹치는 메모는 <mark>로 강조하고,
+   메모가 그 구간에서 끝나면 각주 번호(sup)를 붙인다. (줄 단위로 나눠 그려도 쓸 수 있도록 구간 방식) */
+function appendMemoRange(el, rawText, from, to, ranged, numMap, colorMap, cls){
+  let cur=from;
+  ranged.forEach(m=>{
+    const s=Math.min(Math.max(m.start,from),to), en=Math.min(Math.max(m.end,from),to);
+    if(en<=cur) return;
+    const ss=Math.max(cur,s);
+    if(ss>cur) el.appendChild(document.createTextNode(rawText.slice(cur,ss)));
+    if(en>ss){
+      const mark=document.createElement("mark"); mark.className="memo-hl "+cls(m.id); mark.dataset.memoId=m.id;
+      mark.textContent=rawText.slice(ss,en);
+      el.appendChild(mark);
+    }
+    if(m.end<=to){
+      const sup=document.createElement("sup"); sup.className="memo-fn-num "+cls(m.id); sup.dataset.memoSynthetic="1";
+      sup.textContent=String(numMap.get(m.id)||"");
+      el.appendChild(sup);
+    }
+    cur=Math.max(cur,en);
+  });
+  if(cur<to) el.appendChild(document.createTextNode(rawText.slice(cur,to)));
+}
 function renderMemoTargetText(el, rawText, mine, numMap, colorMap){
   const cls=(id)=>(colorMap&&colorMap.get(id))||"memo-c0";
   el.textContent="";
   const ranged=mine.filter(m=>m.start!=null && m.end!=null && m.end>m.start).sort((a,b)=>a.start-b.start);
   const general=mine.filter(m=>m.start==null);
   if(rawText && rawText.trim()){
-    if(!ranged.length){
-      el.appendChild(document.createTextNode(rawText));
-    }else{
-      let cur=0;
-      ranged.forEach(m=>{
-        const s=Math.max(cur,Math.min(m.start,rawText.length)), en=Math.max(s,Math.min(m.end,rawText.length));
-        if(s>cur) el.appendChild(document.createTextNode(rawText.slice(cur,s)));
-        const mark=document.createElement("mark"); mark.className="memo-hl "+cls(m.id); mark.dataset.memoId=m.id;
-        mark.textContent=rawText.slice(s,en);
-        el.appendChild(mark);
-        const sup=document.createElement("sup"); sup.className="memo-fn-num "+cls(m.id); sup.dataset.memoSynthetic="1";
-        sup.textContent=String(numMap.get(m.id)||"");
-        el.appendChild(sup);
-        cur=en;
-      });
-      if(cur<rawText.length) el.appendChild(document.createTextNode(rawText.slice(cur)));
-    }
+    appendMemoRange(el, rawText, 0, rawText.length, ranged, numMap, colorMap, cls);
   }else if(!general.length){
     el.innerHTML='<span class="muted">(내용 없음)</span>';
   }
@@ -5739,6 +5747,81 @@ function renderMemoTargetText(el, rawText, mine, numMap, colorMap){
     const sup=document.createElement("sup"); sup.className="memo-star "+cls(m.id); sup.dataset.memoSynthetic="1"; sup.textContent="*";
     el.appendChild(sup);
   });
+}
+
+/* ===== 2026-09-12: 첨삭 화면의 "원본"을 학생 편집 화면과 같은 블럭 모양으로 =====
+   제출 데이터는 글쓰기="캐릭터: 대사" 줄, 캐릭터="항목: 값" 줄로 합쳐진 한 덩어리 텍스트다(첨삭 저장·
+   [내 작업물에 반영]의 역변환이 이 형식에 의존하므로 데이터 구조는 그대로 둔다). 그래서 텍스트는
+   건드리지 않고 "그리는 방식"만 줄 단위로 나눠 학생 화면과 같은 칸/항목 모양으로 보여준다.
+   ★ 메모(하이라이트·각주)는 rawText 안의 글자 위치(offset)로 저장되므로, 나눠 그려도 DOM 안 텍스트의
+     합이 rawText와 글자 하나까지 같아야 한다 — 줄 끝 개행문자는 안 보이는 <span class="nl-keep">로 넣는다. */
+function memoTextLines(rawText){
+  const out=[]; let pos=0; const arr=(rawText||"").split("\n");
+  arr.forEach((t,i)=>{ out.push({text:t, start:pos, end:pos+t.length, nl:i<arr.length-1}); pos+=t.length+1; });
+  return out;
+}
+function renderStyledBeforeText(el, kind, rawText, mine, numMap, colorMap){
+  const cls=(id)=>(colorMap&&colorMap.get(id))||"memo-c0";
+  el.textContent="";
+  const ranged=mine.filter(m=>m.start!=null && m.end!=null && m.end>m.start).sort((a,b)=>a.start-b.start);
+  const general=mine.filter(m=>m.start==null);
+  const addGeneral=()=>general.forEach(m=>{
+    const sup=document.createElement("sup"); sup.className="memo-star "+cls(m.id); sup.dataset.memoSynthetic="1"; sup.textContent="*";
+    el.appendChild(sup);
+  });
+  if(!(rawText && rawText.trim())){
+    if(!general.length) el.innerHTML='<span class="muted">(내용 없음)</span>';
+    addGeneral(); return;
+  }
+  const nlSpan=()=>{ const sp=document.createElement("span"); sp.className="nl-keep"; sp.textContent="\n"; return sp; };
+  const lines=memoTextLines(rawText);
+  if(kind==="write"){
+    lines.forEach(ln=>{
+      if(!ln.text.trim()){ const g=document.createElement("span"); g.className="nl-keep"; g.textContent=ln.text+(ln.nl?"\n":""); el.appendChild(g); return; }
+      const m=ln.text.match(/^([^:\n]{1,30}):\s/);
+      const row=document.createElement("div");
+      if(m){
+        row.className="rv-sub rv-line";
+        const who=document.createElement("span"); who.className="dlg-who";
+        appendMemoRange(who, rawText, ln.start, ln.start+m[0].length, ranged, numMap, colorMap, cls);
+        const txt=document.createElement("span"); txt.className="dlg-text";
+        appendMemoRange(txt, rawText, ln.start+m[0].length, ln.end, ranged, numMap, colorMap, cls);
+        if(ln.nl) txt.appendChild(nlSpan());
+        row.append(who, txt);
+      }else{
+        row.className="rv-sub rv-text";
+        appendMemoRange(row, rawText, ln.start, ln.end, ranged, numMap, colorMap, cls);
+        if(ln.nl) row.appendChild(nlSpan());
+      }
+      el.appendChild(row);
+    });
+  }else{ /* character — "항목: 값" 줄마다 한 행, 다음 라벨이 나올 때까지는 같은 행에 이어 붙인다 */
+    const labelSet={};
+    (typeof CHAR_FIELDS!=="undefined"?CHAR_FIELDS:[]).forEach(f=>{ labelSet[f.label]=1; });
+    let curVal=null;
+    lines.forEach(ln=>{
+      const m=ln.text.match(/^([^:：\n]+):\s/);
+      if(m && labelSet[m[1].trim()]){
+        const row=document.createElement("div"); row.className="rv-field";
+        const lb=document.createElement("span"); lb.className="rv-field-label";
+        appendMemoRange(lb, rawText, ln.start, ln.start+m[0].length, ranged, numMap, colorMap, cls);
+        const vv=document.createElement("span"); vv.className="rv-field-val";
+        appendMemoRange(vv, rawText, ln.start+m[0].length, ln.end, ranged, numMap, colorMap, cls);
+        if(ln.nl) vv.appendChild(nlSpan());
+        row.append(lb, vv); el.appendChild(row); curVal=vv;
+      }else{
+        const tgt=curVal||el;
+        appendMemoRange(tgt, rawText, ln.start, ln.end, ranged, numMap, colorMap, cls);
+        if(ln.nl) tgt.appendChild(nlSpan());
+      }
+    });
+  }
+  addGeneral();
+}
+/* 원본 블록 본문 그리기 — 글쓰기/캐릭터만 학생 화면 모양으로, 나머지는 지금까지와 같다 */
+function renderBeforeBody(el, p, mine, numMap, colorMap){
+  if(p.kind==="write" || p.kind==="character") renderStyledBeforeText(el, p.kind, p.before, mine, numMap, colorMap);
+  else renderMemoTargetText(el, p.before, mine, numMap, colorMap);
 }
 /* container(블록 el의 부모, 예: box/prev) 맨 아래에 이 블록(mine)에 달린 메모들을 카드로 나열한다.
    본문 텍스트 바로 아래 여백 없이 붙고(margin-top:0), 옅은 노란색 배경/돋움체는 style.css의 .memo-block에서.
@@ -5831,13 +5914,13 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
     const changed=p.after!==p.before;
     const split = editable ? splitIds.has(p.id) : changed;
     const {mine, numMap, colorMap}=computePairMemoNumbering(memos, p.id);
-    const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":""); wrap.dataset.id=p.id;
+    const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":"")+(p.kind?" kind-"+p.kind:""); wrap.dataset.id=p.id;
     let memoTargetEl;
     if(!split){
       const box=document.createElement("div"); box.className="plan-block review-before";
       const lbl=document.createElement("label"); lbl.textContent=p.label;
       const txt=document.createElement("div"); txt.className="review-before-text";
-      renderMemoTargetText(txt, p.before, mine, numMap, colorMap);
+      renderBeforeBody(txt, p, mine, numMap, colorMap);
       box.append(lbl, txt);
       renderMemoCardsInto(box, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
       wrap.appendChild(box);
@@ -5868,7 +5951,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       }
       /* 이 블록에 메모가 있으면 "이전 버전" 패널은 첨삭 diff 강조 대신 메모 강조(하이라이트+각주번호)를
          보여준다 — 같은 텍스트 위에 두 강조를 함께 표시하기 어려워, 메모가 달린 블록은 메모 표시를 우선한다 */
-      if(mine.length) renderMemoTargetText(prevText, p.before, mine, numMap, colorMap);
+      if(mine.length) renderBeforeBody(prevText, p, mine, numMap, colorMap);
       else prevText.innerHTML=diffPrevHtml(p.before, getAfter());
       renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
       wrap.append(prev, cur);

@@ -1072,3 +1072,25 @@ canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
   background:var(--card,#fff); border:1px solid var(--line);
   font-weight:600; font-size:13px; color:var(--muted,#6b6257); display:inline-block;
 }
+
+/* ===== 2026-09-12: 첨삭 화면의 "원본"을 학생 편집 화면과 같은 블럭 모양으로 =====
+   .nl-keep 은 메모 위치(offset) 계산용으로만 DOM에 있는 개행문자라 화면에는 안 보인다. */
+.nl-keep{display:none}
+/* 글쓰기 — 학생 화면의 칸(.scene-block) + 지문/대사(.sub-block) 모양 */
+.review-pair.kind-write .review-before{background:var(--card);border-left:6px solid var(--accent2)}
+.review-before-text .rv-sub{border:1px solid var(--line);border-radius:8px;padding:5px 8px;margin-top:5px;
+  background:#fff;font-size:13px;line-height:1.6}
+.review-before-text .rv-sub:first-child{margin-top:2px}
+.review-before-text .rv-sub.rv-line{background:#fbf8f3;display:flex;align-items:flex-start;gap:8px}
+.review-before-text .rv-sub .dlg-who{font-weight:700;color:var(--accent);flex-shrink:0;white-space:nowrap}
+.review-before-text .rv-sub .dlg-text{flex:1;min-width:0;word-break:break-word}
+.review-before-text .rv-sub.rv-text{word-break:break-word}
+/* 캐릭터 — 학생 화면의 항목별 입력(라벨 + 값) 모양 */
+.review-before-text .rv-field{display:flex;align-items:flex-start;gap:8px;padding:4px 0;
+  border-bottom:1px dashed var(--line)}
+.review-before-text .rv-field:last-child{border-bottom:none}
+.review-before-text .rv-field-label{font-weight:700;color:var(--accent);flex-shrink:0;min-width:82px;white-space:nowrap}
+.review-before-text .rv-field-val{flex:1;min-width:0;word-break:break-word}
+/* 플롯 — 섹션 설명과 아이디어 카드를 학생 화면처럼 구분 */
+.review-pair.kind-plotIdea .review-before{background:#fff}
+.review-pair.kind-plotIdea .review-before-text{font-weight:600}

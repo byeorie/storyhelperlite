@@ -2185,3 +2185,22 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
   `--memo-bg` 카드 배경 / `--memo-ink` 번호·마커 글자색)만 정의하고, 기존 규칙들은 그 변수를 참조한다.
   색을 늘리거나 바꾸려면 이 7줄과 `MEMO_COLOR_COUNT`만 고치면 된다.
   메모 카드에는 왼쪽 3px 색 띠를 추가해 하이라이트 색과 짝이 더 잘 보이게 했다.
+
+## 2026-09-12 — 제출물 원본을 학생 편집 화면과 같은 블럭 모양으로
+
+교수 첨삭 화면의 "원본"이 학생이 작성하던 모양과 달라 보였다(글쓰기는 대사·지문이 한 덩어리 텍스트,
+캐릭터는 모든 항목이 줄글로 이어짐).
+
+- 제출 데이터 구조는 그대로 둔다 — 첨삭 저장(`buildFeedbackFromPairs`)과 학생 [내 작업물에 반영]의
+  역변환(`parseCharFeedbackText` 등)이 "라벨: 값" / "캐릭터: 대사" 한 줄 형식에 의존하기 때문.
+  바꾼 것은 **그리는 방식뿐**이다.
+- `appendMemoRange(el, rawText, from, to, ...)` 신설 — rawText의 한 구간만 메모 강조와 함께 그린다.
+  `renderMemoTargetText`도 이 함수를 쓰도록 정리(동작 동일).
+- `renderStyledBeforeText` 신설 — 글쓰기는 대사/지문 칸(`.rv-sub.rv-line/.rv-text`), 캐릭터는
+  항목 행(`.rv-field`)으로 줄 단위로 나눠 그린다. `renderBeforeBody`가 kind에 따라 갈라준다.
+- ★ 메모(하이라이트·각주)는 rawText의 글자 위치로 저장되므로, 나눠 그려도 DOM 텍스트의 합이 rawText와
+  글자 하나까지 같아야 한다. 줄 끝 개행문자는 `<span class="nl-keep">`(display:none)로 넣어 맞춘다.
+  줄을 더 쪼개거나 라벨을 다시 쓰는 식으로 바꿀 때 이 규칙을 깨면 메모 위치가 어긋난다.
+- `buildReviewPairs`가 pair에 `kind`(write/character/plotSection/plotIdea)를 넣고,
+  `renderReviewPairs`가 `.review-pair.kind-*` 클래스를 붙인다. style.css에 학생 화면과 같은 칸/항목 스타일 추가.
+- 기획서·배경·사건은 원래부터 항목별 `.plan-block`이라 그대로다. 예전 제출물도 그대로 열린다.
