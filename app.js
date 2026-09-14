@@ -541,7 +541,10 @@ window.addEventListener("keydown", e=>{
     e.preventDefault();
     if(drawOverlay && drawOverlay.__drawUndo) drawOverlay.__drawUndo(); else doUndo();
   }
-  else if((k==="z" && e.shiftKey) || k==="y"){ e.preventDefault(); if(!drawOverlay) doRedo(); }
+  else if((k==="z" && e.shiftKey) || k==="y"){
+    e.preventDefault();
+    if(drawOverlay && drawOverlay.__drawRedo) drawOverlay.__drawRedo(); else if(!drawOverlay) doRedo();
+  }
 });
 
 /* 상단 툴바 — 저장 / 불러오기 / 내보내기 */
@@ -3886,21 +3889,32 @@ function downloadCanvasPng(canvas, baseName){
    snapshot()을 "무언가 바뀌기 직전"에 부르면 그 시점으로 돌아갈 수 있다. */
 const DRAW_UNDO_LIMIT=30;
 function attachDrawUndo(overlay, canvas, ctx){
-  const shots=[]; let busy=false;
-  function snapshot(){
-    try{
-      shots.push(canvas.toDataURL("image/png"));
-      if(shots.length>DRAW_UNDO_LIMIT) shots.shift();
-    }catch(_){ /* 캔버스를 읽지 못하면 실행 취소 없이 그리기만 계속한다 */ }
+  const shots=[], redos=[]; let busy=false;
+  function grab(){
+    try{ return canvas.toDataURL("image/png"); }
+    catch(_){ return null; }   /* 캔버스를 읽지 못하면 실행 취소 없이 그리기만 계속한다 */
   }
-  snapshot.reset=()=>{ shots.length=0; };   // 캔버스 크기가 바뀌면 예전 기록은 버린다
+  function paint(url, done){
+    const img=new Image();
+    img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); done(); };
+    img.onerror=done;
+    img.src=url;
+  }
+  function push(stack, url){ if(!url) return; stack.push(url); if(stack.length>DRAW_UNDO_LIMIT) stack.shift(); }
+  function snapshot(){
+    push(shots, grab());
+    redos.length=0;   // 새로 그리는 순간 '다시 실행'할 것은 사라진다
+  }
+  snapshot.reset=()=>{ shots.length=0; redos.length=0; };   // 캔버스 크기가 바뀌면 예전 기록은 버린다
   overlay.__drawUndo=()=>{
     if(busy || !shots.length) return;
-    const url=shots.pop(); busy=true;
-    const img=new Image();
-    img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); busy=false; };
-    img.onerror=()=>{ busy=false; };
-    img.src=url;
+    const cur=grab(), prev=shots.pop(); busy=true;
+    paint(prev, ()=>{ push(redos, cur); busy=false; });
+  };
+  overlay.__drawRedo=()=>{
+    if(busy || !redos.length) return;
+    const cur=grab(), next=redos.pop(); busy=true;
+    paint(next, ()=>{ push(shots, cur); busy=false; });
   };
   return snapshot;
 }
