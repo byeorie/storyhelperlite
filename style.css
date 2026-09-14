@@ -647,6 +647,8 @@ body.logged-in .login-overlay { display: none; }
 .class-row-handle:active { cursor: grabbing; }
 .class-row-handle .icon { width: 14px; height: 14px; }
 .class-row.class-dragging { opacity: .45; border-style: dashed; }
+/* 수업 카드 부가정보 줄 맨 앞의 학교 이름 태그 */
+.class-tag { display: inline-block; font-size: 11px; font-weight: 700; line-height: 1.6; color: #fff; background: var(--accent); border-radius: 999px; padding: 0 8px; margin-right: 2px; }
 
 /* 수업 관리 — 수업 상세 화면의 과제 관리/수강 학생 탭 (2026-08-24) */
 .class-tabs { max-width: 320px; margin-bottom: 14px; }

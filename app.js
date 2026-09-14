@@ -5778,7 +5778,7 @@ async function renderProfClassList(){
         <button type="button" class="assign-folder-del" data-id="${cl.id}" title="수업 삭제">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="hint">${[classMetaLine(cl),`수강생 ${cl.student_count}명`,`과제 ${cl.assignment_count}건`].filter(Boolean).join(" · ")}${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
+    <div class="hint">${[classMetaLine(cl,true),`수강생 ${cl.student_count}명`,`과제 ${cl.assignment_count}건`].filter(Boolean).join(" · ")}${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
   </div>`).join("");
   wrap.innerHTML=html||`<p class="hint">아직 만든 수업이 없습니다. [수업 만들기]로 첫 수업을 만들어 보세요.</p>`;
   wrap.querySelectorAll(".assign-folder-edit").forEach(btn=>{
@@ -5854,12 +5854,16 @@ async function commitClassOrder(wrap){
   if(!r.ok){ alert((r.body&&r.body.error)||"순서를 저장하지 못했습니다."); renderProfClassList(); }
 }
 /* 수업 목록/상세에 보여줄 "OO대학교 · 2분반 · 화요일 14:00~16:50" 형태의 부가정보 한 줄
-   (2026-09-01 (2): 수업명과 별개로 학교이름/분반/요일/시간을 입력할 수 있게 하며 추가) */
-function classMetaLine(cl){
+   (2026-09-01 (2): 수업명과 별개로 학교이름/분반/요일/시간을 입력할 수 있게 하며 추가)
+   2026-09-14: 수업 목록에서는 tagSchool=true로 불러 학교 이름만 태그(알약 모양)로 도드라지게 표시한다. */
+function classMetaLine(cl, tagSchool){
   if(!cl) return "";
   const day=cl.class_day?`${cl.class_day}요일`:"";
   const dayTime=[day, cl.class_time].filter(Boolean).join(" ");
-  return [cl.school_name, cl.section?`${cl.section}분반`:"", dayTime].filter(Boolean).map(esc).join(" · ");
+  const rest=[cl.section?`${cl.section}분반`:"", dayTime].filter(Boolean).map(esc).join(" · ");
+  if(!cl.school_name) return rest;
+  if(!tagSchool) return [esc(cl.school_name), rest].filter(Boolean).join(" · ");
+  return [`<span class="class-tag">${esc(cl.school_name)}</span>`, rest].filter(Boolean).join(" ");
 }
 const CLASS_DAY_OPTS=["월","화","수","목","금","토","일"];
 /* 수업 만들기/수정 모달에 공통으로 쓰는 학교이름·분반·요일·시간 입력 필드 (수업명과 별개 항목) */
