@@ -5433,18 +5433,19 @@ function parseCharFeedbackText(text){
 /* 현재 프로젝트에서 제출용 스냅샷을 만든다 (탭 종류별로 모양이 다름, 서버는 그대로 JSON 저장만 함) */
 async function buildSubmissionData(type){
   if(type==="storyboard"){
-    const blocks=allWriteBlocksOrdered().filter(bl=>bl.storyboard && bl.storyboard.key);
-    const out=[];
-    for(const bl of blocks){
+    /* 2026-09-14: 콘티 그림만 보내던 것을 그 칸의 글쓰기 지문·대사와 함께 보낸다 —
+       피드백/첨삭 화면에서 교수도 학생도 그림 옆에서 대본을 같이 볼 수 있게 하기 위함.
+       칸 번호(no)와 대사 번호(item.no)는 콘티 화면과 똑같이 매겨야 하므로, 그림이 없는 칸까지
+       포함해 전체를 세면서(카운터는 계속 증가) 제출에는 그림이 있는 칸만 담는다. */
+    const out=[]; let rowNo=0, dlgNo=0;
+    for(const bl of allWriteBlocksOrdered()){
+      rowNo++;
+      const items=(bl.items||[]).filter(it=>(it.text||"").trim()).map(it=> it.type==="line"
+        ? {type:"line", char:it.char||"", text:it.text.trim(), no:++dlgNo}
+        : {type:"text", char:"", text:it.text.trim()});
+      if(!(bl.storyboard && bl.storyboard.key)) continue;
       const key=await duplicateStoryboardImage(bl.storyboard.key);
-      /* 2026-09-14: 콘티 그림만 보내던 것을 그 칸의 글쓰기 지문·대사와 함께 보낸다 —
-         피드백/첨삭 화면에서 교수도 학생도 그림 옆에서 대본을 같이 볼 수 있게 하기 위함. */
-      if(key) out.push({id:bl.id, title:bl.title||"", key, size:(bl.storyboard.size||"medium"),
-        items:(bl.items||[]).filter(it=>(it.text||"").trim()).map(it=>({
-          type: it.type==="line" ? "line" : "text",
-          char: it.type==="line" ? (it.char||"") : "",
-          text: (it.text||"").trim(),
-        }))});
+      if(key) out.push({id:bl.id, no:rowNo, title:bl.title||"", key, size:(bl.storyboard.size||"medium"), items});
     }
     return out;
   }
@@ -6603,11 +6604,17 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
   if(!dataBlocks.length){ container.innerHTML=`<p class="hint">제출된 콘티가 없습니다.</p>`; return; }
   const fbMap={};
   ((feedback && feedback.blocks)||[]).forEach(b=>{ fbMap[b.id]=b; });
+  /* 칸 번호·대사 번호는 제출 데이터에 담겨 오지만(2026-09-14 이후 제출물), 없으면 여기서
+     콘티 화면과 같은 방식으로 위에서부터 이어 센다. */
+  const counter={row:0, dlg:0};
   dataBlocks.forEach(b=>{
     const sz=SB_SIZES[b.size]||SB_SIZES.medium;
     const fb=fbMap[b.id];
+    const rowNo=b.no || (++counter.row);
+    counter.row=rowNo;
     const row=document.createElement("div"); row.className="sb-fb-row";
-    const lbl=document.createElement("div"); lbl.className="sb-fb-label"; lbl.textContent=b.title||"(제목 없음)";
+    const lbl=document.createElement("div"); lbl.className="sb-fb-label";
+    lbl.textContent=rowNo+". "+(b.title||"(제목 없음)");
     row.appendChild(lbl);
     const imgsWrap=document.createElement("div"); imgsWrap.className="sb-fb-images";
     /* 지금 피드백을 그릴 기준이 되는 그림(첨삭 전이면 학생이 낸 원본, 뒤면 지금까지의 피드백본) */
@@ -6638,11 +6645,11 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전",false), mk(fb.afterKey,"피드백",true)); }
     else if(fb){ imgsWrap.appendChild(mk(fb.afterKey,"현재",true)); }
     else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티",true)); }
-    /* 2026-09-14: 그림 옆에 그 칸의 글쓰기 지문·대사를 함께 보여준다 */
+    /* 2026-09-14: 학생 콘티 화면과 같은 배치 — 지문·대사가 왼쪽, 그림이 오른쪽 */
     const bodyWrap=document.createElement("div"); bodyWrap.className="sb-fb-body";
-    bodyWrap.appendChild(imgsWrap);
-    const scriptEl=sbScriptBlock(b);
+    const scriptEl=sbScriptBlock(b, counter);
     if(scriptEl) bodyWrap.appendChild(scriptEl);
+    bodyWrap.appendChild(imgsWrap);
     row.appendChild(bodyWrap);
     if(opts.editable){
       const fbBtn=document.createElement("button"); fbBtn.type="button"; fbBtn.className="btn ghost sm icon-btn";
@@ -6656,7 +6663,7 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
 /* (2026-09-14) 콘티 칸에 딸린 글쓰기 지문·대사 — 제출 데이터의 items를 학생 글쓰기 화면과 같은
    모양(대사는 "이름: 대사" 한 줄, 지문은 한 칸)으로 그린다. items가 없는 예전 제출물은 null을
    돌려주어 그림만 보이게 한다. */
-function sbScriptBlock(b){
+function sbScriptBlock(b, counter){
   const items=(Array.isArray(b.items)?b.items:[]).filter(it=>(it.text||"").trim());
   if(!items.length) return null;
   const box=document.createElement("div"); box.className="sb-fb-script";
@@ -6666,9 +6673,13 @@ function sbScriptBlock(b){
     const line=document.createElement("div");
     if(it.type==="line"){
       line.className="rv-sub rv-line";
+      /* 대사 번호 — 콘티 화면과 같은 전체 연속 번호(제출 데이터에 없으면 이어서 센다) */
+      const n=it.no || (counter ? ++counter.dlg : 0);
+      if(counter && it.no) counter.dlg=it.no;
+      const no=document.createElement("span"); no.className="dlg-no"; no.textContent=n?(n+"."):"";
       const who=document.createElement("span"); who.className="dlg-who"; who.textContent=(it.char||"(미지정)")+":";
       const txt=document.createElement("span"); txt.className="dlg-text"; txt.textContent=(it.text||"").trim();
-      line.append(who, txt);
+      line.append(no, who, txt);
     }else{
       line.className="rv-sub rv-text";
       line.textContent=(it.text||"").trim();
