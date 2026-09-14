@@ -578,6 +578,7 @@ topExportBtn.onclick=e=>{ e.stopPropagation(); toggleExportMenu(); };
 document.getElementById("topExportPlan").onclick=()=>{ topExportMenu.hidden=true; exportPlan(); };
 document.getElementById("topExportScript").onclick=()=>{ topExportMenu.hidden=true; exportScript(); };
 document.getElementById("topExportDialogue").onclick=()=>{ topExportMenu.hidden=true; exportDialogueOnly(); };
+document.getElementById("topExportSetting").onclick=()=>{ topExportMenu.hidden=true; exportSettingsPdf(); };
 document.getElementById("topExportStoryboard").onclick=()=>{ topExportMenu.hidden=true; exportStoryboardPdf(); };
 document.getElementById("topExportStoryboardJpg").onclick=(e)=>{ topExportMenu.hidden=true; exportStoryboardJpg(e.currentTarget); };
 document.getElementById("topExportStory").onclick=()=>{ topExportMenu.hidden=true; exportStory(); };
@@ -3668,6 +3669,177 @@ async function exportStoryboardJpg(btn){
     alert("JPG 내보내기 중 오류가 발생했습니다: "+((e&&e.message)||e));
   }finally{
     if(btn){ btn.disabled=false; btn.textContent=origText; }
+  }
+}
+
+/* 3-3) 설정 출력 — PDF. 캐릭터 설정 · 배경 설정 · 사건 설정을 한 파일로 묶어 내려받는다.
+   캐릭터는 프로필 사진과 캐릭터 이미지(시트)를 함께 싣는다.
+   화면 밖에 인쇄용 HTML을 잠깐 그려 html2canvas로 캡처한 뒤 jsPDF에 담는 방식
+   (제출물 PDF 일괄 다운로드와 같은 방식이라 라이브러리도 그대로 재사용한다).
+   블록(캐릭터 한 명 / 배경 / 사건) 하나가 새 페이지에서 시작한다. */
+const SETTINGS_PDF_CSS="position:fixed;left:-99999px;top:0;width:760px;padding:32px;background:#fff;color:#222;"
+  +"font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:13px;line-height:1.65;box-sizing:border-box";
+/* 캡처 전에 이미지가 다 뜨기를 기다린다(안 기다리면 빈 칸으로 찍힌다). 8초가 지나면 그냥 진행. */
+function waitForImagesIn(root){
+  const imgs=Array.from(root.querySelectorAll("img"));
+  if(!imgs.length) return Promise.resolve();
+  return new Promise(resolve=>{
+    let remaining=imgs.length, done=false;
+    const finish=()=>{ if(!done){ done=true; resolve(); } };
+    const tick=()=>{ remaining--; if(remaining<=0) finish(); };
+    imgs.forEach(im=>{ if(im.complete) tick(); else { im.onload=im.onerror=tick; } });
+    setTimeout(finish, 8000);
+  });
+}
+function settingsPdfRows(rows){
+  if(!rows.length) return "";
+  return `<table style="width:100%;border-collapse:collapse;margin:0 0 6px">${rows.map(r=>
+    `<tr>
+       <td style="width:150px;vertical-align:top;padding:5px 8px;background:#f6f3ec;border:1px solid #e2dccd;font-weight:700;white-space:pre-wrap">${esc(r.label)}</td>
+       <td style="vertical-align:top;padding:5px 10px;border:1px solid #e2dccd;white-space:pre-wrap">${esc(r.v)}</td>
+     </tr>`).join("")}</table>`;
+}
+function settingsPdfHead(title, sub){
+  return `<h2 style="margin:0 0 ${sub?"2px":"12px"};font-size:19px;border-bottom:2px solid #8a3f2a;padding-bottom:6px">${esc(title)}</h2>`
+    +(sub?`<p style="margin:0 0 12px;color:#777;font-size:12px">${esc(sub)}</p>`:"");
+}
+function settingsPdfSubHead(t){
+  return `<div style="margin:14px 0 6px;font-weight:700;font-size:14px;color:#8a3f2a">${esc(t)}</div>`;
+}
+function settingsPdfCustomRows(target){
+  const list=Array.isArray(target&&target.customFields)?target.customFields:[];
+  return list.map(f=>({label:(f.label||"추가 항목").trim()||"추가 항목", v:(f.value||"").trim()}))
+    .filter(x=>x.v);
+}
+/* 캐릭터 한 명 */
+function settingsPdfCharHtml(ch, idx, total){
+  const rows=CHAR_FIELDS.filter(f=>f.k!=="name")
+    .map(f=>({label:f.label, v:charFieldValue(ch,f.k).trim()})).filter(x=>x.v);
+  const customs=settingsPdfCustomRows(ch);
+  const rels=(ch.relationships||[]).map(rel=>{
+    const t=(P.characters||[]).find(c=>c.id===rel.targetId);
+    return `${rel.mutual?"↔":"→"} ${t?(t.name||"(이름 없음)"):"(삭제된 캐릭터)"}${rel.label?" — "+rel.label:""}`;
+  });
+  const sheet=charSheetUrl(ch);
+  const imgCells=[];
+  if(ch.image) imgCells.push(`<div style="text-align:center">
+      <div style="font-size:11px;color:#888;margin-bottom:4px">프로필 사진</div>
+      <img src="${esc(ch.image)}" style="width:140px;height:140px;object-fit:cover;border:1px solid #ddd;border-radius:8px">
+    </div>`);
+  if(sheet) imgCells.push(`<div style="text-align:center">
+      <div style="font-size:11px;color:#888;margin-bottom:4px">캐릭터 이미지(시트)</div>
+      <img src="${esc(sheet)}" style="max-width:230px;max-height:440px;border:1px solid #ddd;border-radius:8px">
+    </div>`);
+  const imgRow=imgCells.length
+    ? `<div style="display:flex;gap:18px;align-items:flex-start;justify-content:center;margin:0 0 14px">${imgCells.join("")}</div>`
+    : "";
+  const body=[
+    settingsPdfRows(rows),
+    rels.length ? settingsPdfSubHead("인물 관계")+settingsPdfRows(rels.map((t,i)=>({label:"관계 "+(i+1), v:t}))) : "",
+    customs.length ? settingsPdfSubHead("추가 항목")+settingsPdfRows(customs) : "",
+  ].join("");
+  return settingsPdfHead("캐릭터 설정 — "+(ch.name||"(이름 없음)"), `${P.name||""} · ${idx}/${total}`)
+    + imgRow
+    + (body || '<p style="color:#999">작성된 내용이 없습니다.</p>');
+}
+/* 배경 설정 */
+function settingsPdfBackgroundHtml(){
+  const rows=BG_FIELDS.map(f=>{
+    const src=(f.src==="background"?(P.background||{}):(P.world||{}));
+    return {label:f.label, v:((src[f.k]||"")+"").trim()};
+  }).filter(x=>x.v);
+  const gloss=((P.world&&P.world.glossary)||[]).filter(g=>(g.term||"").trim()||(g.definition||"").trim())
+    .map(g=>({label:(g.term||"(용어 없음)").trim(), v:[
+      (g.definition||"").trim(),
+      g.firstEpisode?("첫 등장: "+g.firstEpisode):"",
+      g.absoluteRule?("절대 규칙: "+g.absoluteRule):"",
+      g.disclosure?("공개 시점: "+g.disclosure):"",
+      g.resolved?("해소 여부: "+g.resolved):"",
+    ].filter(Boolean).join("\n")}));
+  const customs=settingsPdfCustomRows(P.background);
+  const body=[
+    settingsPdfRows(rows),
+    gloss.length ? settingsPdfSubHead("용어사전")+settingsPdfRows(gloss) : "",
+    customs.length ? settingsPdfSubHead("추가 항목")+settingsPdfRows(customs) : "",
+  ].join("");
+  if(!body) return "";
+  return settingsPdfHead("배경 설정", P.name||"")+body;
+}
+/* 사건 설정 */
+function settingsPdfEventHtml(){
+  const ev=P.event||{};
+  const rows=EVENT_FIELDS.map(f=>({label:f.label, v:((ev[f.k]||"")+"").trim()})).filter(x=>x.v);
+  const log=(ev.log||[]).filter(g=>(g.name||"").trim()||(g.impact||"").trim()||(g.characters||"").trim())
+    .map((g,i)=>({label:"회차 "+(i+1)+(g.episode?` (${g.episode})`:""), v:[
+      (g.name||"").trim(),
+      g.characters?("관련 인물: "+g.characters):"",
+      g.impact?("파급효과: "+g.impact):"",
+      g.nextLink?("다음 사건과의 연결: "+g.nextLink):"",
+      g.cliffhanger?("클리프행어: "+g.cliffhanger):"",
+    ].filter(Boolean).join("\n")}));
+  const customs=settingsPdfCustomRows(ev);
+  const body=[
+    settingsPdfRows(rows),
+    log.length ? settingsPdfSubHead("사건 관리 (회차 일지)")+settingsPdfRows(log) : "",
+    customs.length ? settingsPdfSubHead("추가 항목")+settingsPdfRows(customs) : "",
+  ].join("");
+  if(!body) return "";
+  return settingsPdfHead("사건 설정", P.name||"")+body;
+}
+/* 블록 하나를 캡처해 PDF에 붙인다(길면 여러 페이지로 잘라 담는다) */
+async function appendSettingsBlockToPdf(doc, html, isFirstBlock){
+  const wrap=document.createElement("div");
+  wrap.style.cssText=SETTINGS_PDF_CSS;
+  wrap.innerHTML=html;
+  document.body.appendChild(wrap);
+  let canvas;
+  try{
+    await waitForImagesIn(wrap);
+    await new Promise(r=>setTimeout(r,30)); // 레이아웃 반영 대기
+    canvas=await window.html2canvas(wrap,{scale:2, useCORS:true, backgroundColor:"#ffffff"});
+  }finally{
+    document.body.removeChild(wrap);
+  }
+  const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
+  const imgW=pageW, imgH=canvas.height*(imgW/canvas.width);
+  const imgData=canvas.toDataURL("image/jpeg", 0.92);
+  let heightLeft=imgH, position=0, first=true;
+  while(heightLeft>0){
+    if(!(isFirstBlock && first)) doc.addPage();
+    doc.addImage(imgData, "JPEG", 0, position, imgW, imgH);
+    heightLeft-=pageH; position-=pageH; first=false;
+  }
+}
+/* 진행 상황은 상단 가운데 저장 배너 자리를 빌려 표시한다(메뉴 버튼은 아이콘이 들어 있어 글자만 바꿀 수 없다) */
+function settingsPdfToast(msg){
+  const el=document.getElementById("saveToast");
+  if(!el) return;
+  clearTimeout(saveToastTimer);
+  if(!msg){ el.hidden=true; return; }
+  el.className="save-toast saving"; el.textContent=msg; el.hidden=false;
+}
+async function exportSettingsPdf(){
+  const chars=(P.characters||[]).filter(ch=>
+    (ch.name||"").trim() || CHAR_FIELDS.some(f=>charFieldValue(ch,f.k).trim()) ||
+    ch.image || charSheetKey(ch) || (ch.relationships||[]).length || settingsPdfCustomRows(ch).length);
+  const blocks=chars.map((ch,i)=>settingsPdfCharHtml(ch, i+1, chars.length));
+  const bgHtml=settingsPdfBackgroundHtml(); if(bgHtml) blocks.push(bgHtml);
+  const evHtml=settingsPdfEventHtml(); if(evHtml) blocks.push(evHtml);
+  if(!blocks.length){ alert("캐릭터 · 배경 · 사건 설정에 작성된 내용이 없습니다."); return; }
+  try{
+    settingsPdfToast("라이브러리를 불러오는 중…");
+    await ensureBulkPdfLibs();
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({unit:"pt", format:"a4"});
+    for(let i=0;i<blocks.length;i++){
+      settingsPdfToast(`설정 PDF 만드는 중… (${i+1}/${blocks.length})`);
+      await appendSettingsBlockToPdf(doc, blocks[i], i===0);
+    }
+    triggerDownload(doc.output("blob"), ((P.name||"story")+"_설정.pdf").replace(/[\\/:*?"<>|]/g,"_"));
+    settingsPdfToast(null);
+  }catch(e){
+    settingsPdfToast(null);
+    alert("설정 PDF 내보내기 중 오류가 발생했습니다: "+((e&&e.message)||e));
   }
 }
 
@@ -7215,7 +7387,7 @@ document.getElementById("aboutLink").onclick=e=>{
 const GUIDE_SECTIONS=[
   {title:"시작하기 (회원가입 · 로그인)", open:true, html:`
     <ul>
-      <li>화면 왼쪽 위 "회원가입" 탭에서 소속 학교 · 이름 · 아이디 · 비밀번호 · 이메일을 입력해 가입합니다.</li>
+      <li>첫 화면의 "회원가입" 탭에서 소속 학교 · 이름 · 아이디 · 비밀번호 · 이메일을 입력해 가입합니다.</li>
       <li>가입 후 아이디 · 비밀번호로 로그인하면, 우측 상단에 프로필 아이콘이 나타납니다.</li>
       <li>아이디나 비밀번호를 잊었다면 로그인 화면의 "아이디 / 비밀번호를 잊으셨나요?" 링크를 눌러 가입 시 등록한 이메일로 찾을 수 있습니다.</li>
     </ul>`},
@@ -7224,34 +7396,54 @@ const GUIDE_SECTIONS=[
       <li><b>새 작품</b>: 좌측 상단 문서 아이콘으로 새 작품을 만들고, 여러 작품을 탭으로 동시에 열어 작업할 수 있습니다.</li>
       <li><b>다른 작품 열기</b>: 상단 가운데 드롭다운에서 닫아둔 작품도 다시 열 수 있습니다. 옆의 아이콘으로 이름 변경 · 삭제도 가능합니다.</li>
       <li><b>저장</b>: 작업 중 자동 저장되며, 저장 아이콘(Ctrl+S)으로 즉시 저장할 수도 있습니다. 실행취소(Ctrl+Z) · 다시실행(Ctrl+Shift+Z)도 지원합니다.</li>
-      <li><b>불러오기 / 내보내기</b>: 내보내기 아이콘에서 기획서 · 대본 · 대사만 (.docx), 콘티 (.pdf), 작품 전체 백업 파일(.story)을 받을 수 있습니다. 받아둔 .story 파일은 "불러오기"로 다시 열 수 있습니다.</li>
+      <li><b>내보내기</b>: 기획서 · 대본 · 대사만 (.docx), <b>설정 (.pdf — 캐릭터 · 배경 · 사건을 한 파일로, 캐릭터 이미지 포함)</b>, 콘티 (.pdf / .jpg), 작품 전체 백업 파일(.story)을 받을 수 있습니다.</li>
+      <li><b>불러오기</b>: 받아둔 .story 파일을 다시 열어 이어서 작업할 수 있습니다.</li>
+      <li>휴대폰 등 좁은 화면에서는 새 작품 · 저장 · 불러오기 · 내보내기가 <b>더보기(⋮)</b> 버튼 안에 모여 있습니다.</li>
     </ul>`},
   {title:"창작 순서 (왼쪽 메뉴)", html:`
     <ul>
-      <li><b>아이디어 수집 → 아이디어 탐색</b>: 떠오르는 소재를 자유롭게 기록하고, 태그로 분류하며 방향을 넓혀갑니다.</li>
-      <li><b>기획서 작성</b>: 제목 · 장르 · 시놉시스 등 작품의 전체 뼈대를 정리합니다.</li>
-      <li><b>캐릭터 설정</b>: 등장인물을 MBTI · 에니어그램 기반으로 구체화합니다. 오른쪽에서 기획서 미리보기를 함께 볼 수 있습니다.</li>
-      <li><b>배경 설정 / 사건 설정</b>: 세계관 · 배경, 주요 사건을 정리합니다. 역시 기획서 미리보기가 함께 제공됩니다.</li>
-      <li><b>플롯 생성</b>: "영웅의 여정" 12단계 구조에 맞춰 아이디어 블록을 배치해 이야기 흐름을 짭니다.</li>
-      <li><b>글쓰기</b>: 장면별 대본 · 대사를 작성합니다.</li>
-      <li><b>콘티제작</b>: 이미지를 업로드하거나 직접 그려 콘티를 만듭니다.</li>
+      <li><b>아이디어 수집</b>: 떠오르는 소재를 자유롭게 기록하고 태그로 분류합니다. 아이디어는 <b>작품별이 아니라 계정 전체에서 공유</b>되므로, 어느 작품에서든 모아둔 아이디어를 그대로 꺼내 쓸 수 있습니다(샘플 작품만 예외로 따로 관리됩니다).</li>
+      <li><b>아이디어 탐색</b>: 주인공 유형 · 결핍 · 목표 · 세계관 · 갈등 · 결말 등 선택지를 골라가며 로그라인을 조립해 보고, 마음에 드는 결과를 아이디어로 저장합니다.</li>
+      <li><b>기획서 작성</b>: 제목 · 장르 · 로그라인 · 시놉시스 등 작품의 전체 뼈대를 정리합니다.</li>
+      <li><b>캐릭터 설정</b>: 인물을 MBTI · 에니어그램(스트레스 · 성장 방향 화살표 포함)으로 구체화하고, 역할과 <b>역할의 변화</b>, 인물의 변화 3단계(사건 전 / 중 / 이후), 외모 세부 항목, 인물 간 관계를 정리합니다. <b>프로필 사진</b>과 <b>캐릭터 이미지(시트)</b>를 등록할 수 있고, 시트는 이미지를 올리거나 앱 안에서 직접 그릴 수 있습니다.</li>
+      <li><b>배경 설정</b>: 세계관(시대 · 장소 · 규칙 · 세력 · 금기 등)과 분위기를 정리하고, <b>용어사전</b>에 작품 고유 용어를 등록합니다.</li>
+      <li><b>사건 설정</b>: 중심 사건의 목표 · 갈등 · 결과 · 결말 방향을 정리하고, <b>회차 일지</b>에 회차별 사건 · 파급효과 · 클리프행어를 기록합니다.</li>
+      <li>캐릭터 · 배경 · 사건 화면에서는 <b>항목 추가</b>로 원하는 항목을 직접 만들어 쓸 수 있습니다.</li>
+      <li>캐릭터 · 배경 · 사건 화면 오른쪽에서는 <b>기획서 미리보기</b>를 함께 볼 수 있고, 캐릭터 화면에서는 미리보기와 캐릭터 이미지를 탭으로 번갈아 볼 수 있습니다.</li>
+      <li><b>플롯 생성</b>: 3막 구조 · 5막 구조 · 영웅의 여정 · 8단계 원형 구조 · 액자 구조 · 비선형 · 옴니버스 등 <b>여러 구조 중 하나를 골라</b> 단계별로 아이디어를 배치해 이야기 흐름을 짭니다.</li>
+      <li><b>글쓰기</b>: 플롯에서 불러온 아이디어가 <b>섹션 블럭(상자)</b>이 되고, 그 안에 <b>칸 블럭</b>을 여러 개 만들어 지문과 대사를 씁니다. 블록은 끌어서 순서를 바꾸거나 상자 안팎으로 옮길 수 있습니다.</li>
+      <li><b>콘티제작</b>: 글쓰기의 각 칸마다 이미지를 올리거나 직접 그려 콘티를 만듭니다. 그리기 도구는 <b>레이어 3장(스케치 · 채색 · 선)</b>, 펜 · 마커 · 연필, 지우개, 채우기, 확대/축소, 가이드선(3분할 · 격자 · 소실점 등), 필압을 지원하며 Ctrl+Z로 되돌릴 수 있습니다. [PNG 저장]으로 그림을 내 컴퓨터에 따로 받을 수도 있습니다.</li>
     </ul>`},
   {title:"스토리텔링 학습", html:`
     <ul>
       <li>창작이 막힐 때 참고할 수 있는 스토리텔링 이론 카드 모음입니다. 항목을 눌러 자세한 설명 · 표 · 예시를 볼 수 있습니다.</li>
     </ul>`},
-  {title:"과제 제출과 첨삭 반영 (학생)", html:`
+  {title:"샘플 데이터 (예시 작품)", html:`
     <ul>
-      <li>담당 교수님을 여러 명 등록했다면, 상단 툴바에서 제출할 교수(수업)를 먼저 선택하세요.</li>
-      <li>각 작성 화면 상단의 <b>[제출]</b> 버튼으로 현재 내용을 교수님께 제출합니다.</li>
-      <li><b>[피드백 보기]</b>에서 교수님이 남긴 항목별 피드백과 메모를 확인할 수 있습니다.</li>
-      <li>"반영" 버튼을 누르면 첨삭 내용이 내 작업물에 자동으로 채워지고, 교수님 메모는 별도 카드로 표시됩니다(필요 없으면 카드의 ✕로 삭제 가능).</li>
+      <li>아이디어부터 기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기까지 미리 채워둔 예시 작품입니다.</li>
+      <li>"열기"를 누르면 새 작품 탭으로 추가되며, 원본은 그대로 남아 있어 여러 번 열 수 있습니다. 샘플의 아이디어는 내 계정 아이디어 목록과 섞이지 않습니다.</li>
+    </ul>`},
+  {title:"과제 제출과 피드백 (학생)", html:`
+    <ul>
+      <li>왼쪽 메뉴의 <b>[수업 코드 입력]</b>에서 교수님께 받은 6자리 수업 코드를 등록합니다(여러 수업 등록 가능). 잘못 등록한 수업은 같은 화면에서 [나가기]로 뺄 수 있습니다.</li>
+      <li>수업을 여러 개 등록했다면, 상단 툴바의 드롭다운에서 <b>제출할 수업</b>을 먼저 고르세요.</li>
+      <li>각 작성 화면(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티) 상단의 <b>[제출]</b> 버튼으로 현재 내용을 제출합니다. 과제에 종류가 지정돼 있으면 <b>그 종류의 탭에서만</b> 목록에 보입니다.</li>
+      <li>교수님이 아직 첨삭하지 않은 상태라면, 다시 제출할 때 <b>이전 제출물을 덮어씁니다</b>(같은 과제가 여러 개 쌓이지 않습니다).</li>
+      <li>교수님이 피드백을 보내면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 알림을 누르면 바로 그 과제의 피드백 화면으로 이동하고, [─]로 접어 붉은 원 배지로 줄여둘 수 있습니다.</li>
+      <li><b>[피드백 보기]</b>에서 항목별 첨삭 · 메모 · 교수님의 <b>평가(총평)</b>를 확인할 수 있습니다. 메모는 색깔별로 본문의 해당 부분과 짝지어 표시됩니다.</li>
+      <li>"반영" 버튼을 누르면 첨삭 내용이 내 작업물에 채워지고, 교수님 메모는 별도 카드로 표시됩니다(필요 없으면 카드의 ✕로 삭제 가능).</li>
+      <li>콘티 과제는 교수님이 그림 위에 직접 그려 피드백을 주며, 원본과 피드백 그림을 나란히 비교해 볼 수 있습니다.</li>
     </ul>`},
   {title:"교수 계정 기능", html:`
     <ul>
-      <li><b>수업 관리</b>: 과목별로 수업을 만들고, 내 코드로 가입한 학생을 수업별 수강생으로 배정합니다.</li>
-      <li><b>전체 학생 명단</b>: [수업 관리] 안에서 내 코드로 등록한 전체 학생 명단을 확인합니다.</li>
-      <li><b>과제 관리</b>: [수업 관리]의 각 수업(또는 "수업 미지정 과제") 안에서 과제 폴더를 만들고, 제출된 작업물에 항목별 첨삭과 메모를 남깁니다.</li>
+      <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
+      <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
+      <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
+      <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티)</b>와 제출기한을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
+      <li>학생이 제출하면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 제출함에서 <b>[과제 확인]</b>만 눌러 읽었다는 표시를 남기거나, 제출물을 열어 항목별로 첨삭 · 메모를 달 수 있습니다.</li>
+      <li>첨삭 화면 맨 아래에 <b>평가(총평)</b> 입력칸이 있고, <b>[피드백 전달]</b>을 누르면 학생에게 알림이 가며 자동으로 제출함으로 돌아옵니다.</li>
+      <li>콘티 과제는 제출된 그림을 크게 열어 <b>그 위에 직접 그려</b> 피드백을 줄 수 있습니다(학생 원본은 지워지지 않습니다).</li>
+      <li>과제 폴더에서 제출물 전체를 <b>학생별 PDF로 묶어(zip) 내려받기</b>도 가능합니다.</li>
     </ul>`},
   {title:"관리자 계정 기능", html:`
     <ul>
@@ -7259,10 +7451,10 @@ const GUIDE_SECTIONS=[
     </ul>`},
   {title:"계정 설정", html:`
     <ul>
-      <li>우측 상단 프로필 아이콘을 누르면 <b>개인정보 수정 · 등록 코드 · 비밀번호 변경</b> 3개 메뉴가 나옵니다.</li>
+      <li>우측 상단 프로필 아이콘을 누르면 <b>개인정보 수정 · 비밀번호 변경 · 로그아웃</b> 메뉴가 나옵니다.</li>
       <li><b>개인정보 수정</b>에서 소속 학교 · 이름 · 이메일을 수정할 수 있습니다.</li>
-      <li><b>등록 코드</b>에서 학생은 교수님께 받은 강의 코드를 등록하고(여러 강의 가능), 교수는 [수업 관리]에서 각 수업의 코드를 확인합니다.</li>
       <li><b>비밀번호 변경</b>에서 "비밀번호 변경 메일 보내기"를 누르면 가입 이메일로 변경 링크가 발송됩니다.</li>
+      <li><b>수업 코드 입력</b>은 왼쪽 메뉴 맨 아래에 있습니다. 학생은 여기서 강의 코드를 등록하거나 등록된 수업에서 나갈 수 있고, 교수는 [수업 관리]에서 각 수업의 코드를 확인합니다.</li>
     </ul>`},
   {title:"데이터 보관 안내", html:`
     <ul>
