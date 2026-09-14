@@ -3713,6 +3713,12 @@ const SB_SIZES = {
   medium:{w:350, h:350, label:"중간 칸"},
   small: {w:350, h:250, label:"작은 칸"}
 };
+/* (2026-09-14) 화면에 적어 주는 칸 크기는 실제 캔버스의 2배로 표시한다(웹툰 원고 기준 치수 안내용).
+   캔버스·저장 해상도는 위 SB_SIZES 그대로이고, 여기서는 "표시 문구"만 2배로 만든다. */
+const SB_SIZE_LABEL_SCALE = 2;
+function sbSizeText(s){
+  return `가로 ${s.w*SB_SIZE_LABEL_SCALE} · 세로 ${s.h*SB_SIZE_LABEL_SCALE}px`;
+}
 
 function rStoryboard(){
   if(feedbackPage && feedbackPage.type==="storyboard"){ rFeedbackPage(); return; }
@@ -4042,7 +4048,7 @@ function openSizePicker(bl, onPick){
   Object.keys(SB_SIZES).forEach(k=>{
     const s=SB_SIZES[k];
     const b=document.createElement("button"); b.type="button"; b.className="btn ghost sb-size-btn";
-    b.innerHTML=`<b>${s.label}</b><span class="hint">세로 ${s.h}px · 가로 ${s.w}px</span>`;
+    b.innerHTML=`<b>${s.label}</b><span class="hint">${sbSizeText(s)}</span>`;
     b.onclick=()=>{ document.body.removeChild(overlay); onPick(k); };
     list.appendChild(b);
   });
@@ -4878,7 +4884,7 @@ function openDrawPage(bl, sizeKey){
     if(!cur){ alert("이 콘티 칸을 찾지 못했습니다. 화면을 새로고침(F5)해 주세요."); closeDrawPage(); return; }
     const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
     buildDrawPageShell(host, {
-      title:"콘티 그리기 — "+sz.label+" (세로 "+sz.h+" × 가로 "+sz.w+"px)",
+      title:"콘티 그리기 — "+sz.label+" ("+sbSizeText(sz)+")",
       hint:"저장하면 지금 화면에 보이는 그대로 한 장으로 합쳐집니다. 숨긴 층은 그림에서 빠지지만 지워지지는 않아서, 다음에 다시 열면 층이 그대로 살아 있습니다.",
       pngName:"콘티",
       editorOpts:{w:sz.w, h:sz.h, preload:drawPreloadFrom(cur.storyboard)},
@@ -5431,7 +5437,14 @@ async function buildSubmissionData(type){
     const out=[];
     for(const bl of blocks){
       const key=await duplicateStoryboardImage(bl.storyboard.key);
-      if(key) out.push({id:bl.id, title:bl.title||"", key, size:(bl.storyboard.size||"medium")});
+      /* 2026-09-14: 콘티 그림만 보내던 것을 그 칸의 글쓰기 지문·대사와 함께 보낸다 —
+         피드백/첨삭 화면에서 교수도 학생도 그림 옆에서 대본을 같이 볼 수 있게 하기 위함. */
+      if(key) out.push({id:bl.id, title:bl.title||"", key, size:(bl.storyboard.size||"medium"),
+        items:(bl.items||[]).filter(it=>(it.text||"").trim()).map(it=>({
+          type: it.type==="line" ? "line" : "text",
+          char: it.type==="line" ? (it.char||"") : "",
+          text: (it.text||"").trim(),
+        }))});
     }
     return out;
   }
@@ -6625,7 +6638,12 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전",false), mk(fb.afterKey,"피드백",true)); }
     else if(fb){ imgsWrap.appendChild(mk(fb.afterKey,"현재",true)); }
     else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티",true)); }
-    row.appendChild(imgsWrap);
+    /* 2026-09-14: 그림 옆에 그 칸의 글쓰기 지문·대사를 함께 보여준다 */
+    const bodyWrap=document.createElement("div"); bodyWrap.className="sb-fb-body";
+    bodyWrap.appendChild(imgsWrap);
+    const scriptEl=sbScriptBlock(b);
+    if(scriptEl) bodyWrap.appendChild(scriptEl);
+    row.appendChild(bodyWrap);
     if(opts.editable){
       const fbBtn=document.createElement("button"); fbBtn.type="button"; fbBtn.className="btn ghost sm icon-btn";
       fbBtn.innerHTML=ICONS.chat+" 피드백 그리기";
@@ -6634,6 +6652,31 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     }
     container.appendChild(row);
   });
+}
+/* (2026-09-14) 콘티 칸에 딸린 글쓰기 지문·대사 — 제출 데이터의 items를 학생 글쓰기 화면과 같은
+   모양(대사는 "이름: 대사" 한 줄, 지문은 한 칸)으로 그린다. items가 없는 예전 제출물은 null을
+   돌려주어 그림만 보이게 한다. */
+function sbScriptBlock(b){
+  const items=(Array.isArray(b.items)?b.items:[]).filter(it=>(it.text||"").trim());
+  if(!items.length) return null;
+  const box=document.createElement("div"); box.className="sb-fb-script";
+  const cap=document.createElement("span"); cap.className="sb-fb-imglabel"; cap.textContent="글쓰기 지문·대사";
+  const body=document.createElement("div"); body.className="review-before-text";
+  items.forEach(it=>{
+    const line=document.createElement("div");
+    if(it.type==="line"){
+      line.className="rv-sub rv-line";
+      const who=document.createElement("span"); who.className="dlg-who"; who.textContent=(it.char||"(미지정)")+":";
+      const txt=document.createElement("span"); txt.className="dlg-text"; txt.textContent=(it.text||"").trim();
+      line.append(who, txt);
+    }else{
+      line.className="rv-sub rv-text";
+      line.textContent=(it.text||"").trim();
+    }
+    body.appendChild(line);
+  });
+  box.append(cap, body);
+  return box;
 }
 /* 첨삭 버전 저장(=새 라운드) — 지금 손댄 블록(blockId)만 {beforeKey,afterKey}를 새로 채우고,
    나머지 블록은 지금까지의 상태를 그대로 이어붙여서(처음 손대는 블록이면 beforeKey=afterKey=원본 key)
