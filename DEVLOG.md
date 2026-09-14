@@ -2388,3 +2388,64 @@ Chromium(Playwright)으로 실제 획을 긋고 확인: 층별 그리기·마커
   바로 줄도록 `notifyDismiss()`에서 다시 그린다.
 - `style.css`: `.notify-head`, `.notify-head-title`, `.notify-fold`, `.notify-badge` 추가.
   모바일에서는 접힌 배지만 오른쪽 정렬(`.notify-stack.notify-collapsed`).
+
+## 2026-09-14 (8) — 캐릭터 설정: 프로필 사진 / 캐릭터 이미지(시트) 좌우 배치 · 버튼 정렬
+
+버튼들이 높이·간격이 제각각이고 프로필과 시트가 위아래로 길게 늘어져 있던 것을 정리.
+- `app.js` `rCharDetail()`: 프로필 사진 블록과 `#charSheetRow`를 `.char-media-row` 안의
+  `.char-media-col` 두 개(제목 `프로필 사진` / `캐릭터 이미지(시트)`)로 감싸 좌우 배치.
+  버튼들은 `.char-media-btns` 한 줄로 묶고 설명(hint)은 그 아래로 내렸다. 제목이 생겼으므로
+  hint 문구에서 중복되던 앞부분을 덜어냈다.
+- `style.css`: `.char-media-row`(auto-fit minmax(min(330px,100%),1fr) 그리드 — 화면이 좁으면
+  자동으로 위아래로 쌓임), `.char-media-col`, `.char-media-title`, `.char-media-btns`
+  (버튼 `height:30px` 고정 + 아이콘 13px으로 높이 통일) 추가.
+  `.char-img-actions`는 가로 wrap → 세로(버튼줄 + 설명) 구성으로 변경,
+  `.char-sheet-thumb`는 72×144px로 조정하고 "이미지 없음"이 줄바꿈되지 않게 `white-space:nowrap`.
+- 검증: Playwright로 1000/760/430px 폭에서 렌더링 확인(버튼 높이 동일, 좁은 폭에서 정상 적층).
+
+## 2026-09-14 (9) — 캐릭터 설정 확장: 한 줄 입력 · 역할 변화 · 에니어그램 화살표 · 3단계 변화 · 외모 세분화
+
+### 1) 모든 입력 항목을 한 줄에 하나씩
+`app.js` `charDetailPage()`에서 2단 배치(`<div class="row">`)를 모두 풀어 라벨+입력이 한 줄씩
+이어지도록 변경(이름/역할/나이/성별/직업/소속, MBTI/에니어그램, 목표·결함·강점·비밀, 좋아하는 것·
+싫어하는 것). 프로필 사진 / 캐릭터 이미지(시트) 두 카드의 좌우 배치는 그대로 유지.
+
+### 2) 역할의 변화 (추가 역할 선택)
+조력자였다가 적대자가 되는 식의 변화를 표현할 수 있게 했다.
+- 캐릭터 자료에 `roleArcs: [{id, role, note}]` 추가(`blankChar()`, 불러오기 시 배열 보정).
+- `[역할]` 아래에 `[+ 역할 변화 추가]` 버튼 → 줄마다 `역할 선택 + 계기 메모 + 삭제`.
+  아래에 `협력자 → 그림자` 형태의 흐름 칩(`#charRoleArcFlow`)을 함께 보여준다.
+- 역할(보글러 원형) 선택 시 설명도 `#roleDescBox`에 표시.
+- 제출/첨삭: `CHAR_FIELDS`에 `역할의 변화` 추가. 배열이므로 `charFieldValue()`에서
+  "처음 역할 → 변화 역할 (계기)" 한 줄로 합쳐 보내고, 첨삭 적용 시에는 배열/객체 항목을
+  덮어쓰지 않도록 막았다(구조 파손 방지).
+
+### 3) 에니어그램 유형별 변화(화살표)
+- `data.js` `ENNEAGRAM` 9개 항목에 `stress`(역방향), `growth`(정방향)와 각각의 설명
+  `stressDesc`/`growthDesc` 추가. 화살표는 통합/분열 방향 정설을 따름
+  (1→4/7, 2→8/4, 3→9/6, 4→2/1, 5→7/8, 6→3/9, 7→1/5, 8→5/2, 9→6/3).
+- `app.js` `wireTypeDesc()`에 `#enneaArcBox` 렌더 추가 —
+  [평소(원래 유형)] ↓ [스트레스 · 역방향] ↓ [성장 · 정방향] 3단 카드.
+- `style.css` `.ennea-arc` 계열 추가.
+
+### 4) 인물의 변화 3단계(세로 배치)
+`arcBefore`(① 사건 발생 전) / `arcDuring`(② 사건 중, 신규) / `arcAfter`(③ 사건 이후).
+미리보기 `.char-arc-preview`를 가로 → 세로(`flex-direction:column`, ↓ 화살표)로 바꾸고
+`.arc-box.arc-during` 색을 추가. `CHAR_FIELDS` 라벨도 사건 발생 전/중/이후로 변경.
+
+### 5) 외모 항목 세분화
+`apHeight`(키/체형) · `apFace`(얼굴형/인상) · `apEyes`(눈) · `apHair`(머리) · `apSkin`(피부톤) ·
+`apOutfit`(평소 복장/스타일) · `apMark`(신체 특징) 신규. 기존 `appearance`는 자료 손실 없이
+"전체 인상 / 기타"로 계속 사용한다. 섹션도 [외모]와 [특징]으로 분리.
+
+검증: Playwright로 실제 앱(index.html)을 띄워 캐릭터 상세를 열고 역할 변화 추가 → 새로고침 →
+값 유지, `charFieldsToText()` 출력에 새 항목 포함, 콘솔 오류 0건까지 확인.
+
+## 2026-09-14 (10) — 첨삭 화면: 평가 입력창을 맨 아래로
+
+평가를 적고 곧바로 아래 [피드백 전달]을 누를 수 있도록 순서를 바꿨다.
+- `app.js` `rProfSubmissionReview()`의 틀 마크업에서 `#reviewEvalBox`를 `#reviewPairs` 위 →
+  아래(= [피드백 전달] 버튼 바로 위)로 이동. 동작 코드는 id로 찾으므로 그대로.
+- `style.css`: `#reviewEvalBox .review-eval{margin:16px 0 0}` — 첨삭 목록과의 간격.
+  (학생 피드백 화면의 `.review-eval`은 예전처럼 맨 위 그대로)
+

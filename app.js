@@ -301,6 +301,8 @@ function fillProject(p){
       /* 예전 "인물 변화(아크)" 단일 필드에 값이 있고 전/후 필드가 비어 있으면 "변화 전"으로 이전 */
       if(m.arc && !m.arcBefore && !m.arcAfter) m.arcBefore=m.arc;
       m.customFields=Array.isArray(m.customFields)?m.customFields.map(x=>Object.assign({id:uid(),label:"",value:""},x)):[];
+      /* 2026-09-14: 역할의 변화 목록 — 예전 자료에는 없으므로 빈 배열로 채운다 */
+      m.roleArcs=Array.isArray(m.roleArcs)?m.roleArcs.map(x=>Object.assign({id:uid(),role:"",note:""},x)):[];
       return m;
     }):b.characters,
     plot: Array.isArray(p.plot)?Object.assign([...b.plot],p.plot):b.plot,
@@ -445,7 +447,11 @@ function fillPlotDoc(pd){
 }
 function blankChar(){
   return {id:uid(), name:"",role:"영웅",age:"",gender:"",job:"",mbti:"",enneagram:"",goal:"",flaw:"",strength:"",arc:"",arcType:"",desc:"", relationships:[], image:"",
-    parentsInfo:"", familyRelations:"", affiliation:"", arcBefore:"", arcAfter:"",
+    parentsInfo:"", familyRelations:"", affiliation:"", arcBefore:"", arcDuring:"", arcAfter:"",
+    /* 2026-09-14: 역할의 변화 — [{id, role, note}] 조력자였다가 적대자가 되는 식의 변화를 순서대로 */
+    roleArcs:[],
+    /* 2026-09-14: 외모 세부 항목 (기존 appearance는 "전체 인상/기타"로 계속 사용) */
+    apHeight:"", apFace:"", apEyes:"", apHair:"", apSkin:"", apOutfit:"", apMark:"",
     appearance:"", speechHabit:"", charmPoint:"", secret:"", backstory:"", likes:"", dislikes:"", dialogueSample:"", customFields:[]};
 }
 function currentProject(){
@@ -1334,6 +1340,38 @@ function wireTypeDesc(body){
     enneaSel.addEventListener("change", refresh);
     refresh();
   }
+  /* 에니어그램 "화살표" — 평소(원래 유형) → 스트레스(역방향) → 성장(정방향) 3단계 변화 안내.
+     캐릭터가 이야기를 거치며 어떻게 무너지고 어떻게 나아지는지를 유형별로 보여준다 (2026-09-14). */
+  const enneaArc=body.querySelector("#enneaArcBox");
+  if(enneaSel&&enneaArc){
+    const refreshArc=()=>{
+      const f=ENNEAGRAM.find(e=>e.n===enneaSel.value);
+      if(!f || !f.stress){ enneaArc.innerHTML=""; return; }
+      enneaArc.innerHTML=`
+        <div class="ennea-arc-title">이 유형의 변화 — 평소 → 스트레스(역방향) → 성장(정방향)</div>
+        <div class="ennea-step ennea-normal">
+          <div class="ennea-step-head">평소 · 원래 유형 <b>${esc(f.n)}</b></div>
+          <p>${esc(f.d)}</p></div>
+        <div class="ennea-step-arrow">↓ 전개를 통해 점점 스트레스를 받아갈 때 (역방향)</div>
+        <div class="ennea-step ennea-stress">
+          <div class="ennea-step-head">스트레스 · <b>${esc(f.stress)}</b>의 부정적인 면이 나온다</div>
+          <p>${esc(f.stressDesc||"")}</p></div>
+        <div class="ennea-step-arrow">↓ 사건의 해결로 더 나은 존재가 될 때 (정방향)</div>
+        <div class="ennea-step ennea-growth">
+          <div class="ennea-step-head">성장 · <b>${esc(f.growth)}</b>의 긍정적인 면을 얻는다</div>
+          <p>${esc(f.growthDesc||"")}</p></div>`;
+    };
+    enneaSel.addEventListener("change", refreshArc);
+    refreshArc();
+  }
+  /* 역할(보글러 원형) 설명 */
+  const roleSel=body.querySelector('[data-k="role"]');
+  const roleBox=body.querySelector("#roleDescBox");
+  if(roleSel&&roleBox){
+    const refresh=()=>{ const f=VOGLER_ROLES.find(r=>r.n===roleSel.value); roleBox.textContent=f?f.d:""; };
+    roleSel.addEventListener("change", refresh);
+    refresh();
+  }
 }
 /* 캐릭터 상세 수정 페이지 — 신규 생성/기존 수정 공용. 기본 정보 + 관계 + 서사 확장 항목(외모/말투/과거사/취향/대사) */
 function charDetailPage(ch){
@@ -1352,30 +1390,49 @@ function charDetailPage(ch){
   const arcTypeList=(STORY_GUIDE_SLOTS.find(s=>s.key==="change")||{options:[]}).options.map(o=>o.v);
   const arcTypeOpts=arcTypeList.map(v=>`<option value="${v}">${v}</option>`).join("");
   body.innerHTML=`
-    <div class="char-img-row">
-      <div class="char-avatar char-avatar-lg" id="charImgPreview"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
-      <div class="char-img-actions">
-        <label class="btn ghost sm">사진 선택<input type="file" id="charImgInput" accept="image/*" style="display:none"></label>
-        <button type="button" class="btn ghost sm" id="charImgRemove"${ch.image?"":" disabled"}>제거</button>
-        <p class="hint" style="margin:4px 0 0">500KB 이하 이미지, 300×300px로 자동 압축됩니다.</p>
-      </div>
+    <div class="char-media-row">
+      <section class="char-media-col">
+        <h4 class="char-media-title">프로필 사진</h4>
+        <div class="char-img-row">
+          <div class="char-avatar char-avatar-lg" id="charImgPreview"${ch.image?"":` style="background:${TAG_PALETTE[hashStr(ch.id)%TAG_PALETTE.length]}"`}>${charAvatarHtml(ch)}</div>
+          <div class="char-img-actions">
+            <div class="char-media-btns">
+              <label class="btn ghost sm">사진 선택<input type="file" id="charImgInput" accept="image/*" style="display:none"></label>
+              <button type="button" class="btn ghost sm" id="charImgRemove"${ch.image?"":" disabled"}>제거</button>
+            </div>
+            <p class="hint">500KB 이하, 300×300px로 자동 압축됩니다.</p>
+          </div>
+        </div>
+      </section>
+      <section class="char-media-col">
+        <h4 class="char-media-title">캐릭터 이미지(시트)</h4>
+        <div class="char-sheet-row" id="charSheetRow"></div>
+      </section>
     </div>
-    <div class="char-sheet-row" id="charSheetRow"></div>
     <h3 class="char-detail-sub">${ICONS.user} 인물 정보</h3>
-    <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
-    <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
-    <div class="row"><div><label>나이</label><input type="text" data-k="age" placeholder="예: 17세, 20대 초반"></div>
-    <div><label>성별</label><input type="text" data-k="gender" placeholder="예: 여성, 남성, 논바이너리 등"></div></div>
-    <div class="row"><div><label>직업/신분</label><textarea data-k="job" class="ta-line" rows="1" placeholder="예: 고등학생, 헌터 길드 마스터"></textarea></div>
-    <div><label>소속/세력</label><textarea data-k="affiliation" class="ta-line" rows="1" placeholder="예: OO가문, OO길드, 무소속"></textarea></div></div>
+    <label>이름</label><input type="text" data-k="name">
+    <label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select>
+    <div class="type-desc-box" id="roleDescBox"></div>
+    <label>역할의 변화</label>
+    <p class="hint" style="margin:0 0 6px">조력자였다가 적대자가 되는 것처럼 역할이 바뀐다면, 바뀌는 순서대로 역할을 추가하세요.</p>
+    <div class="char-rolearc-list" id="charRoleArcList"></div>
+    <button type="button" class="btn ghost sm" id="charRoleArcAdd">${ICONS.plus} 역할 변화 추가</button>
+    <div class="char-rolearc-flow" id="charRoleArcFlow"></div>
+    <label>나이</label><input type="text" data-k="age" placeholder="예: 17세, 20대 초반">
+    <label>성별</label><input type="text" data-k="gender" placeholder="예: 여성, 남성, 논바이너리 등">
+    <label>직업/신분</label><textarea data-k="job" class="ta-line" rows="1" placeholder="예: 고등학생, 헌터 길드 마스터"></textarea>
+    <label>소속/세력</label><textarea data-k="affiliation" class="ta-line" rows="1" placeholder="예: OO가문, OO길드, 무소속"></textarea>
 
     <h3 class="char-detail-sub">${ICONS.bolt} 인물 성격</h3>
-    <div class="row"><div><label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select><div class="type-desc-box" id="mbtiDescBox"></div></div>
-    <div><label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select><div class="type-desc-box" id="enneaDescBox"></div></div></div>
-    <div class="row"><div><label>목표 (원하는 것)</label><textarea data-k="goal" class="ta-line" rows="1"></textarea></div>
-    <div><label>결함 (약점·트라우마)</label><textarea data-k="flaw" class="ta-line" rows="1"></textarea></div></div>
-    <div class="row"><div><label>강점 (장점)</label><textarea data-k="strength" class="ta-line" rows="1"></textarea></div>
-    <div><label>비밀</label><textarea data-k="secret" class="ta-line" rows="1" placeholder="아직 밝혀지지 않은 것"></textarea></div></div>
+    <label>MBTI</label><select data-k="mbti"><option value="">선택</option>${mbtiOpts}</select>
+    <div class="type-desc-box" id="mbtiDescBox"></div>
+    <label>에니어그램</label><select data-k="enneagram"><option value="">선택</option>${enOpts}</select>
+    <div class="type-desc-box" id="enneaDescBox"></div>
+    <div class="ennea-arc" id="enneaArcBox"></div>
+    <label>목표 (원하는 것)</label><textarea data-k="goal" class="ta-line" rows="1"></textarea>
+    <label>결함 (약점·트라우마)</label><textarea data-k="flaw" class="ta-line" rows="1"></textarea>
+    <label>강점 (장점)</label><textarea data-k="strength" class="ta-line" rows="1"></textarea>
+    <label>비밀</label><textarea data-k="secret" class="ta-line" rows="1" placeholder="아직 밝혀지지 않은 것"></textarea>
 
     <h3 class="char-detail-sub">${ICONS.building} 가족사</h3>
     <label>부모의 정보 및 관계</label><textarea data-k="parentsInfo" placeholder="부모님의 성격, 직업, 캐릭터와의 관계 등"></textarea>
@@ -1384,16 +1441,26 @@ function charDetailPage(ch){
 
     <h3 class="char-detail-sub">${ICONS.network} 인물의 변화</h3>
     <label>인물호 유형</label><select data-k="arcType"><option value="">선택 안 함</option>${arcTypeOpts}</select>
-    <div class="row"><div><label>변화 전 모습</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도·상태"></textarea></div>
-    <div><label>변화 후 모습</label><textarea data-k="arcAfter" placeholder="이야기를 거치며 달라진 성격·태도·상태"></textarea></div></div>
+    <label>① 사건 발생 전</label><textarea data-k="arcBefore" placeholder="이야기 시작 시점의 성격·태도·상태"></textarea>
+    <label>② 사건 중</label><textarea data-k="arcDuring" placeholder="사건에 휘말리며 흔들리는 모습 — 스트레스를 받을 때 드러나는 다른 얼굴"></textarea>
+    <label>③ 사건 이후</label><textarea data-k="arcAfter" placeholder="사건을 겪고 난 뒤 달라진 성격·태도·상태"></textarea>
     <div class="char-arc-preview" id="charArcPreview"></div>
 
-    <h3 class="char-detail-sub">${ICONS.book} 외모 및 특징</h3>
-    <label>외모 상세</label><textarea data-k="appearance" placeholder="키, 체형, 헤어스타일, 옷차림, 특징적 외형 등"></textarea>
+    <h3 class="char-detail-sub">${ICONS.book} 외모</h3>
+    <label>키 / 체형</label><textarea data-k="apHeight" class="ta-line" rows="1" placeholder="예: 175cm, 마른 편 / 어깨가 넓은 근육질"></textarea>
+    <label>얼굴형 / 인상</label><textarea data-k="apFace" class="ta-line" rows="1" placeholder="예: 갸름한 턱선, 웃으면 어려 보이는 인상"></textarea>
+    <label>눈 (색·눈매)</label><textarea data-k="apEyes" class="ta-line" rows="1" placeholder="예: 짙은 갈색, 끝이 처진 순한 눈매"></textarea>
+    <label>머리 (색·길이·스타일)</label><textarea data-k="apHair" class="ta-line" rows="1" placeholder="예: 검은색 단발, 늘 대충 묶은 머리"></textarea>
+    <label>피부톤</label><textarea data-k="apSkin" class="ta-line" rows="1" placeholder="예: 창백한 편, 햇볕에 그을린 구릿빛"></textarea>
+    <label>평소 복장 / 스타일</label><textarea data-k="apOutfit" class="ta-line" rows="1" placeholder="예: 낡은 후드티에 청바지, 교복은 늘 단정하게"></textarea>
+    <label>신체 특징 (흉터·점·문신·장신구 등)</label><textarea data-k="apMark" class="ta-line" rows="1" placeholder="예: 왼쪽 눈 아래 흉터, 오른손 약지의 반지"></textarea>
+    <label>전체 인상 / 기타</label><textarea data-k="appearance" placeholder="위 항목으로 담기 어려운 분위기, 첫인상, 그림에서 꼭 지켜야 할 점 등"></textarea>
+
+    <h3 class="char-detail-sub">${ICONS.book} 특징</h3>
     <label>말투 / 버릇</label><textarea data-k="speechHabit" placeholder="자주 쓰는 말, 어투, 습관적 행동 등"></textarea>
-    <label>매력 포인트 / 시그니처 소품</label><textarea data-k="charmPoint" class="ta-line" rows="1" placeholder="예: 왼쪽 눈 아래 흉터, 항상 들고 다니는 낡은 만년필"></textarea>
-    <div class="row"><div><label>좋아하는 것</label><textarea data-k="likes" class="ta-line" rows="1"></textarea></div>
-    <div><label>싫어하는 것</label><textarea data-k="dislikes" class="ta-line" rows="1"></textarea></div></div>
+    <label>매력 포인트 / 시그니처 소품</label><textarea data-k="charmPoint" class="ta-line" rows="1" placeholder="예: 항상 들고 다니는 낡은 만년필"></textarea>
+    <label>좋아하는 것</label><textarea data-k="likes" class="ta-line" rows="1"></textarea>
+    <label>싫어하는 것</label><textarea data-k="dislikes" class="ta-line" rows="1"></textarea>
     <label>대사 샘플</label><textarea data-k="dialogueSample" placeholder="이 캐릭터라면 할 법한 대사 예시"></textarea>
 
     <h3 class="char-detail-sub">기타 메모</h3>
@@ -1433,10 +1500,12 @@ function charDetailPage(ch){
     sheetRow.innerHTML=`
       <div class="char-sheet-thumb${has?"":" empty"}">${has?`<img src="${charSheetUrl(ch)}" alt="">`:"이미지 없음"}</div>
       <div class="char-img-actions">
-        <button type="button" class="btn ghost sm icon-btn" id="chSheetDraw">${ICONS.pencil} ${has?"이어서 그리기":"직접 그리기"}</button>
-        <label class="btn ghost sm">${has?"이미지 교체":"이미지 추가"}<input type="file" id="chSheetFile" accept="image/*" style="display:none"></label>
-        <button type="button" class="btn ghost sm" id="chSheetDel"${has?"":" disabled"}>삭제</button>
-        <p class="hint" style="margin:4px 0 0">캐릭터 이미지(시트) — 세로 1000 × 가로 500px, 500KB 이하로 자동 압축됩니다. 등록하면 오른쪽에서 [캐릭터 이미지] 탭으로 볼 수 있습니다.</p>
+        <div class="char-media-btns">
+          <button type="button" class="btn ghost sm icon-btn" id="chSheetDraw">${ICONS.pencil} ${has?"이어서 그리기":"직접 그리기"}</button>
+          <label class="btn ghost sm">${has?"이미지 교체":"이미지 추가"}<input type="file" id="chSheetFile" accept="image/*" style="display:none"></label>
+          <button type="button" class="btn ghost sm" id="chSheetDel"${has?"":" disabled"}>삭제</button>
+        </div>
+        <p class="hint">세로 1000 × 가로 500px, 500KB 이하로 자동 압축됩니다. 등록하면 오른쪽 [캐릭터 이미지] 탭에서 볼 수 있습니다.</p>
       </div>`;
     const thumb=sheetRow.querySelector(".char-sheet-thumb");
     if(has) thumb.onclick=()=>openStoryboardImageViewer((ch.name||"캐릭터")+" 이미지", charSheetKey(ch));
@@ -1446,16 +1515,57 @@ function charDetailPage(ch){
   }
   refreshSheetRow();
 
-  /* 인물의 변화(전/후)를 나란히 보여주는 미리보기 -- 입력할 때마다 즉시 갱신 */
+  /* 역할의 변화 — 처음 역할(위의 [역할])에서 바뀌어 가는 역할을 순서대로 추가한다 (2026-09-14).
+     예: 협력자 → 그림자. 각 줄에 "언제/왜 바뀌는지"를 함께 적을 수 있다. */
+  const roleArcList=body.querySelector("#charRoleArcList");
+  const roleArcFlow=body.querySelector("#charRoleArcFlow");
+  function refreshRoleArcFlow(){
+    const chain=[ch.role||"(역할 없음)"].concat((ch.roleArcs||[]).map(r=>r.role||"(역할 없음)"));
+    roleArcFlow.innerHTML=(ch.roleArcs||[]).length
+      ? chain.map(r=>`<span class="rolearc-chip">${esc(r)}</span>`).join('<span class="rolearc-sep">→</span>')
+      : "";
+  }
+  function renderRoleArcList(){
+    roleArcList.innerHTML="";
+    (ch.roleArcs||[]).forEach((ra,i)=>{
+      const row=document.createElement("div"); row.className="char-rolearc-item";
+      const step=document.createElement("span"); step.className="char-rolearc-step"; step.textContent="변화 "+(i+1);
+      const sel=document.createElement("select");
+      sel.innerHTML=`<option value="">역할 선택</option>`+VOGLER_ROLES.map(r=>`<option value="${r.n}">${r.n} — ${r.d}</option>`).join("");
+      sel.value=ra.role||"";
+      sel.onchange=()=>{ ra.role=sel.value; save(); refreshRoleArcFlow(); };
+      const note=document.createElement("input"); note.type="text"; note.className="char-rolearc-note";
+      note.placeholder="언제·왜 바뀌는가 (예: 비밀이 밝혀진 뒤)"; note.value=ra.note||"";
+      note.oninput=()=>{ ra.note=note.value; save(); };
+      const x=document.createElement("button"); x.type="button"; x.className="chip-x"; x.innerHTML=ICONS.close; x.title="삭제";
+      x.onclick=()=>{ ch.roleArcs.splice(i,1); save(); renderRoleArcList(); };
+      row.append(step, sel, note, x);
+      roleArcList.appendChild(row);
+    });
+    refreshRoleArcFlow();
+  }
+  body.querySelector("#charRoleArcAdd").onclick=()=>{
+    if(!Array.isArray(ch.roleArcs)) ch.roleArcs=[];
+    ch.roleArcs.push({id:uid(), role:"", note:""});
+    save(); renderRoleArcList();
+  };
+  renderRoleArcList();
+  body.querySelector('[data-k="role"]').addEventListener("change", refreshRoleArcFlow);
+
+  /* 인물의 변화(사건 전 → 중 → 후)를 위에서 아래로 보여주는 미리보기 -- 입력할 때마다 즉시 갱신 */
   const arcPreview=body.querySelector("#charArcPreview");
   const arcBox=t=>t?esc(t).replace(/\n/g,"<br>"):'<span class="arc-empty">아직 입력 안 됨</span>';
   function refreshArcPreview(){
-    arcPreview.innerHTML=`<div class="arc-box arc-before"><div class="arc-box-label">변화 전</div>${arcBox(ch.arcBefore)}</div>
-      <div class="arc-arrow">→</div>
-      <div class="arc-box arc-after"><div class="arc-box-label">변화 후</div>${arcBox(ch.arcAfter)}</div>`;
+    arcPreview.innerHTML=`<div class="arc-box arc-before"><div class="arc-box-label">① 사건 발생 전</div>${arcBox(ch.arcBefore)}</div>
+      <div class="arc-arrow">↓</div>
+      <div class="arc-box arc-during"><div class="arc-box-label">② 사건 중</div>${arcBox(ch.arcDuring)}</div>
+      <div class="arc-arrow">↓</div>
+      <div class="arc-box arc-after"><div class="arc-box-label">③ 사건 이후</div>${arcBox(ch.arcAfter)}</div>`;
   }
-  body.querySelector('[data-k="arcBefore"]').addEventListener("input", refreshArcPreview);
-  body.querySelector('[data-k="arcAfter"]').addEventListener("input", refreshArcPreview);
+  ["arcBefore","arcDuring","arcAfter"].forEach(k=>{
+    const el=body.querySelector('[data-k="'+k+'"]');
+    if(el) el.addEventListener("input", refreshArcPreview);
+  });
   refreshArcPreview();
 
   function renderRelList(){
@@ -5272,18 +5382,32 @@ const EVENT_FIELDS=[
    (여러 캐릭터 × 여러 항목을 전부 개별 칸으로 나누면 목록이 지나치게 길어지므로, 플롯/글쓰기 탭과
    같은 방식을 따름). 값에 줄바꿈이 있어도 다음 "라벨:"이 나오기 전까지는 같은 항목으로 이어붙인다. */
 const CHAR_FIELDS=[
-  {k:"name", label:"이름"}, {k:"role", label:"역할"}, {k:"age", label:"나이"}, {k:"gender", label:"성별"},
+  {k:"name", label:"이름"}, {k:"role", label:"역할"}, {k:"roleArcs", label:"역할의 변화"},
+  {k:"age", label:"나이"}, {k:"gender", label:"성별"},
   {k:"job", label:"직업/신분"}, {k:"affiliation", label:"소속/세력"},
   {k:"mbti", label:"MBTI"}, {k:"enneagram", label:"에니어그램"},
   {k:"goal", label:"목표"}, {k:"flaw", label:"결함"}, {k:"strength", label:"강점"}, {k:"secret", label:"비밀"},
   {k:"parentsInfo", label:"부모의 정보 및 관계"}, {k:"familyRelations", label:"가족 관계"}, {k:"backstory", label:"성장배경 / 과거사"},
-  {k:"arcType", label:"인물호 유형"}, {k:"arcBefore", label:"변화 전 모습"}, {k:"arcAfter", label:"변화 후 모습"},
-  {k:"appearance", label:"외모 상세"}, {k:"speechHabit", label:"말투 / 버릇"}, {k:"charmPoint", label:"매력 포인트"},
+  {k:"arcType", label:"인물호 유형"},
+  {k:"arcBefore", label:"사건 발생 전"}, {k:"arcDuring", label:"사건 중"}, {k:"arcAfter", label:"사건 이후"},
+  {k:"apHeight", label:"키 / 체형"}, {k:"apFace", label:"얼굴형 / 인상"}, {k:"apEyes", label:"눈"},
+  {k:"apHair", label:"머리"}, {k:"apSkin", label:"피부톤"}, {k:"apOutfit", label:"평소 복장 / 스타일"},
+  {k:"apMark", label:"신체 특징"}, {k:"appearance", label:"전체 인상 / 기타"},
+  {k:"speechHabit", label:"말투 / 버릇"}, {k:"charmPoint", label:"매력 포인트"},
   {k:"likes", label:"좋아하는 것"}, {k:"dislikes", label:"싫어하는 것"}, {k:"dialogueSample", label:"대사 샘플"},
   {k:"desc", label:"기타 메모"},
 ];
+/* 항목 값을 제출용 한 줄 텍스트로 — roleArcs처럼 배열인 항목은 "A → B (계기)" 형태로 합친다 */
+function charFieldValue(ch, k){
+  if(k==="roleArcs"){
+    const list=Array.isArray(ch.roleArcs)?ch.roleArcs:[];
+    if(!list.length) return "";
+    return [ch.role||"(역할 없음)"].concat(list.map(r=>(r.role||"(역할 없음)")+(r.note?` (${r.note})`:""))).join(" → ");
+  }
+  return (ch[k]||"").toString();
+}
 function charFieldsToText(ch){
-  return CHAR_FIELDS.map(f=>({label:f.label, v:(ch[f.k]||"").toString().trim()}))
+  return CHAR_FIELDS.map(f=>({label:f.label, v:charFieldValue(ch,f.k).trim()}))
     .filter(x=>x.v).map(x=>`${x.label}: ${x.v}`).join("\n");
 }
 /* charFieldsToText의 역변환 — "라벨: 값" 줄로 시작하는 지점마다 새 항목을 열고, 그다음 줄부터
@@ -6200,8 +6324,8 @@ async function rProfSubmissionReview(id, version){
     <p class="hint" id="reviewHint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>(위/아래로 분리) 또는 <b>메모</b>(텍스트를 드래그해 선택한 채 우클릭하면 그 범위에 각주로, 그냥 우클릭하면 블록 전체에 표시)를 달 수 있습니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
     <div id="reviewCheckBar"></div>
     <div id="reviewVersionBanner"></div>
-    <div id="reviewEvalBox"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
+    <div id="reviewEvalBox"></div>
     <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
   app.appendChild(c);
   c.querySelector("#reviewBackBtn").onclick=()=>{ profReviewId=null; profReviewVersion=null; render(); };
@@ -6968,7 +7092,8 @@ function applyFeedbackToProject(type, feedback, memos){
       const ch=P.characters.find(c=>c.id===fb.id);
       if(!ch) return;
       const parsed=parseCharFeedbackText(fb.text||"");
-      Object.keys(parsed).forEach(k=>{ ch[k]=parsed[k]; });
+      /* 배열/객체 항목(역할의 변화 등)은 첨삭 텍스트로 덮어쓰지 않는다 — 구조가 깨지므로 */
+      Object.keys(parsed).forEach(k=>{ if(ch[k] && typeof ch[k]==="object") return; ch[k]=parsed[k]; });
       setAppliedMemos("character",fb.id,memos);
     });
   }
