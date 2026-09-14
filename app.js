@@ -3918,6 +3918,50 @@ function deleteStoryboardSlot(bl){
 }
 
 
+/* (2026-09-14) 콘티 칸 크기 고르기 · 캔버스를 PNG로 내려받기 — 그리기 도구를 개편할 때
+   실수로 함께 지워졌다가 되살린 부분이다. 그리기 페이지(openDrawPage)와 PNG 저장 버튼이 이 둘을 쓴다. */
+function openSizePicker(bl, onPick){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="캔버스 크기 선택";
+  top.append(ttl, iconBtn(ICONS.close, "닫기", ()=>document.body.removeChild(overlay)));
+  box.appendChild(top);
+  const list=document.createElement("div"); list.className="sb-size-list";
+  Object.keys(SB_SIZES).forEach(k=>{
+    const s=SB_SIZES[k];
+    const b=document.createElement("button"); b.type="button"; b.className="btn ghost sb-size-btn";
+    b.innerHTML=`<b>${s.label}</b><span class="hint">세로 ${s.h}px · 가로 ${s.w}px</span>`;
+    b.onclick=()=>{ document.body.removeChild(overlay); onPick(k); };
+    list.appendChild(b);
+  });
+  box.appendChild(list);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+/* 그리는 중인 캔버스를 내 컴퓨터에 PNG 파일로 내려받는다 (저장 후 종료와는 별개로, 서버에
+   올리지 않고 그림만 따로 보관하고 싶을 때 쓴다 — 2026-09-14) */
+function downloadCanvasPng(canvas, baseName){
+  const stamp=new Date().toISOString().slice(0,16).replace(/[-:]/g,"").replace("T","_");
+  const name=(baseName||"콘티").replace(/[\\/:*?"<>|]/g,"_")+"_"+stamp+".png";
+  const finish=url=>{
+    const a=document.createElement("a"); a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  try{
+    if(canvas.toBlob){
+      canvas.toBlob(blob=>{
+        if(!blob){ alert("PNG로 저장하지 못했습니다."); return; }
+        const url=URL.createObjectURL(blob);
+        finish(url);
+        setTimeout(()=>URL.revokeObjectURL(url), 10000);
+      }, "image/png");
+    } else finish(canvas.toDataURL("image/png"));
+  }catch(_){ alert("PNG로 저장하지 못했습니다."); }
+}
+
 /* ===== 🎨 그리기 도구 (2026-09-14 전면 개편) =====
    콘티 그리기 · 캐릭터 이미지 그리기 · 교수 첨삭이 모두 이 엔진 하나를 함께 쓴다.
 
@@ -4718,7 +4762,9 @@ const SB_LAYER_MAX_BYTES=500*1024;   /* 서버 상한 600KB보다 작게 */
 function openDrawPage(bl, sizeKey){
   const blId=bl && bl.id;
   openDrawPageWith(host=>{
-    const cur=allWriteBlocksOrdered().find(x=>x.id===blId);
+    /* 목록에서 같은 id를 다시 찾되, 못 찾으면 넘겨받은 블록을 그대로 쓴다
+       (여기서 되돌려 보내면 버튼이 아무 반응 없는 것처럼 보인다) */
+    const cur=allWriteBlocksOrdered().find(x=>x.id===blId) || bl;
     if(!cur){ alert("이 콘티 칸을 찾지 못했습니다. 화면을 새로고침(F5)해 주세요."); closeDrawPage(); return; }
     const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
     buildDrawPageShell(host, {
