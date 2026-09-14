@@ -37,6 +37,7 @@ const ICONS = {
   cloud:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
   image:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
   pencil:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
+  bucket:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5L19 13a2 2 0 0 1 0 2.8l-4.2 4.2a2 2 0 0 1-2.8 0L3.5 11.5z"/><path d="M7 6L4.5 3.5"/><path d="M20.5 16.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z"/></svg>',
   eraser:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a2 2 0 0 1 0-2.8l9.6-9.6a2 2 0 0 1 2.8 0l5.7 5.7a2 2 0 0 1 0 2.8L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>'
 };
 function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
@@ -533,17 +534,17 @@ function forceSaveNow(){
 window.addEventListener("keydown", e=>{
   if(!(e.ctrlKey||e.metaKey)) return;
   const k=e.key.toLowerCase();
-  /* 그리기 팝업이 열려 있으면 Ctrl+Z는 프로젝트 되돌리기(이전 화면으로 넘어감)가 아니라
+  /* 그리기 화면이 열려 있으면 Ctrl+Z는 프로젝트 되돌리기(이전 화면으로 넘어감)가 아니라
      그림의 직전 획/지우기만 되돌린다 (2026-09-14) */
-  const drawOverlay=document.querySelector(".draw-modal-overlay");
+  const ed=activeDrawEditor;
   if(k==="s"){ e.preventDefault(); forceSaveNow(); }
   else if(k==="z" && !e.shiftKey){
     e.preventDefault();
-    if(drawOverlay && drawOverlay.__drawUndo) drawOverlay.__drawUndo(); else doUndo();
+    if(ed) ed.undo(); else doUndo();
   }
   else if((k==="z" && e.shiftKey) || k==="y"){
     e.preventDefault();
-    if(drawOverlay && drawOverlay.__drawRedo) drawOverlay.__drawRedo(); else if(!drawOverlay) doRedo();
+    if(ed) ed.redo(); else doRedo();
   }
 });
 
@@ -658,6 +659,13 @@ const app=document.getElementById("app");
 app.addEventListener("contextmenu", e=>{ e.preventDefault(); });
 function render(){
   try{
+    /* 그리기 페이지가 열려 있으면 다른 탭 대신 이 페이지를 보여준다.
+       이미 떠 있으면 다시 만들지 않는다 — 서버에서 작품을 다시 불러올 때도 render()가 불리는데,
+       그때 캔버스를 새로 만들면 그리던 그림이 사라지기 때문(2026-09-14) */
+    if(drawPage){
+      if(!app.querySelector(".draw-page")){ app.innerHTML=""; app.classList.add("wide"); drawPage.build(app); }
+      return;
+    }
     refreshProjSelect();
     app.innerHTML="";
     // 2026-08-20: 캐릭터 탭은 상세 편집 화면(charDetailFor 있음)일 때만 넓게 표시됐는데,
@@ -1302,9 +1310,9 @@ function charGalleryCard(ch){
     e.stopPropagation();
     if(P.characters.length<=1){ alert("최소 1명의 캐릭터는 있어야 합니다."); return; }
     if(!confirm(`'${ch.name||"이 캐릭터"}'를 삭제할까요?`)) return;
-    const sheetKey=charSheetKey(ch);   // 캐릭터를 지우면 등록된 캐릭터 이미지도 서버에서 지운다
+    const sheetKeys=charSheetAllKeys(ch);   // 캐릭터를 지우면 등록된 캐릭터 이미지(층 포함)도 서버에서 지운다
     P.characters=P.characters.filter(c=>c.id!==ch.id);
-    if(sheetKey) deleteStoryboardImage(sheetKey);
+    sheetKeys.forEach(deleteStoryboardImage);
     P.characters.forEach(c=>{ c.relationships=(c.relationships||[]).filter(r=>r.targetId!==ch.id); });
     save(); render();
   };
@@ -1432,7 +1440,7 @@ function charDetailPage(ch){
       </div>`;
     const thumb=sheetRow.querySelector(".char-sheet-thumb");
     if(has) thumb.onclick=()=>openStoryboardImageViewer((ch.name||"캐릭터")+" 이미지", charSheetKey(ch));
-    sheetRow.querySelector("#chSheetDraw").onclick=()=>openCharSheetDrawModal(ch, ()=>render());
+    sheetRow.querySelector("#chSheetDraw").onclick=()=>openCharSheetDrawPage(ch, ()=>render());
     sheetRow.querySelector("#chSheetFile").onchange=e=>{ handleCharSheetFile(e.target.files[0], ch, ()=>render()); e.target.value=""; };
     sheetRow.querySelector("#chSheetDel").onclick=()=>removeCharSheet(ch, ()=>render());
   }
@@ -3589,10 +3597,6 @@ function importStory(e){
 }
 
 /* ===== 🖼 콘티제작 (글쓰기 탭의 장면 블록과 행 단위로 연동) ===== */
-/* 그리기 툴 펜 굵기 — 브라우저(개인)별로 마지막에 고른 값을 기억해서 다음에 그릴 때도 그대로 유지 */
-const DRAW_WIDTH_KEY = "storyhelper_drawWidth";
-function loadDrawWidth(){ const n=Number(localStorage.getItem(DRAW_WIDTH_KEY)); return (n>=1 && n<=24) ? n : 4; }
-function saveDrawWidth(n){ try{ localStorage.setItem(DRAW_WIDTH_KEY, String(n)); }catch(e){} }
 
 const SB_SIZES = {
   large: {w:350, h:500, label:"큰 칸"},
@@ -3685,7 +3689,7 @@ function storyboardSlot(bl){
     img.alt="콘티";
     tw.appendChild(img);
     const actions=document.createElement("div"); actions.className="sb-thumb-actions";
-    actions.appendChild(iconBtn(ICONS.pencil, "다시 그리기", ()=>openSizePicker(bl, size=>openDrawModal(bl, size))));
+    actions.appendChild(iconBtn(ICONS.pencil, "다시 그리기", ()=>openSizePicker(bl, size=>openDrawPage(bl, size))));
     actions.appendChild(iconBtn(ICONS.upload, "이미지로 교체", ()=>triggerStoryboardUpload(bl)));
     actions.appendChild(iconBtn(ICONS.trash, "삭제", ()=>deleteStoryboardSlot(bl)));
     tw.appendChild(actions);
@@ -3699,7 +3703,7 @@ function storyboardSlot(bl){
     upBtn.onclick=()=>triggerStoryboardUpload(bl);
     const drawBtn=document.createElement("button"); drawBtn.type="button"; drawBtn.className="btn ghost sm icon-btn";
     drawBtn.innerHTML=ICONS.pencil+" 직접 그리기";
-    drawBtn.onclick=()=>openSizePicker(bl, size=>openDrawModal(bl, size));
+    drawBtn.onclick=()=>openSizePicker(bl, size=>openDrawPage(bl, size));
     btnRow.append(upBtn, drawBtn);
     ph.appendChild(btnRow);
     wrap.appendChild(ph);
@@ -3753,7 +3757,7 @@ function triggerStoryboardUpload(bl){
       img.onload=()=>{
         compressImageToLimit(img, 300*1024, blob=>{
           if(!blob){ alert("이미지 처리에 실패했습니다."); return; }
-          saveStoryboardBlob(bl, blob, (bl.storyboard && bl.storyboard.size) || "medium");
+          saveStoryboardDrawing(bl, blob, null, (bl.storyboard && bl.storyboard.size) || "medium");
         });
       };
       img.onerror=()=>alert("이미지를 불러오지 못했습니다.");
@@ -3824,11 +3828,12 @@ function compressCanvasToLimit(canvas, maxBytes, cb){
   attempt();
 }
 
+/* blob.type을 그대로 보낸다 — 합친 그림은 image/jpeg, 층 3장은 투명도를 지켜야 하므로 image/png */
 async function uploadStoryboardBlob(blob){
   const token=typeof getToken==="function" ? getToken() : null;
   if(!token) return null;
   try{
-    const r=await fetch("/api/storyboard-image", {method:"POST", headers:{"Authorization":"Bearer "+token, "Content-Type":"image/jpeg"}, body:blob});
+    const r=await fetch("/api/storyboard-image", {method:"POST", headers:{"Authorization":"Bearer "+token, "Content-Type":(blob&&blob.type)||"image/jpeg"}, body:blob});
     if(!r.ok) return null;
     const j=await r.json().catch(()=>null);
     return (j && j.key) || null;
@@ -3862,27 +3867,44 @@ function liveWriteBlock(bl){
     return list.find(x=>x.id===bl.id) || null;
   }catch(e){ return bl; }
 }
+/* 콘티 한 칸에 딸린 모든 이미지 key(합친 그림 + 층 3장) */
+function sbAllKeys(sb){
+  if(!sb) return [];
+  const out=[]; if(sb.key) out.push(sb.key);
+  const L=sb.layers||{};
+  ["sketch","color","line"].forEach(id=>{ if(L[id]) out.push(L[id]); });
+  return out;
+}
 /* 그린 그림을 서버(R2)에 올리고 콘티 칸에 붙인다. 성공하면 true, 실패하면 false를 돌려준다 —
-   호출한 쪽(그리기 팝업)은 false일 때 팝업을 닫지 말아야 한다. */
-async function saveStoryboardBlob(bl, blob, size){
-  const key=await uploadStoryboardBlob(blob);
+   호출한 쪽(그리기 페이지)은 false일 때 화면을 벗어나지 말아야 한다.
+   (2026-09-14) 합친 그림 한 장에 더해 층 3장도 투명 PNG로 함께 올려 다음에 이어서 고칠 수 있게 한다. */
+async function saveStoryboardDrawing(bl, flatBlob, layerBlobs, size){
+  const key=await uploadStoryboardBlob(flatBlob);
   if(!key){
-    alert("그림을 서버에 올리지 못했습니다.\n\n인터넷 연결을 확인한 뒤 [저장 후 종료]를 다시 눌러 주세요.\n(그림은 화면에 그대로 남아 있습니다.)");
+    alert("그림을 서버에 올리지 못했습니다.\n\n인터넷 연결을 확인한 뒤 [저장하고 나가기]를 다시 눌러 주세요.\n(그림은 화면에 그대로 남아 있습니다.)");
     return false;
+  }
+  const layerKeys={};
+  for(const id of ["sketch","color","line"]){
+    const b=layerBlobs && layerBlobs[id]; if(!b) continue;
+    const k=await uploadStoryboardBlob(b);
+    if(k) layerKeys[id]=k;   /* 층 하나가 실패해도 합친 그림은 이미 올라갔으므로 저장 자체는 살린다 */
   }
   const target=liveWriteBlock(bl);
   if(!target){
     alert("그리는 동안 작품 정보가 새로 불러와져서 이 칸을 찾지 못했습니다.\n\n화면을 새로고침(F5)한 뒤 다시 그려 주세요.");
     deleteStoryboardImage(key);
+    Object.keys(layerKeys).forEach(id=>deleteStoryboardImage(layerKeys[id]));
     return false;
   }
-  const oldKey=target.storyboard && target.storyboard.key;
-  target.storyboard={key, size:size||"medium"};
+  const oldKeys=sbAllKeys(target.storyboard);
+  target.storyboard={key, size:size||"medium", layers:layerKeys};
   save();
   /* 0.6초 디바운스를 기다리지 않고 바로 서버에 올린다 — 저장 직후 창을 닫아도 유실되지 않게 */
   if(typeof forceSaveToServer==="function") forceSaveToServer();
-  render();
-  if(oldKey && oldKey!==key) deleteStoryboardImage(oldKey);
+  render();   /* 그리기 페이지가 열려 있는 동안에는 render()가 그 페이지를 그대로 두므로 안전하다 */
+  const fresh=sbAllKeys(target.storyboard);
+  oldKeys.filter(k=>fresh.indexOf(k)<0).forEach(deleteStoryboardImage);
   if(typeof serverSaveReady==="function" && !serverSaveReady()){
     alert("그림은 이 브라우저에 저장했지만, 지금 서버와 연결되어 있지 않아 서버에는 올라가지 않았습니다.\n\n화면을 새로고침(F5)해 서버 연결을 되살린 뒤 다시 확인해 주세요.\n이 상태로 다른 컴퓨터에서 열면 이 그림이 보이지 않습니다.");
   }
@@ -3890,211 +3912,664 @@ async function saveStoryboardBlob(bl, blob, size){
 }
 function deleteStoryboardSlot(bl){
   if(!confirm("이 콘티를 삭제할까요?")) return;
-  const key=bl.storyboard && bl.storyboard.key;
+  const keys=sbAllKeys(bl.storyboard);
   bl.storyboard=null; save(); render();
-  if(key) deleteStoryboardImage(key);
+  keys.forEach(deleteStoryboardImage);
 }
 
-/* 캔버스 크기 선택 팝업 (이 팝업은 바깥을 눌러도/×를 눌러도 닫힘 — 그리기 툴 팝업과는 다름) */
-function openSizePicker(bl, onPick){
-  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
-  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  const box=document.createElement("div"); box.className="plot-modal";
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="캔버스 크기 선택";
-  top.append(ttl, iconBtn(ICONS.close, "닫기", ()=>document.body.removeChild(overlay)));
-  box.appendChild(top);
-  const list=document.createElement("div"); list.className="sb-size-list";
-  Object.keys(SB_SIZES).forEach(k=>{
-    const s=SB_SIZES[k];
-    const b=document.createElement("button"); b.type="button"; b.className="btn ghost sb-size-btn";
-    b.innerHTML=`<b>${s.label}</b><span class="hint">세로 ${s.h}px · 가로 ${s.w}px</span>`;
-    b.onclick=()=>{ document.body.removeChild(overlay); onPick(k); };
-    list.appendChild(b);
-  });
-  box.appendChild(list);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-}
 
-/* 그리는 중인 캔버스를 내 컴퓨터에 PNG 파일로 내려받는다 (저장 후 종료와는 별개로, 서버에
-   올리지 않고 그림만 따로 보관하고 싶을 때 쓴다 — 2026-09-14) */
-function downloadCanvasPng(canvas, baseName){
-  const stamp=new Date().toISOString().slice(0,16).replace(/[-:]/g,"").replace("T","_");
-  const name=(baseName||"콘티").replace(/[\\/:*?"<>|]/g,"_")+"_"+stamp+".png";
-  const finish=url=>{
-    const a=document.createElement("a"); a.href=url; a.download=name;
-    document.body.appendChild(a); a.click(); a.remove();
-  };
-  try{
-    if(canvas.toBlob){
-      canvas.toBlob(blob=>{
-        if(!blob){ alert("PNG로 저장하지 못했습니다."); return; }
-        const url=URL.createObjectURL(blob);
-        finish(url);
-        setTimeout(()=>URL.revokeObjectURL(url), 10000);
-      }, "image/png");
-    } else finish(canvas.toDataURL("image/png"));
-  }catch(_){ alert("PNG로 저장하지 못했습니다."); }
-}
+/* ===== 🎨 그리기 도구 (2026-09-14 전면 개편) =====
+   콘티 그리기 · 캐릭터 이미지 그리기 · 교수 첨삭이 모두 이 엔진 하나를 함께 쓴다.
 
-/* 그리기 팝업의 실행 취소(Ctrl+Z) — 획 하나, 지우기 한 번 같은 "바로 직전 행동"만 되돌린다.
-   그림 전체를 PNG로 통째로 기억하는 방식이라 메모리 보호를 위해 30단계까지만 보관한다.
-   snapshot()을 "무언가 바뀌기 직전"에 부르면 그 시점으로 돌아갈 수 있다. */
+   [레이어] <canvas> 세 장을 CSS로 겹쳐 놓았다. 아래에서 위로 스케치 → 채색 → 선 순서.
+     합성을 따로 계산하지 않으므로 확대해도 느려지지 않는다. 맨 아래 base 캔버스는 흰 종이
+     (교수 첨삭에서는 학생이 낸 원본 그림)이며 사용자가 직접 그릴 수 없다.
+   [저장] 화면에 보이는 그대로 한 장(JPEG)으로 합쳐 올리고, 레이어 세 장도 투명 PNG로 따로 올린다.
+     그래서 다음에 다시 열면 레이어가 그대로 살아난다(용량은 합친 그림의 약 1.4배 — 2026-09-14 실측).
+   [실행 취소] 획 하나가 끝날 때마다 "바뀐 레이어 한 장"만 PNG로 기억한다(30단계).
+*/
 const DRAW_UNDO_LIMIT=30;
-function attachDrawUndo(overlay, canvas, ctx){
-  const shots=[], redos=[]; let busy=false;
-  function grab(){
-    try{ return canvas.toDataURL("image/png"); }
-    catch(_){ return null; }   /* 캔버스를 읽지 못하면 실행 취소 없이 그리기만 계속한다 */
+/* 아래에서 위로 쌓이는 순서 그대로 나열한다(스케치가 맨 아래, 선이 맨 위) */
+const DRAW_LAYERS=[
+  {id:"sketch", label:"스케치", opacity:0.45},
+  {id:"color",  label:"채색",   opacity:1},
+  {id:"line",   label:"선",     opacity:1}
+];
+const DRAW_BRUSHES=[
+  {id:"pen",    label:"펜",   hint:"또렷한 선. 태블릿에서는 누르는 힘에 따라 굵기가 변합니다"},
+  {id:"marker", label:"마커", hint:"반투명하게 겹쳐 칠해집니다. 넓은 면을 칠할 때"},
+  {id:"pencil", label:"연필", hint:"거친 질감. 밑그림·스케치에 어울립니다"}
+];
+const DRAW_GUIDES=[
+  {id:"none",   label:"없음"},
+  {id:"thirds", label:"3분할"},
+  {id:"cross",  label:"중앙선"},
+  {id:"grid",   label:"격자"},
+  {id:"persp",  label:"소실점"}
+];
+/* 팔레트 — 5줄 × 5칸. 무채색 / 살구·갈색 / 파랑 / 초록 / 노랑·보라 계열 */
+const DRAW_PALETTE=[
+  "#2c2a26","#6b6560","#9a948d","#c9c4bd","#ffffff",
+  "#7d2b1f","#c4654a","#e08b62","#f0c9a0","#f7e4d0",
+  "#1f4470","#4a7fc4","#7ba7dd","#a9cbe8","#d7e7f5",
+  "#2e6b52","#5a8f6b","#8fbf90","#c8dfae","#e7f0cf",
+  "#8a6b2a","#c4a34a","#e2cc74","#8a4ac4","#c44a91"
+];
+
+/* 그리기 설정은 브라우저(개인)별로 마지막에 고른 값을 기억한다 */
+function drawLsGet(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:v; }catch(_){ return d; } }
+function drawLsSet(k,v){ try{ localStorage.setItem(k,String(v)); }catch(_){ } }
+function loadDrawWidth(){ const n=Number(drawLsGet("storyhelper_drawWidth",4)); return (n>=1 && n<=40) ? n : 4; }
+function saveDrawWidth(n){ drawLsSet("storyhelper_drawWidth", n); }
+function loadDrawRecentColors(){
+  try{ const a=JSON.parse(drawLsGet("storyhelper_drawRecent","[]")); return Array.isArray(a)?a.slice(0,8):[]; }
+  catch(_){ return []; }
+}
+function pushDrawRecentColor(c){
+  const list=loadDrawRecentColors().filter(x=>x!==c);
+  list.unshift(c);
+  drawLsSet("storyhelper_drawRecent", JSON.stringify(list.slice(0,8)));
+}
+
+/* 지금 화면에 열려 있는 그리기 편집기(Ctrl+Z가 어디로 갈지 결정한다). 편집기를 닫으면 null로 되돌린다 */
+let activeDrawEditor=null;
+
+/* 레이어 한 장이 완전히 비어 있는지(아무것도 안 그렸는지) 확인 — 빈 레이어는 서버에 올리지 않는다 */
+function isCanvasEmpty(canvas){
+  try{
+    const d=canvas.getContext("2d").getImageData(0,0,canvas.width,canvas.height).data;
+    for(let i=3;i<d.length;i+=4){ if(d[i]!==0) return false; }
+    return true;
+  }catch(_){ return false; }   /* 읽지 못하면 "내용이 있다"고 보고 그대로 올린다 */
+}
+/* 투명 PNG를 maxBytes 이하로 맞춘다(투명도를 지켜야 하므로 JPEG로 바꿀 수 없어 해상도를 줄인다) */
+function compressLayerPng(canvas, maxBytes, cb){
+  let work=canvas, scale=1, tries=0;
+  function attempt(){
+    tries++;
+    work.toBlob(blob=>{
+      if(!blob){ cb(null); return; }
+      if(blob.size<=maxBytes){ cb(blob); return; }
+      if(tries>8){ cb(null); return; }   /* 끝내 못 줄이면 레이어 보관은 포기하고 합친 그림만 남긴다 */
+      scale*=0.8;
+      const w=Math.max(1,Math.round(canvas.width*scale)), h=Math.max(1,Math.round(canvas.height*scale));
+      const c=document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(canvas,0,0,w,h);
+      work=c; attempt();
+    }, "image/png");
   }
-  function paint(url, done){
+  attempt();
+}
+
+/* ---------------------------------------------------------------------------
+   그리기 편집기 본체. 화면에 붙일 DOM(el)과 조작용 함수들을 돌려준다.
+   opts = {
+     w,h        : 그림의 실제 해상도(px)
+     baseUrl    : (선택) 맨 아래 고정 배경으로 깔 이미지 주소 — 교수 첨삭에서 학생 원본
+     preload    : (선택) {sketch,color,line} 레이어 이미지 주소 / {flat} 옛 방식으로 저장된 그림 한 장
+     onReady    : (선택) 불러오기가 끝났을 때 호출
+     compact    : (선택) true면 도구 패널을 좁게(팝업용)
+   }
+--------------------------------------------------------------------------- */
+function createDrawEditor(opts){
+  const W=opts.w, H=opts.h;
+  /* 굵기 1이 그림 크기와 상관없이 비슷해 보이도록 보정(1600px 원본에서 실처럼 얇아지는 것 방지) */
+  const wScale=Math.max(1, Math.max(W,H)/560);
+
+  const el=document.createElement("div"); el.className="draw-editor"+(opts.compact?" compact":"");
+  const side=document.createElement("div"); side.className="draw-side";
+  const main=document.createElement("div"); main.className="draw-main";
+  el.append(side, main);
+
+  /* ---- 상태 ---- */
+  let curColor=drawLsGet("storyhelper_drawColor", DRAW_PALETTE[0]);
+  let curWidth=loadDrawWidth();
+  let brush=drawLsGet("storyhelper_drawBrush","pen");
+  let guide=drawLsGet("storyhelper_drawGuide","none");
+  let usePressure=drawLsGet("storyhelper_drawPressure","1")==="1";
+  let erasing=false, filling=false, activeId="line", scale=1, ready=false, failed=false;
+  let fillTol=Number(drawLsGet("storyhelper_drawFillTol",32)); if(!(fillTol>=0&&fillTol<=120)) fillTol=32;
+  if(!DRAW_BRUSHES.some(b=>b.id===brush)) brush="pen";
+  if(!DRAW_GUIDES.some(g=>g.id===guide)) guide="none";
+  const layers={};
+
+  /* ---- 캔버스 쌓기 ---- */
+  const viewport=document.createElement("div"); viewport.className="draw-viewport";
+  const pad=document.createElement("div"); pad.className="draw-pad";
+  const stage=document.createElement("div"); stage.className="draw-stage";
+  pad.appendChild(stage); viewport.appendChild(pad);
+  function mkCanvas(cls){
+    const c=document.createElement("canvas"); c.className="draw-layer-canvas "+cls;
+    c.width=W; c.height=H; stage.appendChild(c); return c;
+  }
+  const baseCanvas=mkCanvas("is-base"), baseCtx=baseCanvas.getContext("2d");
+  baseCtx.fillStyle="#fff"; baseCtx.fillRect(0,0,W,H);
+  DRAW_LAYERS.forEach(L=>{
+    const c=mkCanvas("is-"+L.id);
+    c.style.opacity=String(L.opacity);
+    layers[L.id]={canvas:c, ctx:c.getContext("2d"), visible:true, opacity:L.opacity, label:L.label};
+  });
+  const guideCanvas=mkCanvas("is-guide"), guideCtx=guideCanvas.getContext("2d");
+
+  /* ---- 확대/축소 ---- */
+  function applyScale(){
+    const cssW=Math.max(1,Math.round(W*scale)), cssH=Math.max(1,Math.round(H*scale));
+    stage.style.width=cssW+"px"; stage.style.height=cssH+"px";
+    stage.querySelectorAll("canvas").forEach(c=>{ c.style.width=cssW+"px"; c.style.height=cssH+"px"; });
+    if(zoomLabel) zoomLabel.textContent=Math.round(scale*100)+"%";
+    drawGuides();
+  }
+  function setScale(next, anchor){
+    const old=scale;
+    scale=Math.min(8, Math.max(0.1, next));
+    /* 화면에서 보던 지점이 그대로 남도록 스크롤 위치를 함께 옮긴다 */
+    const r=viewport.getBoundingClientRect();
+    const ax=anchor ? anchor.x-r.left : r.width/2;
+    const ay=anchor ? anchor.y-r.top  : r.height/2;
+    const sx=(viewport.scrollLeft+ax)/old, sy=(viewport.scrollTop+ay)/old;
+    applyScale();
+    viewport.scrollLeft=sx*scale-ax; viewport.scrollTop=sy*scale-ay;
+  }
+  function fitToViewport(){
+    const r=viewport.getBoundingClientRect();
+    const availW=Math.max(120, r.width-36), availH=Math.max(120, r.height-36);
+    scale=Math.min(availW/W, availH/H);
+    if(scale>2) scale=2;
+    if(!(scale>0.05)) scale=1;
+    applyScale();
+  }
+
+  /* ---- 가이드선 ---- */
+  function drawGuides(){
+    guideCtx.clearRect(0,0,W,H);
+    if(guide==="none") return;
+    const lw=Math.max(0.5, 1/Math.max(scale,0.05));
+    guideCtx.save();
+    guideCtx.strokeStyle="rgba(40,120,220,0.45)"; guideCtx.lineWidth=lw;
+    guideCtx.setLineDash([lw*6, lw*5]);
+    const line=(x0,y0,x1,y1)=>{ guideCtx.beginPath(); guideCtx.moveTo(x0,y0); guideCtx.lineTo(x1,y1); guideCtx.stroke(); };
+    if(guide==="thirds"){
+      for(let i=1;i<3;i++){ line(W*i/3,0,W*i/3,H); line(0,H*i/3,W,H*i/3); }
+    }else if(guide==="cross"){
+      line(W/2,0,W/2,H); line(0,H/2,W,H/2);
+    }else if(guide==="grid"){
+      const step=Math.max(20, Math.round(Math.min(W,H)/10));
+      for(let x=step;x<W;x+=step) line(x,0,x,H);
+      for(let y=step;y<H;y+=step) line(0,y,W,y);
+    }else if(guide==="persp"){
+      const cx=W/2, cy=H/2;
+      line(0,cy,W,cy);
+      const R=Math.hypot(W,H);
+      for(let a=0;a<180;a+=15){
+        const rad=a*Math.PI/180;
+        line(cx-Math.cos(rad)*R, cy-Math.sin(rad)*R, cx+Math.cos(rad)*R, cy+Math.sin(rad)*R);
+      }
+    }
+    guideCtx.restore();
+  }
+
+  /* ---- 실행 취소 ---- */
+  const undoStack=[], redoStack=[];
+  function grab(id){ try{ return layers[id].canvas.toDataURL("image/png"); }catch(_){ return null; } }
+  function paint(id, url, done){
+    const L=layers[id];
     const img=new Image();
-    img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); done(); };
-    img.onerror=done;
+    img.onload=()=>{ L.ctx.globalCompositeOperation="source-over"; L.ctx.globalAlpha=1;
+      L.ctx.clearRect(0,0,W,H); L.ctx.drawImage(img,0,0,W,H); done&&done(); };
+    img.onerror=()=>done&&done();
     img.src=url;
   }
-  function push(stack, url){ if(!url) return; stack.push(url); if(stack.length>DRAW_UNDO_LIMIT) stack.shift(); }
-  function snapshot(){
-    push(shots, grab());
-    redos.length=0;   // 새로 그리는 순간 '다시 실행'할 것은 사라진다
+  function snapshot(id){
+    const url=grab(id||activeId); if(!url) return;
+    undoStack.push({id:id||activeId, url});
+    if(undoStack.length>DRAW_UNDO_LIMIT) undoStack.shift();
+    redoStack.length=0;
+    refreshUndoBtns();
   }
-  snapshot.reset=()=>{ shots.length=0; redos.length=0; };   // 캔버스 크기가 바뀌면 예전 기록은 버린다
-  overlay.__drawUndo=()=>{
-    if(busy || !shots.length) return;
-    const cur=grab(), prev=shots.pop(); busy=true;
-    paint(prev, ()=>{ push(redos, cur); busy=false; });
-  };
-  overlay.__drawRedo=()=>{
-    if(busy || !redos.length) return;
-    const cur=grab(), next=redos.pop(); busy=true;
-    paint(next, ()=>{ push(shots, cur); busy=false; });
-  };
-  return snapshot;
-}
-
-/* 그리기 툴 팝업 — 요구사항: 바깥을 눌러도 절대 닫히지 않으며, "저장 후 종료"를 눌렀을 때만 닫힌다.
-   그래서 오버레이 클릭 닫기 핸들러와 × 닫기 버튼을 의도적으로 넣지 않았다. */
-function openDrawModal(bl, sizeKey){
-  const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
-  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
-  const box=document.createElement("div"); box.className="draw-modal";
-
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="콘티 그리기 — "+sz.label;
-  top.appendChild(ttl);
-  box.appendChild(top);
-
-  const toolbar=document.createElement("div"); toolbar.className="draw-toolbar";
-  const COLORS=["#2c2a26","#c4654a","#4a7fc4","#5a8f6b","#c4a34a","#8a4ac4","#c44a91"];
-  let curColor=COLORS[0], curWidth=loadDrawWidth(), erasing=false;
-  const swatchWrap=document.createElement("div"); swatchWrap.className="draw-swatches";
-  const swatchEls=[];
-  COLORS.forEach((c,i)=>{
-    const sw=document.createElement("button"); sw.type="button"; sw.className="draw-color-swatch"+(i===0?" active":"");
-    sw.style.background=c; sw.title=c;
-    sw.onclick=()=>{ curColor=c; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); sw.classList.add("active"); eraserBtn.classList.remove("on"); };
-    swatchWrap.appendChild(sw); swatchEls.push(sw);
-  });
-  const customColor=document.createElement("input"); customColor.type="color"; customColor.className="draw-color-custom"; customColor.title="다른 색상";
-  customColor.value="#2c2a26";
-  customColor.oninput=()=>{ curColor=customColor.value; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); eraserBtn.classList.remove("on"); };
-  swatchWrap.appendChild(customColor);
-  toolbar.appendChild(swatchWrap);
-
-  const widthWrap=document.createElement("label"); widthWrap.className="draw-width-wrap"; widthWrap.textContent="굵기";
-  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="24"; widthInput.value=String(curWidth);
-  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); };
-  widthWrap.appendChild(widthInput);
-  toolbar.appendChild(widthWrap);
-
-  const eraserBtn=document.createElement("button"); eraserBtn.type="button"; eraserBtn.className="btn ghost sm icon-btn";
-  eraserBtn.innerHTML=ICONS.eraser+" 지우개";
-  eraserBtn.onclick=()=>{ erasing=!erasing; eraserBtn.classList.toggle("on", erasing); };
-  toolbar.appendChild(eraserBtn);
-
-  const clearBtn=document.createElement("button"); clearBtn.type="button"; clearBtn.className="btn ghost sm icon-btn";
-  clearBtn.innerHTML=ICONS.trash+" 전체 지우기";
-  toolbar.appendChild(clearBtn);
-
-  const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
-  pngBtn.innerHTML=ICONS.download+" PNG 저장";
-  pngBtn.title="지금 그린 그림을 내 컴퓨터에 PNG 파일로 내려받습니다";
-  toolbar.appendChild(pngBtn);
-  box.appendChild(toolbar);
-
-  const canvasWrap=document.createElement("div"); canvasWrap.className="draw-canvas-wrap";
-  const canvas=document.createElement("canvas"); canvas.className="draw-canvas";
-  canvas.width=sz.w; canvas.height=sz.h;
-  canvas.style.width=sz.w+"px"; canvas.style.height=sz.h+"px";
-  const ctx=canvas.getContext("2d");
-  pngBtn.onclick=()=>downloadCanvasPng(canvas, "콘티");
-  function resetCanvas(){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
-  resetCanvas();
-  const snapshotForUndo=attachDrawUndo(overlay, canvas, ctx);
-  clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")){ snapshotForUndo(); resetCanvas(); } };
-  /* 기존 콘티가 있으면 이어서 수정할 수 있도록 배경으로 불러온다 (실패해도 빈 캔버스로 계속 진행) */
-  let preloadFailed=false;
-  if(bl.storyboard && bl.storyboard.key){
-    const preload=new Image();
-    preload.onload=()=>{ ctx.drawImage(preload,0,0,canvas.width,canvas.height); };
-    /* (2026-09-09) 기존 그림을 못 불러온 채로 저장하면 원래 그림이 빈 캔버스로 덮여 사라진다 */
-    preload.onerror=()=>{
-      preloadFailed=true;
-      alert("기존 콘티 그림을 불러오지 못했습니다(인터넷 연결 문제일 수 있습니다).\n\n이대로 저장하면 원래 그림이 사라지니, 저장하지 말고 화면을 새로고침(F5)해 주세요.");
-    };
-    preload.src="/api/storyboard-image?key="+encodeURIComponent(bl.storyboard.key);
+  let busy=false;
+  function undo(){
+    if(busy || !undoStack.length) return;
+    const e=undoStack.pop(), cur=grab(e.id); busy=true;
+    paint(e.id, e.url, ()=>{ if(cur){ redoStack.push({id:e.id, url:cur}); if(redoStack.length>DRAW_UNDO_LIMIT) redoStack.shift(); } busy=false; refreshUndoBtns(); });
   }
-  canvasWrap.appendChild(canvas);
-  box.appendChild(canvasWrap);
+  function redo(){
+    if(busy || !redoStack.length) return;
+    const e=redoStack.pop(), cur=grab(e.id); busy=true;
+    paint(e.id, e.url, ()=>{ if(cur){ undoStack.push({id:e.id, url:cur}); } busy=false; refreshUndoBtns(); });
+  }
 
-  let drawing=false, lastX=0, lastY=0;
+  /* ---- 그리기 ---- */
+  let drawing=false, lastX=0, lastY=0, markerPts=null, strokeBase=null;
   function pos(e){
-    const r=canvas.getBoundingClientRect();
-    return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
+    const r=stage.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)};
   }
-  canvas.addEventListener("pointerdown", e=>{
-    snapshotForUndo();   // 획을 긋기 직전 상태를 기억해 둔다(Ctrl+Z용)
-    drawing=true; canvas.setPointerCapture(e.pointerId);
+  function pressureOf(e){
+    if(!usePressure || e.pointerType==="mouse" || !(e.pressure>0)) return 1;
+    return 0.3+1.4*e.pressure;   /* 0.3배 ~ 1.7배 (보통 힘 0.5에서 1배) */
+  }
+  function strokeWidth(e){ return Math.max(0.5, curWidth*wScale*pressureOf(e)*(brush==="marker"?1.8:1)*(erasing?1.5:1)); }
+  function ctxOf(){ return layers[activeId].ctx; }
+  function beginCtx(){
+    const ctx=ctxOf();
+    ctx.globalCompositeOperation = erasing ? "destination-out" : "source-over";
+    ctx.globalAlpha = erasing ? 1 : (brush==="pencil" ? 0.30 : 1);
+    ctx.strokeStyle=curColor; ctx.fillStyle=curColor;
+    ctx.lineCap="round"; ctx.lineJoin="round";
+  }
+  function resetCtx(){ const ctx=ctxOf(); ctx.globalCompositeOperation="source-over"; ctx.globalAlpha=1; }
+  function pencilSeg(ctx,x0,y0,x1,y1,w){
+    const dx=x1-x0, dy=y1-y0, dist=Math.hypot(dx,dy);
+    const n=Math.max(1, Math.ceil(dist/Math.max(0.8,w*0.22)));
+    for(let i=0;i<=n;i++){
+      const t=i/n;
+      const jx=(Math.random()-0.5)*w*0.75, jy=(Math.random()-0.5)*w*0.75;
+      ctx.beginPath();
+      ctx.arc(x0+dx*t+jx, y0+dy*t+jy, w*(0.16+Math.random()*0.2), 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  /* ===== 채우기(페인트통) =====
+     경계는 "지금 화면에 보이는 그대로"(base + 보이는 층 전부)에서 찾고, 색은 고른 층에만 칠한다.
+     그래야 선 층에 그린 윤곽 안쪽을 채색 층에 칠할 수 있다(층마다 따로 보면 빈 층은 화면 전체가 칠해진다).
+     칠한 뒤 2px 넓히는 이유: 선 가장자리는 부드럽게(반투명하게) 그려져서, 딱 맞게 칠하면 흰 테두리가 남는다. */
+  const FILL_EXPAND=2;
+  function hexToRgb(h){
+    const m=/^#?([0-9a-f]{6})$/i.exec(String(h).trim());
+    if(!m) return {r:0,g:0,b:0};
+    const n=parseInt(m[1],16);
+    return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
+  }
+  function floodFill(fx, fy){
+    const x0=Math.round(fx), y0=Math.round(fy);
+    if(x0<0||y0<0||x0>=W||y0>=H) return;
+    let data;
+    try{ data=flatten().getContext("2d").getImageData(0,0,W,H).data; }
+    catch(_){ alert("채우기를 할 수 없습니다. 화면을 새로고침(F5)한 뒤 다시 시도해 주세요."); return; }
+    const s0=(y0*W+x0)*4, r0=data[s0], g0=data[s0+1], b0=data[s0+2];
+    const tol=fillTol*fillTol*3;
+    const match=i=>{
+      const q=i*4, dr=data[q]-r0, dg=data[q+1]-g0, db=data[q+2]-b0;
+      return dr*dr+dg*dg+db*db<=tol;
+    };
+    /* 가로줄 단위로 번져 나가는 방식(재귀보다 빠르고 큰 그림에서도 안전하다) */
+    let mask=new Uint8Array(W*H);
+    const stack=[y0*W+x0]; mask[y0*W+x0]=1;
+    while(stack.length){
+      const seed=stack.pop(), sy=(seed/W)|0;
+      let xl=seed-sy*W, xr=xl;
+      while(xl>0 && match(sy*W+xl-1)) xl--;
+      while(xr<W-1 && match(sy*W+xr+1)) xr++;
+      for(let x=xl;x<=xr;x++){
+        const i=sy*W+x; mask[i]=1;
+        if(sy>0){ const j=i-W; if(!mask[j] && match(j)){ mask[j]=1; stack.push(j); } }
+        if(sy<H-1){ const j=i+W; if(!mask[j] && match(j)){ mask[j]=1; stack.push(j); } }
+      }
+    }
+    for(let k=0;k<FILL_EXPAND;k++){
+      const next=new Uint8Array(mask);
+      for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+        const i=y*W+x; if(mask[i]) continue;
+        if((x>0&&mask[i-1])||(x<W-1&&mask[i+1])||(y>0&&mask[i-W])||(y<H-1&&mask[i+W])) next[i]=1;
+      }
+      mask=next;
+    }
+    const tmp=document.createElement("canvas"); tmp.width=W; tmp.height=H;
+    const tctx=tmp.getContext("2d");
+    const out=tctx.createImageData(W,H), od=out.data, col=hexToRgb(curColor);
+    for(let i=0;i<W*H;i++){
+      if(!mask[i]) continue;
+      const q=i*4; od[q]=col.r; od[q+1]=col.g; od[q+2]=col.b; od[q+3]=255;
+    }
+    tctx.putImageData(out,0,0);
+    const ctx=ctxOf();
+    ctx.globalCompositeOperation="source-over"; ctx.globalAlpha=1;
+    ctx.drawImage(tmp,0,0);   /* putImageData는 기존 그림을 덮어쓰므로 캔버스로 한 번 거쳐 얹는다 */
+  }
+  function redrawMarker(){
+    /* 마커는 획 전체를 한 번에 반투명하게 그려야 이음매가 진해지지 않는다.
+       획을 긋기 직전의 레이어를 복사해 두고, 점이 늘어날 때마다 통째로 다시 그린다. */
+    const ctx=ctxOf();
+    ctx.globalCompositeOperation="source-over"; ctx.globalAlpha=1;
+    ctx.clearRect(0,0,W,H); ctx.drawImage(strokeBase,0,0);
+    ctx.globalAlpha=0.35; ctx.strokeStyle=curColor; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.lineWidth=markerPts.w;
+    ctx.beginPath(); ctx.moveTo(markerPts.pts[0].x, markerPts.pts[0].y);
+    for(let i=1;i<markerPts.pts.length;i++) ctx.lineTo(markerPts.pts[i].x, markerPts.pts[i].y);
+    if(markerPts.pts.length===1) ctx.lineTo(markerPts.pts[0].x+0.01, markerPts.pts[0].y);
+    ctx.stroke(); ctx.globalAlpha=1;
+  }
+
+  /* 손 도구 / 스페이스바 / 가운데 버튼으로 화면 밀기 */
+  let panning=false, panX=0, panY=0, spaceDown=false, handTool=false;
+  const pointers=new Map(); let pinchDist=0, pinchScale=1;
+
+  stage.addEventListener("pointerdown", e=>{
+    if(!ready) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size===2){   /* 두 손가락 → 확대/축소 */
+      drawing=false;
+      const p=[...pointers.values()];
+      pinchDist=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y); pinchScale=scale;
+      return;
+    }
+    if(handTool || spaceDown || e.button===1){
+      panning=true; panX=e.clientX; panY=e.clientY;
+      stage.setPointerCapture(e.pointerId);
+      return;
+    }
+    if(e.button!==0 && e.pointerType==="mouse") return;
+    if(!layers[activeId].visible){ alert("지금 고른 층("+layers[activeId].label+")이 숨김 상태입니다. 눈 버튼을 눌러 보이게 한 뒤 그려 주세요."); return; }
+    if(filling){
+      const fp=pos(e);
+      snapshot(activeId);
+      floodFill(fp.x, fp.y);
+      return;   /* 채우기는 한 번 누르면 끝이라 드래그로 이어 그리지 않는다 */
+    }
+    snapshot(activeId);
+    drawing=true; stage.setPointerCapture(e.pointerId);
     const p=pos(e); lastX=p.x; lastY=p.y;
-    ctx.beginPath(); ctx.arc(p.x,p.y,curWidth/2,0,Math.PI*2);
-    ctx.fillStyle=erasing?"#fff":curColor; ctx.fill();
+    beginCtx();
+    const w=strokeWidth(e);
+    if(brush==="marker" && !erasing){
+      if(!strokeBase){ strokeBase=document.createElement("canvas"); strokeBase.width=W; strokeBase.height=H; }
+      const sb=strokeBase.getContext("2d");
+      sb.clearRect(0,0,W,H); sb.drawImage(layers[activeId].canvas,0,0);
+      markerPts={pts:[p], w};
+      redrawMarker();
+    }else if(brush==="pencil" && !erasing){
+      pencilSeg(ctxOf(), p.x,p.y,p.x,p.y, w);
+    }else{
+      const ctx=ctxOf();
+      ctx.beginPath(); ctx.arc(p.x,p.y,w/2,0,Math.PI*2); ctx.fill();
+    }
   });
-  canvas.addEventListener("pointermove", e=>{
+  stage.addEventListener("pointermove", e=>{
+    if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size===2 && pinchDist>0){
+      const p=[...pointers.values()];
+      const d=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+      setScale(pinchScale*(d/pinchDist), {x:(p[0].x+p[1].x)/2, y:(p[0].y+p[1].y)/2});
+      return;
+    }
+    if(panning){
+      viewport.scrollLeft-=e.clientX-panX; viewport.scrollTop-=e.clientY-panY;
+      panX=e.clientX; panY=e.clientY; return;
+    }
     if(!drawing) return;
-    const p=pos(e);
-    ctx.strokeStyle=erasing?"#fff":curColor; ctx.lineWidth=curWidth; ctx.lineCap="round"; ctx.lineJoin="round";
-    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
+    const p=pos(e), w=strokeWidth(e);
+    if(brush==="marker" && !erasing){
+      markerPts.pts.push(p); markerPts.w=Math.max(markerPts.w, w); redrawMarker();
+    }else if(brush==="pencil" && !erasing){
+      pencilSeg(ctxOf(), lastX,lastY,p.x,p.y, w);
+    }else{
+      const ctx=ctxOf();
+      ctx.lineWidth=w;
+      ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
+    }
     lastX=p.x; lastY=p.y;
   });
-  function endStroke(){ drawing=false; }
-  canvas.addEventListener("pointerup", endStroke);
-  canvas.addEventListener("pointerleave", endStroke);
-  canvas.addEventListener("pointercancel", endStroke);
+  function endStroke(e){
+    if(e) pointers.delete(e.pointerId);
+    if(pointers.size<2) pinchDist=0;
+    if(drawing){ resetCtx(); markerPts=null; }
+    drawing=false; panning=false;
+  }
+  stage.addEventListener("pointerup", endStroke);
+  stage.addEventListener("pointerleave", endStroke);
+  stage.addEventListener("pointercancel", endStroke);
+  viewport.addEventListener("wheel", e=>{
+    if(!(e.ctrlKey||e.metaKey)) return;   /* 그냥 굴리면 화면 스크롤, Ctrl+굴리면 확대/축소 */
+    e.preventDefault();
+    setScale(scale*(e.deltaY<0?1.12:0.89), {x:e.clientX, y:e.clientY});
+  }, {passive:false});
 
-  const actions=document.createElement("div"); actions.className="dlg-modal-actions";
-  const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
-  saveBtn.textContent="저장 후 종료";
-  /* (2026-09-09) 예전에는 업로드 결과를 기다리지 않고 곧바로 팝업을 닫았다. 그래서 업로드가
-     실패하면(인터넷 끊김·로그인 만료·용량 초과) 알림만 뜨고 그림이 있던 캔버스는 이미 사라져
-     되살릴 방법이 없었다. 이제 저장이 확실히 끝났을 때만 닫는다. */
-  saveBtn.onclick=()=>{
-    if(preloadFailed && !confirm("기존 그림을 불러오지 못한 상태입니다.\n지금 저장하면 원래 그림이 사라집니다. 그래도 저장할까요?")) return;
-    saveBtn.disabled=true; saveBtn.textContent="저장 중…";
-    compressCanvasToLimit(canvas, sbMaxBytes(sizeKey), async blob=>{
-      if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-      const ok=await saveStoryboardBlob(bl, blob, sizeKey);
-      if(!ok){ saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-      if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  const onKeyDown=e=>{ if(e.code==="Space" && !e.repeat && e.target===document.body){ spaceDown=true; stage.classList.add("panning"); e.preventDefault(); } };
+  const onKeyUp=e=>{ if(e.code==="Space"){ spaceDown=false; if(!handTool) stage.classList.remove("panning"); } };
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  const onResize=()=>{ if(!el.isConnected){ cleanup(); return; } drawGuides(); };
+  window.addEventListener("resize", onResize);
+  function cleanup(){
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("resize", onResize);
+    if(activeDrawEditor===api) activeDrawEditor=null;
+  }
+
+  /* ---- 도구 패널 ---- */
+  function section(title){
+    const s=document.createElement("div"); s.className="draw-sec";
+    if(title){ const h=document.createElement("div"); h.className="draw-sec-title"; h.textContent=title; s.appendChild(h); }
+    side.appendChild(s); return s;
+  }
+  function toolBtn(label, title, on){
+    const b=document.createElement("button"); b.type="button"; b.className="draw-tool-btn";
+    b.innerHTML=label; if(title) b.title=title; b.onclick=on; return b;
+  }
+
+  /* 색 */
+  const colSec=section("색");
+  const swatchGrid=document.createElement("div"); swatchGrid.className="draw-swatch-grid";
+  const swatchEls=[];
+  function markActiveColor(){
+    swatchEls.forEach(s=>s.classList.toggle("active", s.dataset.c===curColor));
+    colorPreview.style.background=curColor;
+  }
+  function pickColor(c){
+    curColor=c;
+    drawLsSet("storyhelper_drawColor", c); pushDrawRecentColor(c);
+    markActiveColor(); renderRecent();
+  }
+  DRAW_PALETTE.forEach(c=>{
+    const s=document.createElement("button"); s.type="button"; s.className="draw-color-swatch";
+    s.style.background=c; s.dataset.c=c; s.title=c; s.onclick=()=>pickColor(c);
+    swatchGrid.appendChild(s); swatchEls.push(s);
+  });
+  colSec.appendChild(swatchGrid);
+  const colorRow=document.createElement("div"); colorRow.className="draw-color-row";
+  const colorPreview=document.createElement("span"); colorPreview.className="draw-color-preview";
+  const customColor=document.createElement("input"); customColor.type="color"; customColor.className="draw-color-custom";
+  customColor.value=/^#[0-9a-f]{6}$/i.test(curColor)?curColor:"#2c2a26";
+  customColor.title="다른 색 고르기";
+  customColor.oninput=()=>pickColor(customColor.value);
+  colorRow.append(colorPreview, customColor);
+  colSec.appendChild(colorRow);
+  const recentWrap=document.createElement("div"); recentWrap.className="draw-recent";
+  function renderRecent(){
+    recentWrap.innerHTML="";
+    const list=loadDrawRecentColors();
+    if(!list.length) return;
+    const lab=document.createElement("span"); lab.className="draw-mini-label"; lab.textContent="최근";
+    recentWrap.appendChild(lab);
+    list.forEach(c=>{
+      const s=document.createElement("button"); s.type="button"; s.className="draw-color-swatch sm";
+      s.style.background=c; s.title=c; s.onclick=()=>pickColor(c);
+      recentWrap.appendChild(s);
     });
+  }
+  colSec.appendChild(recentWrap);
+
+  /* 브러시 · 굵기 */
+  const brushSec=section("붓");
+  const brushRow=document.createElement("div"); brushRow.className="draw-btn-row";
+  const brushEls={};
+  DRAW_BRUSHES.forEach(b=>{
+    const btn=toolBtn(b.label, b.hint, ()=>{
+      brush=b.id; erasing=false; filling=false;
+      drawLsSet("storyhelper_drawBrush", b.id); markBrush();
+    });
+    brushEls[b.id]=btn; brushRow.appendChild(btn);
+  });
+  function markBrush(){
+    Object.keys(brushEls).forEach(k=>brushEls[k].classList.toggle("on", k===brush && !erasing && !filling));
+    eraserBtn.classList.toggle("on", erasing);
+    fillBtn.classList.toggle("on", filling);
+    fillRow.hidden=!filling;
+    stage.classList.toggle("filling", filling);
+  }
+  brushSec.appendChild(brushRow);
+
+  const toolRow=document.createElement("div"); toolRow.className="draw-btn-row"; toolRow.style.marginTop="7px";
+  const eraserBtn=toolBtn(ICONS.eraser+" 지우개", "진짜로 지웁니다(흰색을 덧칠하는 것이 아니라 그 층에서 사라집니다)", ()=>{
+    erasing=!erasing; if(erasing) filling=false; markBrush();
+  });
+  const fillBtn=toolBtn(ICONS.bucket+" 채우기", "선으로 둘러싸인 곳을 한 번에 칠합니다. 경계는 화면에 보이는 모든 층의 선을 함께 보고, 색은 지금 고른 층에만 칠해집니다", ()=>{
+    filling=!filling; if(filling) erasing=false; markBrush();
+  });
+  toolRow.append(eraserBtn, fillBtn);
+  brushSec.appendChild(toolRow);
+
+  /* 채우기를 골랐을 때만 보이는 허용 범위 조절 */
+  const fillRow=document.createElement("div"); fillRow.className="draw-width-wrap"; fillRow.hidden=true;
+  const fillLab=document.createElement("span"); fillLab.className="draw-mini-label"; fillLab.textContent="비슷한 색까지 함께 "+fillTol;
+  const fillInput=document.createElement("input"); fillInput.type="range"; fillInput.min="0"; fillInput.max="120"; fillInput.value=String(fillTol);
+  fillInput.title="값이 클수록 조금 다른 색까지 같은 칸으로 보고 함께 칠합니다. 선이 흐리거나 끊겨 색이 새어 나가면 값을 줄여 보세요.";
+  fillInput.oninput=()=>{ fillTol=Number(fillInput.value); drawLsSet("storyhelper_drawFillTol", fillTol); fillLab.textContent="비슷한 색까지 함께 "+fillTol; };
+  fillRow.append(fillLab, fillInput);
+  brushSec.appendChild(fillRow);
+
+  const widthWrap=document.createElement("div"); widthWrap.className="draw-width-wrap";
+  const widthLab=document.createElement("span"); widthLab.className="draw-mini-label"; widthLab.textContent="굵기 "+curWidth;
+  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="40"; widthInput.value=String(curWidth);
+  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); widthLab.textContent="굵기 "+curWidth; };
+  widthWrap.append(widthLab, widthInput);
+  brushSec.insertBefore(widthWrap, toolRow);   /* 붓 → 굵기 → 지우개/채우기 순으로 보이게 */
+
+  const pressLab=document.createElement("label"); pressLab.className="draw-check";
+  const pressBox=document.createElement("input"); pressBox.type="checkbox"; pressBox.checked=usePressure;
+  pressBox.onchange=()=>{ usePressure=pressBox.checked; drawLsSet("storyhelper_drawPressure", usePressure?"1":"0"); };
+  pressLab.append(pressBox, document.createTextNode(" 필압(누르는 힘) 사용"));
+  pressLab.title="태블릿·아이패드 펜에서 세게 누르면 굵게, 살살 그으면 가늘게 그려집니다(마우스는 해당 없음)";
+  brushSec.appendChild(pressLab);
+
+  /* 레이어 */
+  const laySec=section("층(레이어)");
+  const layRows={};
+  [...DRAW_LAYERS].reverse().forEach(L=>{   /* 위에 있는 층을 목록에서도 위에 */
+    const S=layers[L.id];
+    const row=document.createElement("div"); row.className="draw-layer-row";
+    const pick=document.createElement("button"); pick.type="button"; pick.className="draw-layer-pick";
+    pick.textContent=L.label;
+    pick.onclick=()=>{ activeId=L.id; markLayer(); };
+    const eye=document.createElement("button"); eye.type="button"; eye.className="draw-layer-eye on";
+    eye.textContent="👁"; eye.title="이 층을 숨기거나 다시 보이게 합니다";
+    eye.onclick=()=>{
+      S.visible=!S.visible;
+      S.canvas.style.display=S.visible?"":"none";
+      eye.classList.toggle("on", S.visible); eye.textContent=S.visible?"👁":"◦";
+    };
+    const op=document.createElement("input"); op.type="range"; op.min="10"; op.max="100"; op.value=String(Math.round(S.opacity*100));
+    op.className="draw-layer-op"; op.title="이 층의 진하기";
+    op.oninput=()=>{ S.opacity=Number(op.value)/100; S.canvas.style.opacity=String(S.opacity); };
+    const del=document.createElement("button"); del.type="button"; del.className="draw-layer-del";
+    del.innerHTML=ICONS.trash; del.title="이 층만 깨끗이 지웁니다";
+    del.onclick=()=>{
+      if(!confirm(L.label+" 층을 모두 지울까요? (다른 층은 그대로 남습니다)")) return;
+      snapshot(L.id);
+      S.ctx.globalCompositeOperation="source-over"; S.ctx.globalAlpha=1; S.ctx.clearRect(0,0,W,H);
+    };
+    row.append(pick, eye, op, del);
+    laySec.appendChild(row);
+    layRows[L.id]=pick;
+  });
+  function markLayer(){ Object.keys(layRows).forEach(k=>layRows[k].classList.toggle("on", k===activeId)); }
+  const layHint=document.createElement("p"); layHint.className="hint draw-hint";
+  layHint.textContent="아래에서 위로 스케치 → 채색 → 선 순서로 겹쳐집니다. 고른 층에만 그려지니 선을 지워도 채색은 그대로입니다. 채우기는 화면에 보이는 선을 경계로 삼되 색은 고른 층에 칠합니다.";
+  laySec.appendChild(layHint);
+
+  /* ---- 캔버스 위쪽 막대(확대/축소·실행취소) ---- */
+  const bar=document.createElement("div"); bar.className="draw-bar";
+  const undoBtn=toolBtn("↶ 되돌리기", "Ctrl+Z", undo);
+  const redoBtn=toolBtn("↷ 다시", "Ctrl+Shift+Z", redo);
+  function refreshUndoBtns(){ undoBtn.disabled=!undoStack.length; redoBtn.disabled=!redoStack.length; }
+  const outBtn=toolBtn("−","축소", ()=>setScale(scale*0.8));
+  const zoomLabel=document.createElement("span"); zoomLabel.className="draw-zoom-label"; zoomLabel.textContent="100%";
+  const inBtn=toolBtn("+","확대", ()=>setScale(scale*1.25));
+  const fitBtn=toolBtn("맞춤","화면에 맞게", ()=>fitToViewport());
+  const oneBtn=toolBtn("100%","원래 크기", ()=>setScale(1));
+  const handBtn=toolBtn("✋ 이동","누른 채로 끌면 화면을 밀 수 있습니다(스페이스바를 눌러도 됩니다)", ()=>{
+    handTool=!handTool; handBtn.classList.toggle("on", handTool); stage.classList.toggle("panning", handTool);
+  });
+  /* 가이드선 — 화면에서 구도를 잡을 때만 보이고 저장한 그림에는 들어가지 않는다 */
+  const guideWrap=document.createElement("label"); guideWrap.className="draw-guide-wrap";
+  guideWrap.title="구도를 잡을 때만 화면에 보이는 선입니다. 저장한 그림에는 들어가지 않습니다.";
+  const guideLab=document.createElement("span"); guideLab.className="draw-mini-label"; guideLab.textContent="가이드";
+  const guideSel=document.createElement("select"); guideSel.className="draw-select sm";
+  DRAW_GUIDES.forEach(g=>{
+    const o=document.createElement("option"); o.value=g.id; o.textContent=g.label; guideSel.appendChild(o);
+  });
+  guideSel.value=guide;
+  guideSel.onchange=()=>{ guide=guideSel.value; drawLsSet("storyhelper_drawGuide", guide); drawGuides(); };
+  guideWrap.append(guideLab, guideSel);
+  const spacer=document.createElement("span"); spacer.className="draw-bar-gap";
+  bar.append(undoBtn, redoBtn, guideWrap, spacer, outBtn, zoomLabel, inBtn, fitBtn, oneBtn, handBtn);
+  main.append(bar, viewport);
+  const loadMsg=document.createElement("div"); loadMsg.className="draw-loading"; loadMsg.textContent="불러오는 중…";
+  viewport.appendChild(loadMsg);
+
+  markActiveColor(); renderRecent(); markBrush(); markLayer(); refreshUndoBtns();
+
+  /* ---- 기존 그림 불러오기 ---- */
+  let pending=0;
+  function done(){
+    if(--pending>0) return;
+    ready=true; loadMsg.remove();
+    requestAnimationFrame(()=>fitToViewport());
+    opts.onReady&&opts.onReady(failed);
+  }
+  function loadInto(drawFn, url){
+    pending++;
+    const img=new Image();
+    img.onload=()=>{ drawFn(img); done(); };
+    img.onerror=()=>{ failed=true; done(); };
+    img.src=url;
+  }
+  pending=1;   /* 아무것도 불러올 게 없어도 done()이 한 번은 돌도록 */
+  if(opts.baseUrl) loadInto(img=>{
+    /* 원본 비율이 캔버스와 다를 수 있으므로 비율을 지켜 가운데 맞춤 */
+    const sc=Math.min(W/img.width, H/img.height);
+    const w=img.width*sc, h=img.height*sc;
+    baseCtx.drawImage(img,(W-w)/2,(H-h)/2,w,h);
+  }, opts.baseUrl);
+  const pre=opts.preload||{};
+  DRAW_LAYERS.forEach(L=>{ if(pre[L.id]) loadInto(img=>layers[L.id].ctx.drawImage(img,0,0,W,H), pre[L.id]); });
+  if(pre.flat) loadInto(img=>layers.color.ctx.drawImage(img,0,0,W,H), pre.flat);
+  done();
+
+  /* ---- 밖으로 내보내는 기능들 ---- */
+  function flatten(){
+    const c=document.createElement("canvas"); c.width=W; c.height=H;
+    const cx=c.getContext("2d");
+    cx.fillStyle="#fff"; cx.fillRect(0,0,W,H);
+    cx.drawImage(baseCanvas,0,0);
+    DRAW_LAYERS.forEach(L=>{
+      const S=layers[L.id];
+      if(!S.visible) return;   /* 숨긴 층은 화면에 안 보이므로 합친 그림에도 넣지 않는다 */
+      cx.globalAlpha=S.opacity; cx.drawImage(S.canvas,0,0);
+    });
+    cx.globalAlpha=1;
+    return c;
+  }
+  /* 레이어 세 장을 각각 투명 PNG로 만든다(빈 층은 null). maxBytes를 넘기면 그 층은 보관하지 않는다 */
+  function exportLayers(maxBytes, cb){
+    const out={}; const ids=DRAW_LAYERS.map(L=>L.id); let i=0;
+    (function step(){
+      if(i>=ids.length){ cb(out); return; }
+      const id=ids[i++];
+      if(isCanvasEmpty(layers[id].canvas)){ out[id]=null; step(); return; }
+      compressLayerPng(layers[id].canvas, maxBytes, blob=>{ out[id]=blob; step(); });
+    })();
+  }
+  const api={
+    el, flatten, exportLayers, undo, redo,
+    isReady:()=>ready, loadFailed:()=>failed,
+    hasAnything:()=>DRAW_LAYERS.some(L=>!isCanvasEmpty(layers[L.id].canvas)),
+    destroy:cleanup
   };
-  actions.appendChild(saveBtn);
-  box.appendChild(actions);
-
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
+  activeDrawEditor=api;
+  return api;
 }
-
 
 /* ===== 캐릭터 시트(캐릭터 이미지) — 2026-09-14 =====
    프로필 사진(ch.image: 300×300 데이터URL)과는 별개로, 전신/설정용 이미지를 한 장 등록한다.
@@ -4106,23 +4581,13 @@ function charSheetUrl(ch){
   const k=charSheetKey(ch);
   return k ? "/api/storyboard-image?key="+encodeURIComponent(k) : "";
 }
-/* 캔버스를 500KB 이하로 압축 → 업로드 → ch.sheet에 연결. 성공하면 done(true) */
+/* 캔버스를 500KB 이하로 압축 → 업로드 → ch.sheet에 연결. 성공하면 done(true)
+   (이미지 파일을 올려 등록하는 경로. 직접 그리기는 층 3장을 함께 올리는 saveCharSheetDrawing을 쓴다) */
 function saveCharSheetFromCanvas(ch, canvas, done){
   compressCanvasToLimit(canvas, CHAR_SHEET_MAX_BYTES, async blob=>{
     if(!blob){ alert("이미지를 저장하지 못했습니다. 다시 시도해 주세요."); done&&done(false); return; }
-    const key=await uploadStoryboardBlob(blob);
-    if(!key){
-      alert("이미지를 서버에 올리지 못했습니다.\n\n인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
-      done&&done(false); return;
-    }
-    /* 올리는 동안 서버에서 작품을 다시 불러왔을 수 있으므로 같은 id의 캐릭터를 다시 찾는다 */
-    const target=(P.characters||[]).find(c=>c.id===ch.id) || ch;
-    const oldKey=charSheetKey(target);
-    target.sheet={key};
-    save();
-    if(typeof forceSaveToServer==="function") forceSaveToServer();
-    if(oldKey && oldKey!==key) deleteStoryboardImage(oldKey);
-    done&&done(true);
+    const ok=await saveCharSheetDrawing(ch, blob, null);
+    done&&done(ok);
   });
 }
 /* 고른 이미지 파일을 500×1000 캔버스 안에 비율 그대로 넣는다(남는 부분은 흰 여백) */
@@ -4156,145 +4621,211 @@ function removeCharSheet(ch, onDone){
   deleteStoryboardImage(key);
   onDone&&onDone();
 }
-/* 캐릭터 시트 그리기 팝업 — 콘티 그리기 팝업과 같은 도구(색·굵기·지우개·Ctrl+Z/Ctrl+Shift+Z·PNG 저장).
-   화면보다 긴 세로 1000px이므로 화면 높이에 맞춰 줄여 보여주고, 선 굵기는 그만큼 보정한다. */
-function openCharSheetDrawModal(ch, onSaved){
-  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
-  const box=document.createElement("div"); box.className="draw-modal";
-
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title";
-  ttl.textContent="캐릭터 이미지 그리기 — "+((ch.name||"새 캐릭터")+" · 세로 1000 × 가로 500px");
-  top.append(ttl, iconBtn(ICONS.close, "저장하지 않고 닫기", ()=>{
-    if(confirm("저장하지 않고 닫을까요? 지금 그린 내용은 사라집니다.")) document.body.removeChild(overlay);
-  }));
-  box.appendChild(top);
-
-  const toolbar=document.createElement("div"); toolbar.className="draw-toolbar";
-  const COLORS=["#2c2a26","#c4654a","#4a7fc4","#5a8f6b","#c4a34a","#8a4ac4","#c44a91"];
-  let curColor=COLORS[0], curWidth=loadDrawWidth(), erasing=false;
-  const swatchWrap=document.createElement("div"); swatchWrap.className="draw-swatches";
-  const swatchEls=[];
-  COLORS.forEach((c,i)=>{
-    const sw=document.createElement("button"); sw.type="button"; sw.className="draw-color-swatch"+(i===0?" active":"");
-    sw.style.background=c; sw.title=c;
-    sw.onclick=()=>{ curColor=c; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); sw.classList.add("active"); eraserBtn.classList.remove("on"); };
-    swatchWrap.appendChild(sw); swatchEls.push(sw);
-  });
-  const customColor=document.createElement("input"); customColor.type="color"; customColor.className="draw-color-custom"; customColor.title="다른 색상";
-  customColor.value="#2c2a26";
-  customColor.oninput=()=>{ curColor=customColor.value; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); eraserBtn.classList.remove("on"); };
-  swatchWrap.appendChild(customColor);
-  toolbar.appendChild(swatchWrap);
-
-  const widthWrap=document.createElement("label"); widthWrap.className="draw-width-wrap"; widthWrap.textContent="굵기";
-  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="24"; widthInput.value=String(curWidth);
-  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); };
-  widthWrap.appendChild(widthInput);
-  toolbar.appendChild(widthWrap);
-
-  const eraserBtn=document.createElement("button"); eraserBtn.type="button"; eraserBtn.className="btn ghost sm icon-btn";
-  eraserBtn.innerHTML=ICONS.eraser+" 지우개";
-  eraserBtn.onclick=()=>{ erasing=!erasing; eraserBtn.classList.toggle("on", erasing); };
-  toolbar.appendChild(eraserBtn);
-
-  const clearBtn=document.createElement("button"); clearBtn.type="button"; clearBtn.className="btn ghost sm icon-btn";
-  clearBtn.innerHTML=ICONS.trash+" 전체 지우기";
-  toolbar.appendChild(clearBtn);
-
-  const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
-  pngBtn.innerHTML=ICONS.download+" PNG 저장";
-  pngBtn.title="지금 그린 그림을 내 컴퓨터에 PNG 파일로 내려받습니다";
-  toolbar.appendChild(pngBtn);
-  box.appendChild(toolbar);
-
-  const canvasWrap=document.createElement("div"); canvasWrap.className="draw-canvas-wrap";
-  const canvas=document.createElement("canvas"); canvas.className="draw-canvas";
-  canvas.width=CHAR_SHEET_W; canvas.height=CHAR_SHEET_H;
-  const ctx=canvas.getContext("2d");
-  pngBtn.onclick=()=>downloadCanvasPng(canvas, "캐릭터_"+(ch.name||""));
-  function resetCanvas(){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
-  resetCanvas();
-  const snapshotForUndo=attachDrawUndo(overlay, canvas, ctx);
-  clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")){ snapshotForUndo(); resetCanvas(); } };
-  canvasWrap.appendChild(canvas);
-  box.appendChild(canvasWrap);
-
-  /* 세로로 긴 캔버스를 화면 안에 들어오도록 줄여서 보여준다(원본 해상도는 그대로 500×1000) */
-  function fitCanvasToScreen(){
-    if(!overlay.isConnected){ window.removeEventListener("resize", fitCanvasToScreen); return; }
-    const fit=Math.min(1, (window.innerHeight*0.62)/canvas.height, (window.innerWidth*0.8)/canvas.width);
-    canvas.style.width=Math.round(canvas.width*fit)+"px";
-    canvas.style.height=Math.round(canvas.height*fit)+"px";
+/* 캐릭터 이미지 저장 — 합친 그림 한 장(JPEG)과 층 3장(투명 PNG)을 올려 ch.sheet에 연결한다 */
+function charSheetLayerKeys(ch){ return (ch && ch.sheet && ch.sheet.layers) || {}; }
+function charSheetAllKeys(ch){
+  const out=[]; const k=charSheetKey(ch); if(k) out.push(k);
+  const L=charSheetLayerKeys(ch);
+  ["sketch","color","line"].forEach(id=>{ if(L[id]) out.push(L[id]); });
+  return out;
+}
+async function saveCharSheetDrawing(ch, flatBlob, layerBlobs){
+  const key=await uploadStoryboardBlob(flatBlob);
+  if(!key){ alert("이미지를 서버에 올리지 못했습니다.\n\n인터넷 연결을 확인한 뒤 다시 시도해 주세요."); return false; }
+  const layerKeys={};
+  for(const id of ["sketch","color","line"]){
+    const b=layerBlobs && layerBlobs[id]; if(!b) continue;
+    const k=await uploadStoryboardBlob(b); if(k) layerKeys[id]=k;
   }
-  fitCanvasToScreen();
-  window.addEventListener("resize", fitCanvasToScreen);
-
-  /* 이미 등록된 이미지가 있으면 이어서 고칠 수 있게 불러온다 */
-  let preloadFailed=false;
-  if(charSheetKey(ch)){
-    const preload=new Image();
-    preload.onload=()=>{ ctx.drawImage(preload,0,0,canvas.width,canvas.height); };
-    preload.onerror=()=>{
-      preloadFailed=true;
-      alert("기존 캐릭터 이미지를 불러오지 못했습니다(인터넷 연결 문제일 수 있습니다).\n\n이대로 저장하면 원래 이미지가 사라지니, 저장하지 말고 화면을 새로고침(F5)해 주세요.");
-    };
-    preload.src=charSheetUrl(ch);
-  }
-
-  let drawing=false, lastX=0, lastY=0;
-  function pos(e){
-    const r=canvas.getBoundingClientRect();
-    return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
-  }
-  function strokeW(){
-    const r=canvas.getBoundingClientRect();
-    const ratio=r.width ? (canvas.width/r.width) : 1;
-    return Math.max(1, curWidth*ratio);
-  }
-  canvas.addEventListener("pointerdown", e=>{
-    snapshotForUndo();
-    drawing=true; canvas.setPointerCapture(e.pointerId);
-    const p=pos(e); lastX=p.x; lastY=p.y;
-    ctx.beginPath(); ctx.arc(p.x,p.y,strokeW()/2,0,Math.PI*2);
-    ctx.fillStyle=erasing?"#fff":curColor; ctx.fill();
-  });
-  canvas.addEventListener("pointermove", e=>{
-    if(!drawing) return;
-    const p=pos(e);
-    ctx.strokeStyle=erasing?"#fff":curColor; ctx.lineWidth=strokeW(); ctx.lineCap="round"; ctx.lineJoin="round";
-    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
-    lastX=p.x; lastY=p.y;
-  });
-  function endStroke(){ drawing=false; }
-  canvas.addEventListener("pointerup", endStroke);
-  canvas.addEventListener("pointerleave", endStroke);
-  canvas.addEventListener("pointercancel", endStroke);
-
-  const actions=document.createElement("div"); actions.className="dlg-modal-actions";
-  const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
-  saveBtn.textContent="저장 후 종료";
-  saveBtn.onclick=()=>{
-    if(preloadFailed && !confirm("기존 이미지를 불러오지 못한 상태입니다.\n지금 저장하면 원래 이미지가 사라집니다. 그래도 저장할까요?")) return;
-    saveBtn.disabled=true; saveBtn.textContent="저장 중…";
-    saveCharSheetFromCanvas(ch, canvas, ok=>{
-      if(!ok){ saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-      if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      onSaved&&onSaved();
-    });
-  };
-  actions.appendChild(saveBtn);
-  box.appendChild(actions);
-
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
+  /* 올리는 동안 서버에서 작품을 다시 불러왔을 수 있으므로 같은 id의 캐릭터를 다시 찾는다 */
+  const target=(P.characters||[]).find(c=>c.id===ch.id) || ch;
+  const oldKeys=charSheetAllKeys(target);
+  target.sheet={key, layers:layerKeys};
+  save();
+  if(typeof forceSaveToServer==="function") forceSaveToServer();
+  const fresh=charSheetAllKeys(target);
+  oldKeys.filter(k2=>fresh.indexOf(k2)<0).forEach(deleteStoryboardImage);
+  return true;
 }
 
-/* 교수 첨삭용 그리기 팝업 — openDrawModal(학생용)과 거의 같은 그리기 도구이지만,
-   프로젝트 블록(bl)이 아니라 R2 key(refKey)를 기준으로 동작하고, 저장하면 콘티 블록에 직접
-   반영하는 대신 onSave(newKey)로 새로 만들어진 이미지 key만 돌려준다(이 key를 어떻게 쓸지는
-   호출한 쪽 — rProfSubmissionReview — 이 첨삭 버전으로 저장). 학생용과 달리 취소하고 닫을 수 있다
-   (첨삭은 저장 전까지 아무것도 바뀌지 않으므로 취소해도 안전). */
+
+/* ===== 그리기 "페이지" (2026-09-14) =====
+   예전에는 그리기가 팝업(모달)이었는데, 도구가 늘어나면서 화면이 좁아 페이지로 옮겼다.
+   drawPage에 "이 페이지를 어떻게 그릴지"를 담아 두면 render()가 다른 탭 대신 이 페이지를 그린다.
+   (render()는 서버에서 작품을 다시 불러올 때도 불리므로, 이미 그리기 페이지가 떠 있으면
+    다시 만들지 않고 그대로 둔다 — 그리던 그림이 지워지면 안 되기 때문) */
+let drawPage=null;
+function openDrawPageWith(build){ drawPage={build}; render(); window.scrollTo(0,0); }
+function closeDrawPage(){ drawPage=null; render(); window.scrollTo(0,0); }
+/* 그리는 중에 새로고침·창닫기를 누르면 브라우저가 한 번 더 물어보게 한다 */
+window.addEventListener("beforeunload", e=>{
+  if(drawPage && activeDrawEditor && activeDrawEditor.hasAnything()){ e.preventDefault(); e.returnValue=""; }
+});
+
+/* 그리기 페이지의 공통 껍데기(제목줄 + 편집기). cfg로 저장 버튼이 할 일을 넘겨준다 */
+function buildDrawPageShell(host, cfg){
+  const page=document.createElement("div"); page.className="card draw-page";
+  const top=document.createElement("div"); top.className="draw-page-top";
+  const back=document.createElement("button"); back.type="button"; back.className="btn ghost sm";
+  back.textContent="← 나가기";
+  const ttl=document.createElement("h2"); ttl.className="draw-page-title"; ttl.textContent=cfg.title;
+  const spacer=document.createElement("span"); spacer.className="draw-bar-gap";
+  const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
+  pngBtn.innerHTML=ICONS.download+" PNG 저장";
+  pngBtn.title="지금 화면의 그림을 내 컴퓨터에 PNG 파일로 내려받습니다(서버 저장과는 별개)";
+  const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
+  saveBtn.textContent="저장하고 나가기";
+  top.append(back, ttl, spacer, pngBtn, saveBtn);
+  page.appendChild(top);
+
+  if(cfg.hint){
+    const h=document.createElement("p"); h.className="hint draw-page-hint"; h.textContent=cfg.hint;
+    page.appendChild(h);
+  }
+
+  const ed=createDrawEditor(cfg.editorOpts);
+  page.appendChild(ed.el);
+  host.appendChild(page);
+
+  pngBtn.onclick=()=>downloadCanvasPng(ed.flatten(), cfg.pngName||"그림");
+  back.onclick=()=>{
+    if(ed.hasAnything() && !confirm("저장하지 않고 나가면 지금 그린 내용이 사라집니다. 나갈까요?")) return;
+    ed.destroy(); closeDrawPage();
+  };
+  saveBtn.onclick=()=>{
+    if(!ed.isReady()){ alert("그림을 아직 불러오는 중입니다. 잠시 뒤에 다시 눌러 주세요."); return; }
+    if(ed.loadFailed() && !confirm("기존 그림 일부를 불러오지 못한 상태입니다.\n지금 저장하면 그 부분이 사라집니다. 그래도 저장할까요?")) return;
+    cfg.onSave(ed, saveBtn);
+  };
+  return ed;
+}
+
+/* 저장된 콘티에서 "다시 열어 편집할 때 쓸 그림 주소"를 뽑는다.
+   레이어가 보관돼 있으면 레이어 3장을, 예전에 한 장으로만 저장된 그림이면 그 한 장을
+   채색 층에 올려 이어서 고칠 수 있게 한다. */
+function sbImgUrl(k){ return "/api/storyboard-image?key="+encodeURIComponent(k); }
+function drawPreloadFrom(rec){
+  if(!rec) return {};
+  const L=rec.layers||{}, o={};
+  let any=false;
+  ["sketch","color","line"].forEach(id=>{ if(L[id]){ o[id]=sbImgUrl(L[id]); any=true; } });
+  if(any) return o;
+  return rec.key ? {flat:sbImgUrl(rec.key)} : {};
+}
+const SB_LAYER_MAX_BYTES=500*1024;   /* 서버 상한 600KB보다 작게 */
+
+/* ---- 콘티 그리기 페이지 ---- */
+function openDrawPage(bl, sizeKey){
+  const blId=bl && bl.id;
+  openDrawPageWith(host=>{
+    const cur=allWriteBlocksOrdered().find(x=>x.id===blId);
+    if(!cur){ alert("이 콘티 칸을 찾지 못했습니다. 화면을 새로고침(F5)해 주세요."); closeDrawPage(); return; }
+    const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
+    buildDrawPageShell(host, {
+      title:"콘티 그리기 — "+sz.label+" (세로 "+sz.h+" × 가로 "+sz.w+"px)",
+      hint:"저장하면 지금 화면에 보이는 그대로 한 장으로 합쳐집니다. 숨긴 층은 그림에서 빠지지만 지워지지는 않아서, 다음에 다시 열면 층이 그대로 살아 있습니다.",
+      pngName:"콘티",
+      editorOpts:{w:sz.w, h:sz.h, preload:drawPreloadFrom(cur.storyboard)},
+      onSave:(ed, btn)=>{
+        btn.disabled=true; btn.textContent="저장 중…";
+        const undoBtn=()=>{ btn.disabled=false; btn.textContent="저장하고 나가기"; };
+        compressCanvasToLimit(ed.flatten(), sbMaxBytes(sizeKey), flatBlob=>{
+          if(!flatBlob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); undoBtn(); return; }
+          ed.exportLayers(SB_LAYER_MAX_BYTES, async layerBlobs=>{
+            const live=allWriteBlocksOrdered().find(x=>x.id===blId);
+            const ok=await saveStoryboardDrawing(live||cur, flatBlob, layerBlobs, sizeKey);
+            if(!ok){ undoBtn(); return; }
+            ed.destroy(); closeDrawPage();
+          });
+        });
+      }
+    });
+  });
+}
+
+/* ---- 캐릭터 이미지 그리기 페이지 ---- */
+function openCharSheetDrawPage(ch, onSaved){
+  const chId=ch && ch.id;
+  openDrawPageWith(host=>{
+    const cur=(P.characters||[]).find(c=>c.id===chId) || ch;
+    buildDrawPageShell(host, {
+      title:"캐릭터 이미지 그리기 — "+((cur.name||"새 캐릭터")+" · 세로 "+CHAR_SHEET_H+" × 가로 "+CHAR_SHEET_W+"px"),
+      hint:"저장하면 지금 화면에 보이는 그대로 한 장으로 합쳐집니다. 층(스케치·채색·선)은 따로 보관되어 다음에 다시 열면 그대로 이어서 고칠 수 있습니다.",
+      pngName:"캐릭터_"+(cur.name||""),
+      editorOpts:{w:CHAR_SHEET_W, h:CHAR_SHEET_H, preload:drawPreloadFrom(cur.sheet)},
+      onSave:(ed, btn)=>{
+        btn.disabled=true; btn.textContent="저장 중…";
+        const undoBtn=()=>{ btn.disabled=false; btn.textContent="저장하고 나가기"; };
+        compressCanvasToLimit(ed.flatten(), CHAR_SHEET_MAX_BYTES, flatBlob=>{
+          if(!flatBlob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); undoBtn(); return; }
+          ed.exportLayers(SB_LAYER_MAX_BYTES, async layerBlobs=>{
+            const ok=await saveCharSheetDrawing(cur, flatBlob, layerBlobs);
+            if(!ok){ undoBtn(); return; }
+            ed.destroy(); closeDrawPage(); onSaved&&onSaved();
+          });
+        });
+      }
+    });
+  });
+}
+
+/* ---- 교수 첨삭 그리기 (팝업 유지) ----
+   학생이 낸 그림은 맨 아래 고정 배경으로 깔고, 교수는 그 위 층에 그린다. 그래서 지우개로
+   아무리 지워도 학생 원본은 지워지지 않는다. 저장하면 합친 그림 한 장의 key만 돌려준다
+   (첨삭본은 그때그때의 스냅샷이라 층을 따로 보관하지 않는다).
+   페이지가 아니라 팝업인 이유: 교수 채점 화면(rProfSubmissionReview)의 상태를 그대로 두고
+   돌아와야 하기 때문. */
+function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
+  const FB_MAX_DIM=1600;
+  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
+  const box=document.createElement("div"); box.className="draw-modal draw-modal-wide";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="콘티 피드백 그리기 — "+(title||"");
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  top.append(ttl, iconBtn(ICONS.close, "취소", ()=>{ if(confirm("저장하지 않고 닫을까요?")){ if(fbEd) fbEd.destroy(); close(); } }));
+  box.appendChild(top);
+  const wait=document.createElement("p"); wait.className="hint"; wait.textContent="학생이 낸 그림을 불러오는 중…";
+  box.appendChild(wait);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  let fbEd=null;
+  const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
+  const probe=new Image();
+  probe.onload=()=>build(probe.naturalWidth||sz.w, probe.naturalHeight||sz.h);
+  probe.onerror=()=>build(sz.w, sz.h);
+  probe.src=sbImgUrl(refKey);
+
+  function build(nw, nh){
+    wait.remove();
+    const cap=Math.min(1, FB_MAX_DIM/Math.max(nw,nh,1));
+    const W=Math.max(1,Math.round(nw*cap)), H=Math.max(1,Math.round(nh*cap));
+    const hint=document.createElement("p"); hint.className="hint";
+    hint.textContent="학생 그림은 맨 아래 고정 배경이라 지우개로 지워지지 않습니다. 안심하고 그 위에 첨삭하세요.";
+    box.appendChild(hint);
+    fbEd=createDrawEditor({w:W, h:H, baseUrl:sbImgUrl(refKey), compact:true});
+    box.appendChild(fbEd.el);
+
+    const actions=document.createElement("div"); actions.className="dlg-modal-actions";
+    const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
+    pngBtn.innerHTML=ICONS.download+" PNG 저장";
+    pngBtn.onclick=()=>downloadCanvasPng(fbEd.flatten(), "콘티피드백_"+(title||""));
+    const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
+    saveBtn.textContent="저장 후 종료";
+    saveBtn.onclick=()=>{
+      if(!fbEd.isReady()){ alert("그림을 아직 불러오는 중입니다. 잠시 뒤에 다시 눌러 주세요."); return; }
+      saveBtn.disabled=true; saveBtn.textContent="저장 중…";
+      compressCanvasToLimit(fbEd.flatten(), sbMaxBytes(sizeKey), async blob=>{
+        if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
+        const key=await uploadStoryboardBlob(blob);
+        if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
+        fbEd.destroy(); close(); onSave(key);
+      });
+    };
+    actions.append(pngBtn, saveBtn);
+    box.appendChild(actions);
+  }
+}
+
 /* 콘티 이미지 크게 보기 (2026-09-11 추가).
    제출한 콘티(직접 그린 것이든 업로드한 이미지든)를 클릭하면 화면 크기에 맞춰 크게 띄운다.
    교수 화면에서는 이 창에서 바로 [이 그림에 피드백 그리기]로 넘어갈 수 있다. */
@@ -4328,161 +4859,6 @@ function openStoryboardImageViewer(title, key, onDraw){
    (2026-09-11) 예전에는 캔버스를 항상 SB_SIZES(350x350 등) 고정 크기로 만들어서, 학생이 "직접 그리기"가
    아니라 "이미지 업로드"로 낸 콘티(세로로 긴 스캔본 등)는 작게 찌그러진 채로 열렸고 그 위에 첨삭을
    그려야 했다. 이제는 실제 이미지의 가로세로 비율과 해상도를 그대로 쓰고, 화면에 맞게 크게 띄운다. */
-function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
-  const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
-  const FB_MAX_DIM=1600;   // 저장 해상도 상한(너무 큰 원본은 이 크기로 줄여서 다룬다)
-  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
-  overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  const box=document.createElement("div"); box.className="draw-modal";
-
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="콘티 피드백 그리기 — "+(title||"");
-  top.append(ttl, iconBtn(ICONS.close, "취소", ()=>document.body.removeChild(overlay)));
-  box.appendChild(top);
-
-  const toolbar=document.createElement("div"); toolbar.className="draw-toolbar";
-  const COLORS=["#2c2a26","#c4654a","#4a7fc4","#5a8f6b","#c4a34a","#8a4ac4","#c44a91"];
-  let curColor=COLORS[0], curWidth=loadDrawWidth(), erasing=false;
-  const swatchWrap=document.createElement("div"); swatchWrap.className="draw-swatches";
-  const swatchEls=[];
-  COLORS.forEach((c,i)=>{
-    const sw=document.createElement("button"); sw.type="button"; sw.className="draw-color-swatch"+(i===0?" active":"");
-    sw.style.background=c; sw.title=c;
-    sw.onclick=()=>{ curColor=c; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); sw.classList.add("active"); eraserBtn.classList.remove("on"); };
-    swatchWrap.appendChild(sw); swatchEls.push(sw);
-  });
-  const customColor=document.createElement("input"); customColor.type="color"; customColor.className="draw-color-custom"; customColor.title="다른 색상";
-  customColor.value="#2c2a26";
-  customColor.oninput=()=>{ curColor=customColor.value; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); eraserBtn.classList.remove("on"); };
-  swatchWrap.appendChild(customColor);
-  toolbar.appendChild(swatchWrap);
-
-  const widthWrap=document.createElement("label"); widthWrap.className="draw-width-wrap"; widthWrap.textContent="굵기";
-  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="24"; widthInput.value=String(curWidth);
-  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); };
-  widthWrap.appendChild(widthInput);
-  toolbar.appendChild(widthWrap);
-
-  const eraserBtn=document.createElement("button"); eraserBtn.type="button"; eraserBtn.className="btn ghost sm icon-btn";
-  eraserBtn.innerHTML=ICONS.eraser+" 지우개";
-  eraserBtn.onclick=()=>{ erasing=!erasing; eraserBtn.classList.toggle("on", erasing); };
-  toolbar.appendChild(eraserBtn);
-
-  const clearBtn=document.createElement("button"); clearBtn.type="button"; clearBtn.className="btn ghost sm icon-btn";
-  clearBtn.innerHTML=ICONS.trash+" 전체 지우기";
-  toolbar.appendChild(clearBtn);
-
-  const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
-  pngBtn.innerHTML=ICONS.download+" PNG 저장";
-  pngBtn.title="지금 화면의 그림을 내 컴퓨터에 PNG 파일로 내려받습니다";
-  toolbar.appendChild(pngBtn);
-  box.appendChild(toolbar);
-
-  const hint=document.createElement("p"); hint.className="hint"; hint.style.margin="0 0 8px";
-  hint.textContent="학생이 제출한(또는 지금까지의) 콘티 위에 바로 피드백을 그립니다. 지우개로 지우면 원래 그림도 함께 지워집니다.";
-  box.appendChild(hint);
-
-  const canvasWrap=document.createElement("div"); canvasWrap.className="draw-canvas-wrap";
-  const canvas=document.createElement("canvas"); canvas.className="draw-canvas";
-  canvas.width=sz.w; canvas.height=sz.h;
-  canvas.style.width=sz.w+"px"; canvas.style.height=sz.h+"px";
-  const ctx=canvas.getContext("2d");
-  pngBtn.onclick=()=>downloadCanvasPng(canvas, "콘티피드백_"+(title||""));
-  let baseImg=null, ready=false;
-  function paintBase(){
-    ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
-    if(baseImg) ctx.drawImage(baseImg,0,0,canvas.width,canvas.height);
-  }
-  paintBase();
-  const snapshotForUndo=attachDrawUndo(overlay, canvas, ctx);
-  /* "전체 지우기"는 내가 그린 피드백만 없애고 학생의 원래 그림은 되살린다
-     (학생 그림까지 흰 종이로 지워버리면 피드백의 의미가 없어지므로 — 2026-09-11) */
-  clearBtn.innerHTML=ICONS.trash+" 그린 것 지우기";
-  clearBtn.title="내가 그린 피드백만 지우고 학생이 낸 원래 그림으로 되돌립니다";
-  clearBtn.onclick=()=>{ if(confirm("그린 피드백을 모두 지우고 학생이 낸 원래 그림으로 되돌릴까요?")){ snapshotForUndo(); paintBase(); } };
-
-  const loadingMsg=document.createElement("p"); loadingMsg.className="hint"; loadingMsg.textContent="그림을 불러오는 중…";
-  canvasWrap.appendChild(canvas);
-  box.append(loadingMsg, canvasWrap);
-
-  /* 화면 크기에 맞춰 캔버스를 최대한 크게 보여준다(비율은 원본 그대로 유지) */
-  function fitCanvasToScreen(){
-    if(!overlay.isConnected){ window.removeEventListener("resize", fitCanvasToScreen); return; }
-    const availW=Math.min(window.innerWidth*0.86, 1100);
-    const availH=Math.max(240, window.innerHeight*0.58);
-    let fit=Math.min(availW/canvas.width, availH/canvas.height);
-    if(fit>2) fit=2;   // 아주 작은 그림을 지나치게 확대해 뭉개지 않도록
-    canvas.style.width=Math.round(canvas.width*fit)+"px";
-    canvas.style.height=Math.round(canvas.height*fit)+"px";
-  }
-  const preload=new Image();
-  preload.onload=()=>{
-    const nw=preload.naturalWidth||sz.w, nh=preload.naturalHeight||sz.h;
-    const cap=Math.min(1, FB_MAX_DIM/Math.max(nw,nh,1));
-    canvas.width=Math.max(1,Math.round(nw*cap));
-    canvas.height=Math.max(1,Math.round(nh*cap));
-    baseImg=preload;
-    paintBase();
-    snapshotForUndo.reset();   // 캔버스 크기가 원본 비율로 바뀌었으므로 실행 취소 기록을 비운다
-    fitCanvasToScreen();
-    loadingMsg.remove();
-    ready=true;
-  };
-  preload.onerror=()=>{ loadingMsg.textContent="그림을 불러오지 못했습니다. 빈 종이 위에 그릴 수 있습니다."; ready=true; };
-  preload.src="/api/storyboard-image?key="+encodeURIComponent(refKey);
-  window.addEventListener("resize", fitCanvasToScreen);
-
-  let drawing=false, lastX=0, lastY=0;
-  function pos(e){
-    const r=canvas.getBoundingClientRect();
-    return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
-  }
-  /* 화면에 보이는 굵기가 캔버스 해상도와 상관없이 일정하게 보이도록 보정
-     (큰 이미지를 축소해서 볼 때 선이 실처럼 얇아지는 것을 막는다) */
-  function strokeW(){
-    const r=canvas.getBoundingClientRect();
-    const ratio = r.width ? (canvas.width/r.width) : 1;
-    return Math.max(1, curWidth*ratio);
-  }
-  canvas.addEventListener("pointerdown", e=>{
-    if(!ready) return;
-    snapshotForUndo();   // 획을 긋기 직전 상태를 기억해 둔다(Ctrl+Z용)
-    drawing=true; canvas.setPointerCapture(e.pointerId);
-    const p=pos(e); lastX=p.x; lastY=p.y;
-    ctx.beginPath(); ctx.arc(p.x,p.y,strokeW()/2,0,Math.PI*2);
-    ctx.fillStyle=erasing?"#fff":curColor; ctx.fill();
-  });
-  canvas.addEventListener("pointermove", e=>{
-    if(!drawing) return;
-    const p=pos(e);
-    ctx.strokeStyle=erasing?"#fff":curColor; ctx.lineWidth=strokeW(); ctx.lineCap="round"; ctx.lineJoin="round";
-    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
-    lastX=p.x; lastY=p.y;
-  });
-  function endStroke(){ drawing=false; }
-  canvas.addEventListener("pointerup", endStroke);
-  canvas.addEventListener("pointerleave", endStroke);
-  canvas.addEventListener("pointercancel", endStroke);
-
-  const actions=document.createElement("div"); actions.className="dlg-modal-actions";
-  const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
-  saveBtn.textContent="저장 후 종료";
-  saveBtn.onclick=()=>{
-    saveBtn.disabled=true; saveBtn.textContent="저장 중…";
-    compressCanvasToLimit(canvas, sbMaxBytes(sizeKey), async blob=>{
-      if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-      const key=await uploadStoryboardBlob(blob);
-      if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-      document.body.removeChild(overlay);
-      onSave(key);
-    });
-  };
-  actions.appendChild(saveBtn);
-  box.appendChild(actions);
-
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-}
 
 /* ===== 🛠 관리자 — 회원 관리 · 서버 초기화 =====
    /api/admin (GET: 회원 명단, POST {mode:"data"|"all"}: 초기화) 를 사용한다.

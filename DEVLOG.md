@@ -2273,3 +2273,72 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
   해당 보기가 없어지면 자동으로 "plan"으로 돌아간다.
 - 캐릭터를 삭제하면 등록된 시트 이미지도 서버에서 함께 지운다.
 - `style.css`: `.char-sheet-row/.char-sheet-thumb/.char-sheet-view/.side-view-tabs/.side-view-tab`.
+
+## 2026-09-14 (4) — 그리기 도구 전면 개편: 레이어 3장 · 필압 · 확대/축소 · 진짜 지우개 · 브러시 · 가이드 · 페이지 전환
+
+콘티 그리기와 캐릭터 이미지 그리기가 팝업(모달)이었는데 도구가 늘어 화면이 좁아져 **페이지**로 옮겼다.
+콘티·캐릭터·교수 첨삭 세 곳에 각각 복사돼 있던 그리기 코드(거의 동일한 200줄 × 3)를 엔진 하나로 합쳤다.
+
+### 1) 그리기 엔진 `createDrawEditor(opts)` (app.js)
+`attachDrawUndo` / `openDrawModal` / `openCharSheetDrawModal` / 옛 `openStoryboardFeedbackDrawModal`을 대체.
+- **레이어 3장** — `<canvas>` 세 장을 CSS로 겹친다(아래→위: 스케치 → 채색 → 선). 합성 계산이 없어 확대해도 느려지지 않는다.
+  맨 아래 `is-base` 캔버스는 흰 종이(첨삭에서는 학생 원본)이고 사용자가 그릴 수 없다. 층마다 [선택]/[숨김]/[진하기]/[지우기].
+- **필압** — `pointerdown/move`의 `e.pressure`를 굵기에 반영(0.3~1.7배). 마우스(`pointerType==="mouse"`)는 제외. 체크박스로 끄고 켬.
+- **확대/축소·이동** — 각 캔버스의 CSS 크기만 바꾸고 `.draw-viewport`의 스크롤로 이동. `Ctrl+휠`, `−/+/맞춤/100%`,
+  ✋이동 버튼·스페이스바·가운데 버튼 드래그, 두 손가락 핀치(pointer 2개 추적). 캔버스 해상도는 그대로라 화질 손실 없음.
+- **진짜 지우개** — `globalCompositeOperation="destination-out"`. 흰색 덧칠이 아니라 그 층에서만 사라지므로 아래 층은 그대로 남는다.
+- **브러시 3종** — 펜(필압), 마커(반투명 0.35), 연필(점 흩뿌림 질감 0.30).
+  마커는 획을 그을 때마다 이음매가 진해지지 않도록, 획 시작 전 층을 `strokeBase`에 복사해 두고 점이 늘 때마다 전체 경로를 다시 그린다.
+- **가이드선** — 없음/3분할/중앙선/격자/소실점. 별도 `is-guide` 캔버스에만 그리므로 저장물에는 안 들어간다. 캔버스 위 막대에 배치.
+- **팔레트** — 25색 그리드 + 색상 선택기 + 최근 쓴 색 8개(localStorage `storyhelper_drawRecent`).
+- **실행 취소** — 획마다 "바뀐 층 한 장"만 PNG로 기억(30단계). 전역 `activeDrawEditor`를 통해 Ctrl+Z/Ctrl+Shift+Z 연결.
+
+### 2) 팝업 → 페이지 (app.js)
+- 전역 `drawPage`에 "이 페이지를 어떻게 그릴지"를 담고, `render()` 맨 앞에서 이를 보고 다른 탭 대신 그리기 페이지를 그린다.
+- **이미 페이지가 떠 있으면 다시 만들지 않는다.** 서버에서 작품을 다시 불러올 때도 `render()`가 불리는데,
+  그때 캔버스를 새로 만들면 그리던 그림이 통째로 사라지기 때문(9/8~9/9의 그림 소실 사고와 같은 계열의 위험).
+- `openDrawPage(bl,size)` / `openCharSheetDrawPage(ch,cb)` / 공통 껍데기 `buildDrawPageShell()`.
+- 그리는 중 새로고침·창닫기 시 `beforeunload`로 한 번 더 확인.
+- 교수 첨삭(`openStoryboardFeedbackDrawModal`)만 팝업 유지 — 교수 채점 화면 상태를 두고 돌아와야 하기 때문.
+  대신 학생 그림을 base 층에 깔아, 지우개로 지워도 원본이 사라지지 않는다(예전에는 함께 지워졌다).
+
+### 3) 레이어 저장 (app.js + functions/api/storyboard-image.js)
+합친 그림 한 장(JPEG)에 더해 **층 3장을 투명 PNG로 함께 올린다.** 다시 열면 층이 그대로 살아난다.
+- 데이터: `bl.storyboard={key, size, layers:{sketch,color,line}}`, `ch.sheet={key, layers:{...}}`.
+  층 key가 없는 옛 그림은 `{flat:key}`로 채색 층에 얹어 이어서 고칠 수 있게 한다(`drawPreloadFrom`).
+- `uploadStoryboardBlob`은 `blob.type`을 그대로 Content-Type으로 보낸다. 서버는 `image/png`면 `.png`·`contentType:image/png`로 저장.
+- 빈 층은 올리지 않는다(`isCanvasEmpty`). PNG가 500KB를 넘으면 해상도를 줄여 맞추고(`compressLayerPng`),
+  그래도 안 되면 그 층만 보관을 포기(합친 그림은 정상 저장).
+- 그림을 바꾸거나 지울 때 옛 key를 전부 정리: `sbAllKeys()` / `charSheetAllKeys()` — `deleteStoryboardSlot`, 캐릭터 삭제에도 반영.
+- **용량 실측(2026-09-14)**: 층 보관 방식은 합친 그림 한 장만 저장할 때의 **약 1.4배**.
+  중간 칸 39~84KB→53~118KB, 큰 칸 45~102KB→60~142KB, 캐릭터 66~161KB→88~219KB. 학생 40명×20칸 기준 80MB→110MB(R2 무료 10GB).
+- `saveStoryboardBlob` → `saveStoryboardDrawing(bl, flatBlob, layerBlobs, size)`로 이름/구조 변경.
+  이미지 업로드 경로(`triggerStoryboardUpload`)와 캐릭터 이미지 파일 등록(`saveCharSheetFromCanvas`)은 `layerBlobs=null`로 호출.
+
+### 4) style.css
+`.draw-modal-overlay/.draw-modal`은 유지하고 그 아래 옛 툴바·캔버스 스타일을 새 구조로 교체:
+`.draw-page`, `.draw-editor`(왼쪽 도구 패널 `.draw-side` + 오른쪽 `.draw-main`), `.draw-sec`, `.draw-swatch-grid`,
+`.draw-tool-btn`, `.draw-layer-row`, `.draw-bar`, `.draw-viewport/.draw-pad/.draw-stage/canvas.draw-layer-canvas`,
+860px 이하에서 도구 패널을 캔버스 위로 접는 반응형 규칙.
+
+### 검증
+Chromium(Playwright)으로 실제 획을 긋고 확인: 층별 그리기·마커 반투명·연필 질감·소실점 가이드·확대(157%)·
+지우개로 선 층만 지워도 아래 채색이 남는 것·실행 취소·층 3장 PNG 추출(각 10~12KB) 모두 정상, JS 오류 없음.
+
+## 2026-09-14 (5) — 채우기(페인트통) 툴
+
+그리기 도구에 채우기를 추가했다. 선으로 둘러싸인 곳을 한 번 눌러 칠한다.
+
+- `createDrawEditor` 안에 `floodFill(x,y)` 추가. 붓 칸에 [채우기] 버튼(`ICONS.bucket` 신규)과,
+  채우기를 골랐을 때만 보이는 **허용 범위** 슬라이더(0~120, 기본 32, `storyhelper_drawFillTol`).
+- **경계는 화면에 보이는 그대로(`flatten()` = base + 보이는 층 전부)에서 찾고, 색은 고른 층에만 칠한다.**
+  층마다 따로 보면 빈 채색 층은 화면 전체가 칠해져서 쓸 수 없다. 선 층에 그린 윤곽 안쪽을 채색 층에 칠하는 것이 목적.
+- 가로줄 단위(스캔라인) 번짐 + 명시적 스택(재귀 아님). 1600×1600에서도 0.5초 안팎.
+- 칠한 영역을 **2px 넓힌다(`FILL_EXPAND`)**. 선 가장자리는 반투명하게 그려지므로 딱 맞게 칠하면 흰 테두리가 남는다.
+- `putImageData`는 기존 그림을 덮어쓰므로 임시 캔버스를 거쳐 `drawImage`로 얹는다.
+- 도구 3종(붓/지우개/채우기)은 서로 배타. `markBrush()`가 세 상태를 함께 표시하고 커서도 바꾼다(`.draw-stage.filling`).
+  색을 고르면 도구는 그대로 유지된다(색 고르고 다시 칠하는 흐름이라).
+- 붓 칸 순서를 붓 → 굵기 → 지우개/채우기 → 허용 범위 → 필압으로 정리.
+
+검증: 육각형에 칸막이를 그린 뒤 왼칸/오른칸/바깥 배경을 서로 다른 색으로 채우고, 선 층을 숨겨
+채색 층만 남겼을 때 세 영역이 정확히 분리돼 남는 것까지 확인(흰 테두리 없음, JS 오류 없음).

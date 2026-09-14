@@ -941,20 +941,97 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
 .sb-size-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px}
 .sb-size-btn .hint{margin:0}
 
-/* 그리기 툴 팝업 — 바깥을 눌러도 닫히지 않으며 "저장 후 종료"로만 닫힌다 */
+/* ===== 그리기 도구 (2026-09-14 개편) =====
+   콘티·캐릭터는 "페이지"(.draw-page)로, 교수 첨삭만 팝업(.draw-modal)으로 뜬다.
+   둘 다 안쪽은 같은 .draw-editor(왼쪽 도구 패널 + 오른쪽 캔버스)를 쓴다. */
 .draw-modal-overlay{position:fixed;inset:0;z-index:2100;background:rgba(0,0,0,.5);
   display:flex;align-items:center;justify-content:center;padding:20px}
 .draw-modal{background:var(--card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.3);
   padding:16px;display:flex;flex-direction:column;gap:12px;max-height:94vh;overflow:auto}
-.draw-toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.draw-swatches{display:flex;align-items:center;gap:6px}
-.draw-color-swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
-.draw-color-swatch.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
-.draw-color-custom{width:26px;height:26px;border:1px solid var(--line);border-radius:6px;cursor:pointer;padding:0}
-.draw-width-wrap{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-.draw-toolbar .icon-btn.on{background:var(--accent2);border-color:var(--accent);color:var(--accent)}
-.draw-canvas-wrap{border:1px solid var(--line);background:#fff;align-self:center;border-radius:4px;overflow:hidden}
-canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
+.draw-modal-wide{width:min(1180px,94vw)}
+
+/* --- 페이지 머리 --- */
+.draw-page{padding:14px 16px}
+.draw-page-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.draw-page-title{font-size:17px;margin:0;flex-shrink:0}
+.draw-page-hint{margin:0 0 10px}
+
+/* --- 편집기 뼈대 --- */
+.draw-editor{display:flex;gap:12px;align-items:flex-start}
+.draw-side{width:236px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;padding-right:4px}
+.draw-editor.compact .draw-side{width:210px;max-height:62vh;overflow-y:auto}
+.draw-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.draw-sec{border:1px solid var(--line);border-radius:10px;padding:7px 9px;background:var(--bg)}
+.draw-sec-title{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.draw-hint{font-size:11px;margin:6px 0 0;line-height:1.45}
+.draw-mini-label{font-size:11px;color:var(--muted)}
+
+/* --- 색 --- */
+.draw-swatch-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.draw-color-swatch{width:100%;aspect-ratio:1;border-radius:5px;border:1px solid rgba(0,0,0,.15);
+  cursor:pointer;padding:0}
+.draw-color-swatch.sm{width:17px;height:17px;aspect-ratio:auto;border-radius:4px}
+.draw-color-swatch.active{outline:2px solid var(--accent);outline-offset:1px}
+.draw-color-row{display:flex;align-items:center;gap:7px;margin-top:7px}
+.draw-color-preview{width:26px;height:26px;border-radius:6px;border:1px solid var(--line);flex-shrink:0}
+.draw-color-custom{width:34px;height:26px;border:1px solid var(--line);border-radius:6px;cursor:pointer;padding:0}
+.draw-recent{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:7px;min-height:0}
+
+/* --- 버튼 --- */
+.draw-btn-row{display:flex;gap:5px}
+.draw-tool-btn{flex:1;padding:6px 7px;border:1px solid var(--line);background:#fff;border-radius:7px;
+  cursor:pointer;font-size:12px;white-space:nowrap;color:var(--ink)}
+.draw-tool-btn:hover:not(:disabled){background:var(--accent2)}
+.draw-tool-btn:disabled{opacity:.4;cursor:default}
+.draw-tool-btn.on{background:var(--accent2);border-color:var(--accent);color:var(--accent);font-weight:700}
+.draw-tool-btn.wide{width:100%;flex:none;margin-top:7px}
+.draw-tool-btn .icon{width:14px;height:14px;vertical-align:-2px}
+.draw-width-wrap{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.draw-width-wrap input[type=range]{width:100%}
+.draw-check{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);margin-top:7px;cursor:pointer}
+.draw-select{width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.draw-select.sm{width:auto;padding:4px 6px;font-size:12px}
+.draw-guide-wrap{display:flex;align-items:center;gap:5px;margin-left:6px}
+
+/* --- 층(레이어) --- */
+.draw-layer-row{display:flex;align-items:center;gap:5px;margin-bottom:5px}
+.draw-layer-pick{flex:1;padding:5px 7px;border:1px solid var(--line);background:#fff;border-radius:7px;
+  cursor:pointer;font-size:12px;text-align:left;color:var(--ink)}
+.draw-layer-pick.on{background:var(--accent2);border-color:var(--accent);color:var(--accent);font-weight:700}
+.draw-layer-eye,.draw-layer-del{width:24px;height:24px;padding:0;border:1px solid var(--line);background:#fff;
+  border-radius:6px;cursor:pointer;font-size:12px;line-height:1;color:var(--muted);flex-shrink:0}
+.draw-layer-eye.on{color:var(--ink)}
+.draw-layer-del .icon{width:12px;height:12px;vertical-align:-1px}
+.draw-layer-op{width:48px;flex-shrink:0}
+
+/* --- 캔버스 위 막대 --- */
+.draw-bar{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.draw-bar .draw-tool-btn{flex:none;padding:5px 9px}
+.draw-bar-gap{flex:1}
+.draw-zoom-label{font-size:12px;color:var(--muted);min-width:42px;text-align:center}
+
+/* --- 캔버스 --- */
+.draw-viewport{position:relative;flex:1;min-height:340px;height:70vh;overflow:auto;
+  background:#e9e6e0;border:1px solid var(--line);border-radius:10px}
+.draw-editor.compact .draw-viewport{height:56vh;min-height:280px}
+.draw-pad{min-width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;padding:18px}
+.draw-stage{position:relative;flex-shrink:0;background:#fff;
+  box-shadow:0 2px 10px rgba(0,0,0,.18);touch-action:none;cursor:crosshair}
+.draw-stage.panning{cursor:grab}
+.draw-stage.filling{cursor:cell}
+canvas.draw-layer-canvas{position:absolute;left:0;top:0;display:block;image-rendering:auto;pointer-events:none}
+canvas.draw-layer-canvas.is-base{position:relative}
+.draw-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;
+  padding:8px 14px;font-size:13px;color:var(--muted)}
+
+/* 좁은 화면에서는 도구 패널을 캔버스 위로 접어 올린다 */
+@media (max-width:860px){
+  .draw-editor{flex-direction:column}
+  .draw-side,.draw-editor.compact .draw-side{width:100%;max-height:none;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+  .draw-viewport,.draw-editor.compact .draw-viewport{height:60vh}
+}
 
 /* 콘티 이미지 크게 보기 (2026-09-11) — 업로드한 이미지도 원본 비율 그대로 화면에 맞춰 크게 띄운다 */
 .sb-view-modal{max-width:94vw}
