@@ -2245,3 +2245,10 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
   파일명은 `콘티_YYYYMMDD_HHMM.png`(첨삭은 `콘티피드백_제목_...`), 윈도우에서 못 쓰는 글자는 `_`로 치환.
   objectURL은 10초 뒤 revoke. toBlob이 없는 브라우저는 dataURL로 폴백.
 - 두 그리기 팝업 툴바의 [전체 지우기] 옆에 `[⤓ PNG 저장]` 버튼 추가.
+
+### 3) 다시 실행(Ctrl+Shift+Z / Ctrl+Y) 추가 — 2026-09-14 (2)
+그리기 팝업에서 Ctrl+Shift+Z가 아무 반응이 없던 문제(팝업이 떠 있으면 프로젝트 redo를 막기만 했음).
+- `attachDrawUndo`에 `redos` 스택과 `overlay.__drawRedo` 추가. 되돌릴 때 **되돌리기 직전 그림**을
+  redos에 넣어두고, 다시 실행하면 그것을 그리면서 원래 그림을 shots로 돌려놓는다(양방향).
+- 새로 획을 긋거나 지우면(`snapshot()`) redos를 비운다 — 일반적인 편집기와 같은 규칙.
+- 전역 `keydown`: 팝업이 있으면 `__drawRedo()`, 없으면 기존 `doRedo()`. 두 스택 모두 30단계 상한.

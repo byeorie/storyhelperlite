@@ -3860,6 +3860,27 @@ function openSizePicker(bl, onPick){
   document.body.appendChild(overlay);
 }
 
+/* 그리는 중인 캔버스를 내 컴퓨터에 PNG 파일로 내려받는다 (저장 후 종료와는 별개로, 서버에
+   올리지 않고 그림만 따로 보관하고 싶을 때 쓴다 — 2026-09-14) */
+function downloadCanvasPng(canvas, baseName){
+  const stamp=new Date().toISOString().slice(0,16).replace(/[-:]/g,"").replace("T","_");
+  const name=(baseName||"콘티").replace(/[\\/:*?"<>|]/g,"_")+"_"+stamp+".png";
+  const finish=url=>{
+    const a=document.createElement("a"); a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  try{
+    if(canvas.toBlob){
+      canvas.toBlob(blob=>{
+        if(!blob){ alert("PNG로 저장하지 못했습니다."); return; }
+        const url=URL.createObjectURL(blob);
+        finish(url);
+        setTimeout(()=>URL.revokeObjectURL(url), 10000);
+      }, "image/png");
+    } else finish(canvas.toDataURL("image/png"));
+  }catch(_){ alert("PNG로 저장하지 못했습니다."); }
+}
+
 /* 그리기 팝업의 실행 취소(Ctrl+Z) — 획 하나, 지우기 한 번 같은 "바로 직전 행동"만 되돌린다.
    그림 전체를 PNG로 통째로 기억하는 방식이라 메모리 보호를 위해 30단계까지만 보관한다.
    snapshot()을 "무언가 바뀌기 직전"에 부르면 그 시점으로 돌아갈 수 있다. */
@@ -3927,6 +3948,11 @@ function openDrawModal(bl, sizeKey){
   const clearBtn=document.createElement("button"); clearBtn.type="button"; clearBtn.className="btn ghost sm icon-btn";
   clearBtn.innerHTML=ICONS.trash+" 전체 지우기";
   toolbar.appendChild(clearBtn);
+
+  const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
+  pngBtn.innerHTML=ICONS.download+" PNG 저장";
+  pngBtn.title="지금 그린 그림을 내 컴퓨터에 PNG 파일로 내려받습니다";
+  toolbar.appendChild(pngBtn);
   box.appendChild(toolbar);
 
   const canvasWrap=document.createElement("div"); canvasWrap.className="draw-canvas-wrap";
@@ -3934,6 +3960,7 @@ function openDrawModal(bl, sizeKey){
   canvas.width=sz.w; canvas.height=sz.h;
   canvas.style.width=sz.w+"px"; canvas.style.height=sz.h+"px";
   const ctx=canvas.getContext("2d");
+  pngBtn.onclick=()=>downloadCanvasPng(canvas, "콘티");
   function resetCanvas(){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
   resetCanvas();
   const snapshotForUndo=attachDrawUndo(overlay, canvas, ctx);
@@ -4081,6 +4108,11 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   const clearBtn=document.createElement("button"); clearBtn.type="button"; clearBtn.className="btn ghost sm icon-btn";
   clearBtn.innerHTML=ICONS.trash+" 전체 지우기";
   toolbar.appendChild(clearBtn);
+
+  const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
+  pngBtn.innerHTML=ICONS.download+" PNG 저장";
+  pngBtn.title="지금 화면의 그림을 내 컴퓨터에 PNG 파일로 내려받습니다";
+  toolbar.appendChild(pngBtn);
   box.appendChild(toolbar);
 
   const hint=document.createElement("p"); hint.className="hint"; hint.style.margin="0 0 8px";
@@ -4092,6 +4124,7 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   canvas.width=sz.w; canvas.height=sz.h;
   canvas.style.width=sz.w+"px"; canvas.style.height=sz.h+"px";
   const ctx=canvas.getContext("2d");
+  pngBtn.onclick=()=>downloadCanvasPng(canvas, "콘티피드백_"+(title||""));
   let baseImg=null, ready=false;
   function paintBase(){
     ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
