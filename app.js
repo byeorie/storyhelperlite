@@ -5745,12 +5745,19 @@ function rProfClasses(){
   if(profClassId!=null){ rProfClassDetail(profClassId); return; }
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>${ICONS.book} 수업 관리</h2>
-    <p class="hint">과목별로 수업을 만들어 학생을 나누고, 수업마다 따로 과제를 낼 수 있습니다. 학생은 자신이 속한 수업의 과제만 보게 됩니다. 수업에 넣지 않은 과제는 "수업 미지정 과제" 항목에서 모든 등록 학생에게 공개됩니다. 내 코드로 가입한 전체 학생 명단은 아래 "전체 학생 명단" 항목에서 볼 수 있습니다.</p>
-    <button class="btn" id="profNewClassBtn">${ICONS.plus} 수업 만들기</button>
-    <div id="profClassWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>
+    <p class="hint">과목별로 수업을 만들어 학생을 나누고, 수업마다 따로 과제를 낼 수 있습니다. 학생은 자신이 속한 수업의 과제만 보게 됩니다. 수업에 넣지 않은 과제는 위의 [수업 미지정 과제] 버튼에서 관리하며 모든 등록 학생에게 공개됩니다. 내 코드로 가입한 전체 학생 명단은 [전체 학생 명단] 버튼에서 볼 수 있습니다. 수업 목록은 왼쪽 손잡이(⠿)를 잡아 끌어 순서를 바꿀 수 있습니다.</p>
+    <div class="assign-folder-actions">
+      <button class="btn" id="profNewClassBtn">${ICONS.plus} 수업 만들기</button>
+      <button class="btn ghost" id="profRosterBtn">${ICONS.user} 전체 학생 명단</button>
+      <button class="btn ghost" id="profUnassignedBtn">${ICONS.book} 수업 미지정 과제</button>
+    </div>
+    <div id="profClassWrap" class="prof-assign-grid class-rows"><p class="hint">불러오는 중…</p></div>
   </div>`;
   app.appendChild(c);
   c.querySelector("#profNewClassBtn").onclick=openNewClassModal;
+  /* 2026-09-14: "전체 학생 명단"·"수업 미지정 과제"는 목록 카드가 아니라 상단 버튼으로 옮김 */
+  c.querySelector("#profRosterBtn").onclick=()=>{ profClassId="roster"; profClassTab="assignments"; render(); };
+  c.querySelector("#profUnassignedBtn").onclick=()=>{ profClassId="none"; profClassTab="assignments"; render(); };
   renderProfClassList();
 }
 async function renderProfClassList(){
@@ -5759,17 +5766,12 @@ async function renderProfClassList(){
   if(!wrap.isConnected) return;
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const classes=res.body.classes||[], unassignedCount=res.body.unassignedCount||0;
-  let html=`<div class="assign-folder" data-class="roster">
-    <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.user} 전체 학생 명단</span></div>
-    <div class="hint">내 코드로 가입한 전체 학생 조회</div>
-  </div>`;
-  html+=`<div class="assign-folder" data-class="none">
-    <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.book} 수업 미지정 과제</span></div>
-    <div class="hint">과제 ${unassignedCount}건 · 모든 등록 학생에게 공개</div>
-  </div>`;
-  html+=classes.map(cl=>`<div class="assign-folder" data-class="${cl.id}">
+  /* 수업 미지정 과제 건수는 상단 버튼 라벨에 표시 (2026-09-14: 목록 카드에서 버튼으로 이동) */
+  const unBtn=document.getElementById("profUnassignedBtn");
+  if(unBtn) unBtn.innerHTML=`${ICONS.book} 수업 미지정 과제 (${unassignedCount})`;
+  let html=classes.map(cl=>`<div class="assign-folder class-row" data-class="${cl.id}" data-id="${cl.id}">
     <div class="assign-folder-top">
-      <span class="assign-folder-title">${ICONS.book} ${esc(cl.name)}</span>
+      <span class="assign-folder-title"><span class="class-row-handle" title="드래그해서 순서 변경">${ICONS.grip}</span>${ICONS.book} ${esc(cl.name)}</span>
       <div class="assign-folder-controls">
         <button type="button" class="assign-folder-edit" data-id="${cl.id}" title="수업 정보 수정">${ICONS.edit}</button>
         ${cl.code?`<button type="button" class="assign-folder-code-big" data-name="${esc(cl.name)}" data-code="${esc(cl.code)}" title="등록 코드 크게 보기">${ICONS.search}</button>`:""}
@@ -5778,7 +5780,7 @@ async function renderProfClassList(){
     </div>
     <div class="hint">${[classMetaLine(cl),`수강생 ${cl.student_count}명`,`과제 ${cl.assignment_count}건`].filter(Boolean).join(" · ")}${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
   </div>`).join("");
-  wrap.innerHTML=html;
+  wrap.innerHTML=html||`<p class="hint">아직 만든 수업이 없습니다. [수업 만들기]로 첫 수업을 만들어 보세요.</p>`;
   wrap.querySelectorAll(".assign-folder-edit").forEach(btn=>{
     btn.onclick=(e)=>{ e.stopPropagation(); openEditClassModal(classes.find(cl=>cl.id===Number(btn.dataset.id))); };
   });
@@ -5805,6 +5807,51 @@ async function renderProfClassList(){
       profClassTab="assignments"; render();
     };
   });
+  bindClassRowDnd(wrap);
+}
+/* ===== 수업 목록 순서 바꾸기 (2026-09-14) =====
+   한 줄에 하나씩 놓인 수업 카드를 왼쪽 손잡이로 잡아 끌면 순서가 바뀌고, 그 순서를 서버
+   (classes.sort_order)에 저장해 다른 기기에서도 같은 순서로 보이게 한다.
+   앱의 다른 드래그(플롯 섹션 등)와 같은 방식: 손잡이 mousedown에서만 draggable=true. */
+let classRowDropHandled=false;
+function bindClassRowDnd(wrap){
+  wrap.querySelectorAll(".class-row-handle").forEach(h=>{
+    const row=h.closest(".class-row"); if(!row) return;
+    h.onclick=e=>e.stopPropagation();                       // 손잡이 클릭으로 수업이 열리지 않게
+    h.addEventListener("mousedown", ()=>{ row.draggable=true; });
+    h.addEventListener("touchstart", ()=>{ row.draggable=true; }, {passive:true});
+  });
+  wrap.querySelectorAll(".class-row").forEach(row=>{
+    row.addEventListener("dragstart", e=>{
+      if(!row.draggable) return;
+      classRowDropHandled=false;
+      e.dataTransfer.effectAllowed="move";
+      setTimeout(()=>row.classList.add("class-dragging"),0);
+    });
+    row.addEventListener("dragend", ()=>{
+      row.draggable=false; row.classList.remove("class-dragging");
+      if(!classRowDropHandled && wrap.isConnected) commitClassOrder(wrap);
+    });
+  });
+  if(wrap.dataset.dndBound) return;                          // 목록만 다시 그릴 때 중복 등록 방지
+  wrap.dataset.dndBound="1";
+  wrap.addEventListener("dragover", e=>{
+    const dragging=wrap.querySelector(".class-row.class-dragging"); if(!dragging) return;
+    e.preventDefault();
+    const after=getDragAfterEl(wrap, e.clientY, ".class-row:not(.class-dragging)");
+    if(after==null) wrap.appendChild(dragging); else wrap.insertBefore(dragging, after);
+  });
+  wrap.addEventListener("drop", e=>{
+    if(!wrap.querySelector(".class-row.class-dragging")) return;
+    e.preventDefault(); commitClassOrder(wrap);
+  });
+}
+async function commitClassOrder(wrap){
+  classRowDropHandled=true;
+  const order=[...wrap.querySelectorAll(".class-row")].map(el=>Number(el.dataset.id)).filter(Boolean);
+  if(!order.length) return;
+  const r=await apiFetch("professor-classes", {method:"PUT", body:JSON.stringify({order})});
+  if(!r.ok){ alert((r.body&&r.body.error)||"순서를 저장하지 못했습니다."); renderProfClassList(); }
 }
 /* 수업 목록/상세에 보여줄 "OO대학교 · 2분반 · 화요일 14:00~16:50" 형태의 부가정보 한 줄
    (2026-09-01 (2): 수업명과 별개로 학교이름/분반/요일/시간을 입력할 수 있게 하며 추가) */

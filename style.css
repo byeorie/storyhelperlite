@@ -641,6 +641,12 @@ body.logged-in .login-overlay { display: none; }
 .assign-folder-edit:hover { color: var(--accent); background: var(--accent2); }
 .assign-folder-del .icon, .assign-folder-edit .icon { width: 14px; height: 14px; vertical-align: middle; }
 .assign-folder-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+/* 2026-09-14: 수업 목록은 한 행에 하나씩 놓고, 왼쪽 손잡이를 잡아 끌어 순서를 바꾼다 */
+.prof-assign-grid.class-rows { grid-template-columns: 1fr; }
+.class-row-handle { color: var(--muted); cursor: grab; display: inline-flex; align-items: center; }
+.class-row-handle:active { cursor: grabbing; }
+.class-row-handle .icon { width: 14px; height: 14px; }
+.class-row.class-dragging { opacity: .45; border-style: dashed; }
 
 /* 수업 관리 — 수업 상세 화면의 과제 관리/수강 학생 탭 (2026-08-24) */
 .class-tabs { max-width: 320px; margin-bottom: 14px; }

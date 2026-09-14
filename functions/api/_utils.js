@@ -56,6 +56,16 @@ export async function ensureAssignmentSchema(env) {
   assignmentSchemaEnsured = true;
 }
 
+/* ===== (2026-09-14) 수업 목록 순서(sort_order) 컬럼 =====
+   교수가 [수업 관리]에서 수업 카드를 끌어 순서를 바꾸면 그 순서를 여기에 저장한다.
+   NULL이면 아직 순서를 정하지 않은 수업 → 목록 끝쪽에 최신 생성순으로 붙는다. */
+let classSchemaEnsured = false;
+export async function ensureClassSchema(env) {
+  if (classSchemaEnsured) return;
+  try { await env.DB.prepare("ALTER TABLE classes ADD COLUMN sort_order INTEGER").run(); } catch (e) {}
+  classSchemaEnsured = true;
+}
+
 /* ===== (2026-09-08) 수강 등록 표 정리 =====
    "수업 코드 입력이 꼬여서 같은 수업에 두 번 등록된 학생이 생겼다"는 신고에 대한 대응.
    원래 schema.sql에는 중복을 막는 UNIQUE 인덱스가 있지만, 그 SQL을 운영 DB에 실행하지 않았다면

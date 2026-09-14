@@ -131,6 +131,8 @@ ALTER TABLE classes ADD COLUMN school_name TEXT;
 ALTER TABLE classes ADD COLUMN section TEXT;
 ALTER TABLE classes ADD COLUMN class_day TEXT;
 ALTER TABLE classes ADD COLUMN class_time TEXT;
+-- 2026-09-14: 교수가 정한 수업 목록 표시 순서(NULL=미지정 → 목록 뒤쪽)
+ALTER TABLE classes ADD COLUMN sort_order INTEGER;
 ALTER TABLE submissions ADD COLUMN checked_at INTEGER;
 -- 2026-09-10: 교수 총평(선택 입력)
 ALTER TABLE submissions ADD COLUMN evaluation TEXT;
