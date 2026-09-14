@@ -2221,3 +2221,27 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
 - 서버(`student-submit`)도 같은 검사를 한다 — 화면을 우회해도 종류가 다르면
   "이 과제는 「글쓰기」 과제입니다. 글쓰기 탭에서 제출해주세요." 로 거절.
 - `schema.sql` / `schema-ensure.sql`에도 컬럼을 반영.
+
+
+## 2026-09-14 — 그리기 팝업: Ctrl+Z 실행 취소 · PNG로 내 컴퓨터에 저장
+
+### 1) Ctrl+Z가 그림 실행 취소로 동작
+콘티 [직접 그리기] 중에 Ctrl+Z를 누르면 전역 단축키가 `doUndo()`(프로젝트 전체 되돌리기)를 불러
+화면이 이전 상태로 넘어가 버렸다. 그리기 팝업이 떠 있을 때는 그림만 되돌리도록 분리.
+- 전역 `keydown` 핸들러: `document.querySelector(".draw-modal-overlay")`가 있으면
+  `overlay.__drawUndo()`를 부르고, 없을 때만 기존 `doUndo()`. 다시 실행(Ctrl+Shift+Z / Ctrl+Y)은
+  팝업이 떠 있는 동안 프로젝트 상태를 건드리지 않도록 무시한다.
+- `attachDrawUndo(overlay, canvas, ctx)` 신설(openDrawModal 바로 위). 캔버스 전체를 PNG dataURL로
+  기억하는 방식이고, **바뀌기 직전**(pointerdown, 전체 지우기 confirm 통과 후)에 `snapshot()`을 부른다.
+  되돌릴 땐 마지막 스냅샷을 Image로 다시 그린다 → 직전 획 하나 / 지우기 한 번 단위로만 취소됨.
+- `DRAW_UNDO_LIMIT=30` — 30단계까지 보관하고 넘치면 오래된 것부터 버린다(그림 통째로 들고 있으므로
+  메모리 보호). 캔버스 크기가 바뀌면 `snapshot.reset()`으로 기록을 비운다
+  (교수 첨삭 모달은 `preload.onload`에서 원본 비율로 캔버스를 다시 만들기 때문).
+- 학생 `openDrawModal`, 교수 `openStoryboardFeedbackDrawModal` 두 곳 모두 적용.
+
+### 2) [PNG 저장] 버튼
+서버에 올리는 [저장 후 종료]와 별개로, 그리는 중인 그림을 내 컴퓨터에 파일로 내려받는다.
+- `downloadCanvasPng(canvas, baseName)` 신설 — `canvas.toBlob` → objectURL → `<a download>` 클릭.
+  파일명은 `콘티_YYYYMMDD_HHMM.png`(첨삭은 `콘티피드백_제목_...`), 윈도우에서 못 쓰는 글자는 `_`로 치환.
+  objectURL은 10초 뒤 revoke. toBlob이 없는 브라우저는 dataURL로 폴백.
+- 두 그리기 팝업 툴바의 [전체 지우기] 옆에 `[⤓ PNG 저장]` 버튼 추가.

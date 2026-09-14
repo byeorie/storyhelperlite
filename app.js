@@ -533,9 +533,15 @@ function forceSaveNow(){
 window.addEventListener("keydown", e=>{
   if(!(e.ctrlKey||e.metaKey)) return;
   const k=e.key.toLowerCase();
+  /* 그리기 팝업이 열려 있으면 Ctrl+Z는 프로젝트 되돌리기(이전 화면으로 넘어감)가 아니라
+     그림의 직전 획/지우기만 되돌린다 (2026-09-14) */
+  const drawOverlay=document.querySelector(".draw-modal-overlay");
   if(k==="s"){ e.preventDefault(); forceSaveNow(); }
-  else if(k==="z" && !e.shiftKey){ e.preventDefault(); doUndo(); }
-  else if((k==="z" && e.shiftKey) || k==="y"){ e.preventDefault(); doRedo(); }
+  else if(k==="z" && !e.shiftKey){
+    e.preventDefault();
+    if(drawOverlay && drawOverlay.__drawUndo) drawOverlay.__drawUndo(); else doUndo();
+  }
+  else if((k==="z" && e.shiftKey) || k==="y"){ e.preventDefault(); if(!drawOverlay) doRedo(); }
 });
 
 /* 상단 툴바 — 저장 / 불러오기 / 내보내기 */
@@ -3854,6 +3860,30 @@ function openSizePicker(bl, onPick){
   document.body.appendChild(overlay);
 }
 
+/* 그리기 팝업의 실행 취소(Ctrl+Z) — 획 하나, 지우기 한 번 같은 "바로 직전 행동"만 되돌린다.
+   그림 전체를 PNG로 통째로 기억하는 방식이라 메모리 보호를 위해 30단계까지만 보관한다.
+   snapshot()을 "무언가 바뀌기 직전"에 부르면 그 시점으로 돌아갈 수 있다. */
+const DRAW_UNDO_LIMIT=30;
+function attachDrawUndo(overlay, canvas, ctx){
+  const shots=[]; let busy=false;
+  function snapshot(){
+    try{
+      shots.push(canvas.toDataURL("image/png"));
+      if(shots.length>DRAW_UNDO_LIMIT) shots.shift();
+    }catch(_){ /* 캔버스를 읽지 못하면 실행 취소 없이 그리기만 계속한다 */ }
+  }
+  snapshot.reset=()=>{ shots.length=0; };   // 캔버스 크기가 바뀌면 예전 기록은 버린다
+  overlay.__drawUndo=()=>{
+    if(busy || !shots.length) return;
+    const url=shots.pop(); busy=true;
+    const img=new Image();
+    img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); busy=false; };
+    img.onerror=()=>{ busy=false; };
+    img.src=url;
+  };
+  return snapshot;
+}
+
 /* 그리기 툴 팝업 — 요구사항: 바깥을 눌러도 절대 닫히지 않으며, "저장 후 종료"를 눌렀을 때만 닫힌다.
    그래서 오버레이 클릭 닫기 핸들러와 × 닫기 버튼을 의도적으로 넣지 않았다. */
 function openDrawModal(bl, sizeKey){
@@ -3906,7 +3936,8 @@ function openDrawModal(bl, sizeKey){
   const ctx=canvas.getContext("2d");
   function resetCanvas(){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
   resetCanvas();
-  clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")) resetCanvas(); };
+  const snapshotForUndo=attachDrawUndo(overlay, canvas, ctx);
+  clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")){ snapshotForUndo(); resetCanvas(); } };
   /* 기존 콘티가 있으면 이어서 수정할 수 있도록 배경으로 불러온다 (실패해도 빈 캔버스로 계속 진행) */
   let preloadFailed=false;
   if(bl.storyboard && bl.storyboard.key){
@@ -3928,6 +3959,7 @@ function openDrawModal(bl, sizeKey){
     return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
   }
   canvas.addEventListener("pointerdown", e=>{
+    snapshotForUndo();   // 획을 긋기 직전 상태를 기억해 둔다(Ctrl+Z용)
     drawing=true; canvas.setPointerCapture(e.pointerId);
     const p=pos(e); lastX=p.x; lastY=p.y;
     ctx.beginPath(); ctx.arc(p.x,p.y,curWidth/2,0,Math.PI*2);
@@ -4066,11 +4098,12 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
     if(baseImg) ctx.drawImage(baseImg,0,0,canvas.width,canvas.height);
   }
   paintBase();
+  const snapshotForUndo=attachDrawUndo(overlay, canvas, ctx);
   /* "전체 지우기"는 내가 그린 피드백만 없애고 학생의 원래 그림은 되살린다
      (학생 그림까지 흰 종이로 지워버리면 피드백의 의미가 없어지므로 — 2026-09-11) */
   clearBtn.innerHTML=ICONS.trash+" 그린 것 지우기";
   clearBtn.title="내가 그린 피드백만 지우고 학생이 낸 원래 그림으로 되돌립니다";
-  clearBtn.onclick=()=>{ if(confirm("그린 피드백을 모두 지우고 학생이 낸 원래 그림으로 되돌릴까요?")) paintBase(); };
+  clearBtn.onclick=()=>{ if(confirm("그린 피드백을 모두 지우고 학생이 낸 원래 그림으로 되돌릴까요?")){ snapshotForUndo(); paintBase(); } };
 
   const loadingMsg=document.createElement("p"); loadingMsg.className="hint"; loadingMsg.textContent="그림을 불러오는 중…";
   canvasWrap.appendChild(canvas);
@@ -4094,6 +4127,7 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
     canvas.height=Math.max(1,Math.round(nh*cap));
     baseImg=preload;
     paintBase();
+    snapshotForUndo.reset();   // 캔버스 크기가 원본 비율로 바뀌었으므로 실행 취소 기록을 비운다
     fitCanvasToScreen();
     loadingMsg.remove();
     ready=true;
@@ -4116,6 +4150,7 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   }
   canvas.addEventListener("pointerdown", e=>{
     if(!ready) return;
+    snapshotForUndo();   // 획을 긋기 직전 상태를 기억해 둔다(Ctrl+Z용)
     drawing=true; canvas.setPointerCapture(e.pointerId);
     const p=pos(e); lastX=p.x; lastY=p.y;
     ctx.beginPath(); ctx.arc(p.x,p.y,strokeW()/2,0,Math.PI*2);
