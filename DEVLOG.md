@@ -2359,3 +2359,32 @@ Chromium(Playwright)으로 실제 획을 긋고 확인: 층별 그리기·마커
 없어진 이름이 의도한 것뿐인지 확인할 것. 이번에 그렇게 비교해 보니 의도치 않은 삭제는 이 둘뿐이었다.
 검증도 엔진만이 아니라 실제 앱 화면에서 버튼을 눌러 페이지가 뜨는 데까지 했다
 (콘티 직접 그리기 · 캐릭터 이미지 그리기 · PNG 저장 · 교수 첨삭 팝업 모두 정상).
+
+
+## 2026-09-14 (7) — 재제출 덮어쓰기 · 피드백 전달 후 제출함 복귀 · 알림 접기
+
+### 1) 첨삭 전 재제출은 새로 쌓지 않고 덮어쓰기
+학생이 제출 직후 내용을 고쳐 다시 내면 교수 제출함에 같은 과제가 여러 개 쌓여 어느 것이 최신인지
+알기 어려웠다.
+- `functions/api/student-submit.js`: INSERT 전에 `feedback IS NULL AND feedback_at IS NULL`인 기존
+  제출물(같은 과제·학생·종류)을 찾아, 있으면 `project_name/data/submitted_at`을 UPDATE하고
+  `checked_at = NULL`로 되돌린다(교수 알림에 다시 뜨게). 응답에 `replaced: true`.
+  첨삭이 이미 저장됐거나 전달된 제출물은 건드리지 않고 새로 쌓아 이력을 보존한다.
+  `checked_at` 컬럼이 없는 DB를 위해 UPDATE는 2단계로 감쌌다.
+- `app.js` 제출 버튼: `replaced`면 "이전에 제출한 내용을 이번 내용으로 덮어썼습니다." 알림.
+
+### 2) [피드백 전달] 후 제출함으로 자동 이동
+전달해도 첨삭 화면에 그대로 남아 있어 다음 학생으로 넘어가려면 매번 [돌아가기]를 눌러야 했다.
+- `app.js` 첨삭 저장 핸들러 2곳(콘티 `deliver:true` 경로, 일반 첨삭 저장 경로): 성공 후
+  `profReviewId=null; profReviewVersion=null; render();` → 그 과제의 제출함 화면으로 복귀.
+
+### 3) 알림 목록 접기 (붉은 원 배지)
+알림이 여러 개 뜨면 화면 오른쪽 위를 계속 가렸다.
+- `app.js`: `NOTIFY_COLLAPSE_KEY`(localStorage에 접힘 상태 기억), `notifyIsCollapsed()`,
+  `notifySetCollapsed()`, `notifyLastRender`(서버를 다시 부르지 않고 즉시 다시 그리기 위한 직전 자료).
+  `renderNotifyToasts()`에 접힘 분기 추가 — 펼친 상태는 맨 위에 `[알림 n] [─]` 머리말,
+  접은 상태는 붉은 원 안에 개수(교수=제출 건수 합, 학생=알림 개수, 99 초과는 `99+`)만.
+  서명(sig)에 접힘 여부를 넣어 상태가 바뀌면 다시 그리도록 했고, [x]로 알림을 닫으면 머리말 숫자도
+  바로 줄도록 `notifyDismiss()`에서 다시 그린다.
+- `style.css`: `.notify-head`, `.notify-head-title`, `.notify-fold`, `.notify-badge` 추가.
+  모바일에서는 접힌 배지만 오른쪽 정렬(`.notify-stack.notify-collapsed`).

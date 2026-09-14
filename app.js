@@ -5025,6 +5025,23 @@ const NOTIFY_DISMISS_KEY = "storyhelper_notify_dismissed";
 let notifyTimer = null;
 let notifySignature = "";             // 같은 내용이면 다시 그리지 않아 깜빡임을 막는다
 let notifyDismissed = null;           // 교수용 [x] 기억 { "a12": 마지막제출물id }
+/* 2026-09-14: 알림 목록 접기 — 접으면 붉은 원 안에 알림 개수만 남는다(상단바 아래 오른쪽) */
+const NOTIFY_COLLAPSE_KEY = "storyhelper_notify_collapsed";
+let notifyCollapsed = null;           // null이면 아직 localStorage에서 안 읽음
+let notifyLastRender = null;          // 접기/펼치기 때 서버를 다시 부르지 않고 바로 다시 그리기 위한 직전 자료
+
+function notifyIsCollapsed(){
+  if(notifyCollapsed===null){
+    try{ notifyCollapsed = localStorage.getItem(NOTIFY_COLLAPSE_KEY)==="1"; }catch(e){ notifyCollapsed=false; }
+  }
+  return notifyCollapsed;
+}
+function notifySetCollapsed(v){
+  notifyCollapsed=!!v;
+  try{ localStorage.setItem(NOTIFY_COLLAPSE_KEY, notifyCollapsed?"1":"0"); }catch(e){}
+  notifySignature="";                 // 모양이 바뀌므로 다시 그리게 한다
+  if(notifyLastRender) renderNotifyToasts(notifyLastRender.role, notifyLastRender.items);
+}
 
 function notifyLoadDismissed(){
   if(notifyDismissed) return notifyDismissed;
@@ -5046,7 +5063,7 @@ function refreshNotifyPolling(){
 }
 function notifyClearToasts(){
   const st=notifyStackEl(); if(st) st.innerHTML="";
-  notifySignature="";
+  notifySignature=""; notifyLastRender=null;
 }
 /* 다른 탭을 보다가 돌아오면 기다리지 않고 바로 한 번 갱신한다 */
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) fetchNotifications(); });
@@ -5063,20 +5080,49 @@ function renderNotifyToasts(role, itemsRaw){
   const stack=notifyStackEl(); if(!stack) return;
   const isProf = role==="professor";
   const dismissed = notifyLoadDismissed();
+  notifyLastRender={role, items:(itemsRaw||[]).slice()};
 
   /* 교수 쪽 [x]는 "그 과제에 새 제출이 들어오기 전까지" 숨기는 의미 — 마지막 제출물 id로 판단한다 */
   const items=(itemsRaw||[]).filter(it=> isProf ? !(Number(dismissed[it.key])>=Number(it.lastId)) : true);
 
+  /* 상단바 높이에 맞춰 "상단탭 바로 아래"에 붙인다(화면 폭에 따라 상단바 높이가 달라지므로 매번 계산) */
+  const bar=document.querySelector(".topbar");
+  if(bar) stack.style.top=(bar.getBoundingClientRect().height+8)+"px";
+
+  const collapsed=notifyIsCollapsed();
+  /* 접었을 때 붉은 원에 넣을 숫자 — 교수는 제출 건수 합, 학생은 알림 개수 */
+  const total=items.reduce((n,it)=>n+(Number(it.count)||1),0);
   const shown=items.slice(0, NOTIFY_MAX_TOASTS);
   const rest=items.length-shown.length;
-  const sig=role+"|"+shown.map(it=>it.key+":"+it.count+":"+(it.lastId||it.lastAt||0)).join(",")+"|"+rest;
+  const sig=(collapsed?"C":"E")+"|"+role+"|"+shown.map(it=>it.key+":"+it.count+":"+(it.lastId||it.lastAt||0)).join(",")+"|"+rest;
   if(sig===notifySignature) return;
   notifySignature=sig;
 
   stack.innerHTML="";
-  /* 상단바 높이에 맞춰 "상단탭 바로 아래"에 붙인다(화면 폭에 따라 상단바 높이가 달라지므로 매번 계산) */
-  const bar=document.querySelector(".topbar");
-  if(bar) stack.style.top=(bar.getBoundingClientRect().height+8)+"px";
+  stack.classList.toggle("notify-collapsed", collapsed);
+  if(!items.length) return;
+
+  /* 접힌 상태 — 붉은 원 안에 개수만. 누르면 다시 펼쳐진다 */
+  if(collapsed){
+    const badge=document.createElement("button");
+    badge.type="button"; badge.className="notify-badge";
+    badge.title="읽지 않은 알림 "+total+"개 — 누르면 펼쳐집니다";
+    badge.textContent = total>99 ? "99+" : String(total);
+    badge.onclick=()=>notifySetCollapsed(false);   // 펼치기
+    stack.appendChild(badge);
+    return;
+  }
+
+  /* 펼친 상태 — 맨 위에 [알림 n] 과 접기 버튼 */
+  const head=document.createElement("div");
+  head.className="notify-head";
+  const headTitle=document.createElement("span");
+  headTitle.className="notify-head-title"; headTitle.textContent="알림 "+total;
+  const fold=document.createElement("button");
+  fold.type="button"; fold.className="notify-fold"; fold.title="접기"; fold.textContent="─";
+  fold.onclick=()=>notifySetCollapsed(true);
+  head.append(headTitle, fold);
+  stack.appendChild(head);
 
   shown.forEach(it=>{
     const el=document.createElement("div");
@@ -5121,6 +5167,11 @@ function notifyDismiss(isProf, it){
   }
   notifyRemoveByKey(it.key);       // 서버 응답을 기다리지 않고 화면에서 바로 없앤다
   notifySignature="";              // 다음 폴링 때 다시 그리도록 서명 초기화
+  /* 2026-09-14: 머리말의 개수(와 접었을 때의 붉은 원 숫자)도 바로 줄어들게 다시 그린다 */
+  if(notifyLastRender){
+    notifyLastRender.items=(notifyLastRender.items||[]).filter(x=>x.key!==it.key);
+    renderNotifyToasts(notifyLastRender.role, notifyLastRender.items);
+  }
 }
 function notifyRemoveByKey(key){
   const stack=notifyStackEl(); if(!stack) return;
@@ -5380,7 +5431,8 @@ async function openSubmitModal(type){
       const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
         assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
       })});
-      if(r.ok){ alert("제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
+      /* 2026-09-14: 첨삭 전에 다시 내면 서버가 이전 제출물을 덮어쓴다(replaced) */
+      if(r.ok){ alert(r.body&&r.body.replaced ? "이전에 제출한 내용을 이번 내용으로 덮어썼습니다." : "제출되었습니다."); if(overlay.isConnected) document.body.removeChild(overlay); }
       else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
     };
   });
@@ -6239,7 +6291,8 @@ async function rProfSubmissionReview(id, version){
         alert(r.body && r.body.delivered
           ? "피드백을 학생에게 전달했습니다."
           : "평가를 저장하고 확인 표시를 했습니다. (아직 그린 피드백이 없습니다)");
-        profReviewVersion=null; render();
+        /* 2026-09-14: 전달을 마치면 첨삭 화면에 머무르지 않고 그 과제의 제출함으로 자동으로 나간다 */
+        profReviewId=null; profReviewVersion=null; render();
       };
     }
     return;
@@ -6265,7 +6318,8 @@ async function rProfSubmissionReview(id, version){
     /* rProfSubmissionReview(id)를 직접 다시 부르면 app.innerHTML을 지우지 않고 카드를 또 appendChild해서
        화면에 이전 카드+새 카드가 이중으로 쌓인다(2026-08-20 발견). render()를 거쳐야 app이 먼저 비워진 뒤
        profReviewId 기준으로 이 함수가 다시 호출된다. */
-    if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewVersion=null; render(); }
+    /* 2026-09-14: 전달 후에는 제출함 화면으로 자동 이동(profReviewId=null) */
+    if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewId=null; profReviewVersion=null; render(); }
     else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
   };
 }

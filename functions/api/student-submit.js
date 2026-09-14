@@ -58,9 +58,40 @@ export async function onRequestPost({ request, env }) {
   }
 
   const now = nowSec();
+  const projectName = (body.projectName || "").slice(0, 100);
+  const dataJson = JSON.stringify(body.data);
+
+  /* 2026-09-14: 아직 교수의 첨삭이 하나도 없는 제출물이 남아 있으면, 새 줄을 쌓지 않고 그것을 최신
+     내용으로 덮어쓴다(= 재제출). 학생이 제출 직후 고쳐서 다시 내면 교수 제출함에 같은 과제가 여러 개
+     쌓여 어느 것이 최신인지 알기 어렵던 문제를 없앤다.
+     - 첨삭이 이미 저장됐거나(feedback) 학생에게 전달된(feedback_at) 제출물은 건드리지 않고 새로 쌓아
+       이력을 보존한다.
+     - 덮어쓰면 "교수 확인"도 다시 안 한 상태로 되돌려(checked_at=NULL) 교수 알림에 다시 뜨게 한다. */
+  let prev = null;
+  try {
+    prev = await env.DB.prepare(
+      "SELECT id FROM submissions WHERE assignment_id = ? AND student_id = ? AND type = ? " +
+      "AND feedback IS NULL AND feedback_at IS NULL ORDER BY id DESC LIMIT 1"
+    ).bind(assignmentId, auth.user.id, type).first();
+  } catch (e) { prev = null; }
+
+  if (prev && prev.id) {
+    try {
+      await env.DB.prepare(
+        "UPDATE submissions SET project_name = ?, data = ?, submitted_at = ?, checked_at = NULL WHERE id = ?"
+      ).bind(projectName, dataJson, now, prev.id).run();
+    } catch (e) {
+      // checked_at 컬럼이 아직 없는 DB에서도 덮어쓰기 자체는 되도록
+      await env.DB.prepare(
+        "UPDATE submissions SET project_name = ?, data = ?, submitted_at = ? WHERE id = ?"
+      ).bind(projectName, dataJson, now, prev.id).run();
+    }
+    return jsonResponse({ ok: true, submissionId: prev.id, submittedAt: now, replaced: true });
+  }
+
   const result = await env.DB.prepare(
     "INSERT INTO submissions (assignment_id, student_id, type, project_name, data, submitted_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(assignmentId, auth.user.id, type, (body.projectName || "").slice(0, 100), JSON.stringify(body.data), now).run();
+  ).bind(assignmentId, auth.user.id, type, projectName, dataJson, now).run();
 
-  return jsonResponse({ ok: true, submissionId: result.meta.last_row_id, submittedAt: now });
+  return jsonResponse({ ok: true, submissionId: result.meta.last_row_id, submittedAt: now, replaced: false });
 }
