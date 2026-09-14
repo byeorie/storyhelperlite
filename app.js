@@ -1219,8 +1219,11 @@ function rChar(){
   if(charDetailFor){
     const dch=P.characters.find(x=>x.id===charDetailFor);
     if(dch){
-      /* 배경 설정 페이지와 동일하게 오른쪽에 기획서 미리보기를 붙인다 */
-      mountWithPlanViewer(charDetailPage(dch));
+      /* 배경 설정 페이지와 동일하게 오른쪽에 기획서 미리보기를 붙인다.
+         캐릭터 이미지가 등록돼 있으면 [기획서 미리보기]/[캐릭터 이미지] 탭으로 골라 볼 수 있다 */
+      const extraViews = charSheetKey(dch)
+        ? [{key:"charSheet", label:"캐릭터 이미지", render:el=>renderCharSheetViewInto(el, dch)}] : [];
+      mountWithPlanViewer(charDetailPage(dch), extraViews);
       return;
     }
     charDetailFor=null;
@@ -1299,7 +1302,9 @@ function charGalleryCard(ch){
     e.stopPropagation();
     if(P.characters.length<=1){ alert("최소 1명의 캐릭터는 있어야 합니다."); return; }
     if(!confirm(`'${ch.name||"이 캐릭터"}'를 삭제할까요?`)) return;
+    const sheetKey=charSheetKey(ch);   // 캐릭터를 지우면 등록된 캐릭터 이미지도 서버에서 지운다
     P.characters=P.characters.filter(c=>c.id!==ch.id);
+    if(sheetKey) deleteStoryboardImage(sheetKey);
     P.characters.forEach(c=>{ c.relationships=(c.relationships||[]).filter(r=>r.targetId!==ch.id); });
     save(); render();
   };
@@ -1347,6 +1352,7 @@ function charDetailPage(ch){
         <p class="hint" style="margin:4px 0 0">500KB 이하 이미지, 300×300px로 자동 압축됩니다.</p>
       </div>
     </div>
+    <div class="char-sheet-row" id="charSheetRow"></div>
     <h3 class="char-detail-sub">${ICONS.user} 인물 정보</h3>
     <div class="row"><div><label>이름</label><input type="text" data-k="name"></div>
     <div><label>역할 (보글러의 8가지 캐릭터 원형)</label><select data-k="role"><option value="">선택</option>${roleOpts}</select></div></div>
@@ -1410,6 +1416,27 @@ function charDetailPage(ch){
   }
   imgInput.onchange=e=>{ handleCharImageFile(e.target.files[0], ch, refreshImgPreview); e.target.value=""; };
   imgRemoveBtn.onclick=()=>{ ch.image=""; save(); refreshImgPreview(); };
+
+  /* 캐릭터 이미지(시트) — 프로필 사진과 별개로 세로 1000×가로 500px 이미지 한 장.
+     직접 그리거나 파일로 올릴 수 있고, 등록되면 오른쪽 패널에서 크게 볼 수 있다 (2026-09-14) */
+  const sheetRow=body.querySelector("#charSheetRow");
+  function refreshSheetRow(){
+    const has=!!charSheetKey(ch);
+    sheetRow.innerHTML=`
+      <div class="char-sheet-thumb${has?"":" empty"}">${has?`<img src="${charSheetUrl(ch)}" alt="">`:"이미지 없음"}</div>
+      <div class="char-img-actions">
+        <button type="button" class="btn ghost sm icon-btn" id="chSheetDraw">${ICONS.pencil} ${has?"이어서 그리기":"직접 그리기"}</button>
+        <label class="btn ghost sm">${has?"이미지 교체":"이미지 추가"}<input type="file" id="chSheetFile" accept="image/*" style="display:none"></label>
+        <button type="button" class="btn ghost sm" id="chSheetDel"${has?"":" disabled"}>삭제</button>
+        <p class="hint" style="margin:4px 0 0">캐릭터 이미지(시트) — 세로 1000 × 가로 500px, 500KB 이하로 자동 압축됩니다. 등록하면 오른쪽에서 [캐릭터 이미지] 탭으로 볼 수 있습니다.</p>
+      </div>`;
+    const thumb=sheetRow.querySelector(".char-sheet-thumb");
+    if(has) thumb.onclick=()=>openStoryboardImageViewer((ch.name||"캐릭터")+" 이미지", charSheetKey(ch));
+    sheetRow.querySelector("#chSheetDraw").onclick=()=>openCharSheetDrawModal(ch, ()=>render());
+    sheetRow.querySelector("#chSheetFile").onchange=e=>{ handleCharSheetFile(e.target.files[0], ch, ()=>render()); e.target.value=""; };
+    sheetRow.querySelector("#chSheetDel").onclick=()=>removeCharSheet(ch, ()=>render());
+  }
+  refreshSheetRow();
 
   /* 인물의 변화(전/후)를 나란히 보여주는 미리보기 -- 입력할 때마다 즉시 갱신 */
   const arcPreview=body.querySelector("#charArcPreview");
@@ -1640,13 +1667,40 @@ function renderPlanViewerInto(container){
       : `<p class="hint">아직 "기획서 작성" 탭에 입력한 내용이 없습니다. 왼쪽 메뉴의 "기획서 작성"에서 먼저 채워보세요.</p>`}
   </div>`;
 }
-/* 카드 하나를 좌측에, 기획서 뷰어를 우측에 배치하는 분할 화면으로 app에 붙인다 */
-function mountWithPlanViewer(cardEl){
+/* 캐릭터 이미지(시트) 미리보기 — 오른쪽 패널에서 기획서 대신 골라 볼 수 있다 (2026-09-14) */
+function renderCharSheetViewInto(container, ch){
+  container.innerHTML=`<div class="card plan-viewer-card">
+    <h3>${ICONS.image} 캐릭터 이미지</h3>
+    <p class="hint">등록한 캐릭터 이미지입니다. 클릭하면 크게 볼 수 있습니다.</p>
+    <img class="char-sheet-view" src="${charSheetUrl(ch)}" alt="${esc(ch.name||"캐릭터")} 이미지">
+  </div>`;
+  const im=container.querySelector(".char-sheet-view");
+  if(im) im.onclick=()=>openStoryboardImageViewer((ch.name||"캐릭터")+" 이미지", charSheetKey(ch));
+}
+/* 카드 하나를 좌측에, 오른쪽 패널(기획서 미리보기 + 추가 보기)을 우측에 배치한다.
+   extraViews: [{key,label,render(container)}] — 2개 이상이면 위에 전환 탭이 붙는다. */
+let sideViewMode="plan";
+function mountWithPlanViewer(cardEl, extraViews){
   const layout=document.createElement("div"); layout.className="setting-split";
   const left=document.createElement("div"); left.className="setting-main";
   left.appendChild(cardEl);
   const right=document.createElement("div"); right.className="setting-planview";
-  renderPlanViewerInto(right);
+  const views=[{key:"plan", label:"기획서 미리보기", render:renderPlanViewerInto}].concat(extraViews||[]);
+  if(views.length>1){
+    if(!views.some(v=>v.key===sideViewMode)) sideViewMode="plan";
+    const tabs=document.createElement("div"); tabs.className="side-view-tabs";
+    views.forEach(v=>{
+      const b=document.createElement("button"); b.type="button";
+      b.className="side-view-tab"+(v.key===sideViewMode?" active":"");
+      b.textContent=v.label;
+      b.onclick=()=>{ sideViewMode=v.key; render(); };
+      tabs.appendChild(b);
+    });
+    right.appendChild(tabs);
+  }else sideViewMode="plan";
+  const panel=document.createElement("div");
+  right.appendChild(panel);
+  (views.find(v=>v.key===sideViewMode)||views[0]).render(panel);
   layout.append(left, right);
   app.appendChild(layout);
 }
@@ -4032,6 +4086,201 @@ function openDrawModal(bl, sizeKey){
       const ok=await saveStoryboardBlob(bl, blob, sizeKey);
       if(!ok){ saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
       if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    });
+  };
+  actions.appendChild(saveBtn);
+  box.appendChild(actions);
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+
+/* ===== 캐릭터 시트(캐릭터 이미지) — 2026-09-14 =====
+   프로필 사진(ch.image: 300×300 데이터URL)과는 별개로, 전신/설정용 이미지를 한 장 등록한다.
+   세로 1000 × 가로 500px 고정, 500KB 이하로 압축해서 콘티와 같은 저장소(R2)에 올리고
+   ch.sheet={key} 만 작품 데이터에 남긴다(데이터URL로 넣으면 작품 JSON이 너무 커진다). */
+const CHAR_SHEET_W=500, CHAR_SHEET_H=1000, CHAR_SHEET_MAX_BYTES=500*1024;
+function charSheetKey(ch){ return (ch && ch.sheet && ch.sheet.key) || ""; }
+function charSheetUrl(ch){
+  const k=charSheetKey(ch);
+  return k ? "/api/storyboard-image?key="+encodeURIComponent(k) : "";
+}
+/* 캔버스를 500KB 이하로 압축 → 업로드 → ch.sheet에 연결. 성공하면 done(true) */
+function saveCharSheetFromCanvas(ch, canvas, done){
+  compressCanvasToLimit(canvas, CHAR_SHEET_MAX_BYTES, async blob=>{
+    if(!blob){ alert("이미지를 저장하지 못했습니다. 다시 시도해 주세요."); done&&done(false); return; }
+    const key=await uploadStoryboardBlob(blob);
+    if(!key){
+      alert("이미지를 서버에 올리지 못했습니다.\n\n인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
+      done&&done(false); return;
+    }
+    /* 올리는 동안 서버에서 작품을 다시 불러왔을 수 있으므로 같은 id의 캐릭터를 다시 찾는다 */
+    const target=(P.characters||[]).find(c=>c.id===ch.id) || ch;
+    const oldKey=charSheetKey(target);
+    target.sheet={key};
+    save();
+    if(typeof forceSaveToServer==="function") forceSaveToServer();
+    if(oldKey && oldKey!==key) deleteStoryboardImage(oldKey);
+    done&&done(true);
+  });
+}
+/* 고른 이미지 파일을 500×1000 캔버스 안에 비율 그대로 넣는다(남는 부분은 흰 여백) */
+function handleCharSheetFile(file, ch, onDone){
+  if(!file) return;
+  if(!file.type||!file.type.startsWith("image/")){ alert("이미지 파일만 올릴 수 있습니다."); return; }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement("canvas"); c.width=CHAR_SHEET_W; c.height=CHAR_SHEET_H;
+      const cx=c.getContext("2d");
+      cx.fillStyle="#fff"; cx.fillRect(0,0,c.width,c.height);
+      const sc=Math.min(c.width/img.width, c.height/img.height);
+      const w=img.width*sc, h=img.height*sc;
+      cx.drawImage(img,(c.width-w)/2,(c.height-h)/2,w,h);
+      saveCharSheetFromCanvas(ch, c, ok=>{ if(ok) onDone&&onDone(); });
+    };
+    img.onerror=()=>alert("이미지를 불러오지 못했습니다.");
+    img.src=reader.result;
+  };
+  reader.onerror=()=>alert("파일을 읽지 못했습니다.");
+  reader.readAsDataURL(file);
+}
+function removeCharSheet(ch, onDone){
+  const key=charSheetKey(ch);
+  if(!key) return;
+  if(!confirm("등록된 캐릭터 이미지를 삭제할까요?")) return;
+  ch.sheet=null; save();
+  if(typeof forceSaveToServer==="function") forceSaveToServer();
+  deleteStoryboardImage(key);
+  onDone&&onDone();
+}
+/* 캐릭터 시트 그리기 팝업 — 콘티 그리기 팝업과 같은 도구(색·굵기·지우개·Ctrl+Z/Ctrl+Shift+Z·PNG 저장).
+   화면보다 긴 세로 1000px이므로 화면 높이에 맞춰 줄여 보여주고, 선 굵기는 그만큼 보정한다. */
+function openCharSheetDrawModal(ch, onSaved){
+  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
+  const box=document.createElement("div"); box.className="draw-modal";
+
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title";
+  ttl.textContent="캐릭터 이미지 그리기 — "+((ch.name||"새 캐릭터")+" · 세로 1000 × 가로 500px");
+  top.append(ttl, iconBtn(ICONS.close, "저장하지 않고 닫기", ()=>{
+    if(confirm("저장하지 않고 닫을까요? 지금 그린 내용은 사라집니다.")) document.body.removeChild(overlay);
+  }));
+  box.appendChild(top);
+
+  const toolbar=document.createElement("div"); toolbar.className="draw-toolbar";
+  const COLORS=["#2c2a26","#c4654a","#4a7fc4","#5a8f6b","#c4a34a","#8a4ac4","#c44a91"];
+  let curColor=COLORS[0], curWidth=loadDrawWidth(), erasing=false;
+  const swatchWrap=document.createElement("div"); swatchWrap.className="draw-swatches";
+  const swatchEls=[];
+  COLORS.forEach((c,i)=>{
+    const sw=document.createElement("button"); sw.type="button"; sw.className="draw-color-swatch"+(i===0?" active":"");
+    sw.style.background=c; sw.title=c;
+    sw.onclick=()=>{ curColor=c; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); sw.classList.add("active"); eraserBtn.classList.remove("on"); };
+    swatchWrap.appendChild(sw); swatchEls.push(sw);
+  });
+  const customColor=document.createElement("input"); customColor.type="color"; customColor.className="draw-color-custom"; customColor.title="다른 색상";
+  customColor.value="#2c2a26";
+  customColor.oninput=()=>{ curColor=customColor.value; erasing=false; swatchEls.forEach(x=>x.classList.remove("active")); eraserBtn.classList.remove("on"); };
+  swatchWrap.appendChild(customColor);
+  toolbar.appendChild(swatchWrap);
+
+  const widthWrap=document.createElement("label"); widthWrap.className="draw-width-wrap"; widthWrap.textContent="굵기";
+  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="24"; widthInput.value=String(curWidth);
+  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); };
+  widthWrap.appendChild(widthInput);
+  toolbar.appendChild(widthWrap);
+
+  const eraserBtn=document.createElement("button"); eraserBtn.type="button"; eraserBtn.className="btn ghost sm icon-btn";
+  eraserBtn.innerHTML=ICONS.eraser+" 지우개";
+  eraserBtn.onclick=()=>{ erasing=!erasing; eraserBtn.classList.toggle("on", erasing); };
+  toolbar.appendChild(eraserBtn);
+
+  const clearBtn=document.createElement("button"); clearBtn.type="button"; clearBtn.className="btn ghost sm icon-btn";
+  clearBtn.innerHTML=ICONS.trash+" 전체 지우기";
+  toolbar.appendChild(clearBtn);
+
+  const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
+  pngBtn.innerHTML=ICONS.download+" PNG 저장";
+  pngBtn.title="지금 그린 그림을 내 컴퓨터에 PNG 파일로 내려받습니다";
+  toolbar.appendChild(pngBtn);
+  box.appendChild(toolbar);
+
+  const canvasWrap=document.createElement("div"); canvasWrap.className="draw-canvas-wrap";
+  const canvas=document.createElement("canvas"); canvas.className="draw-canvas";
+  canvas.width=CHAR_SHEET_W; canvas.height=CHAR_SHEET_H;
+  const ctx=canvas.getContext("2d");
+  pngBtn.onclick=()=>downloadCanvasPng(canvas, "캐릭터_"+(ch.name||""));
+  function resetCanvas(){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
+  resetCanvas();
+  const snapshotForUndo=attachDrawUndo(overlay, canvas, ctx);
+  clearBtn.onclick=()=>{ if(confirm("캔버스를 모두 지울까요?")){ snapshotForUndo(); resetCanvas(); } };
+  canvasWrap.appendChild(canvas);
+  box.appendChild(canvasWrap);
+
+  /* 세로로 긴 캔버스를 화면 안에 들어오도록 줄여서 보여준다(원본 해상도는 그대로 500×1000) */
+  function fitCanvasToScreen(){
+    if(!overlay.isConnected){ window.removeEventListener("resize", fitCanvasToScreen); return; }
+    const fit=Math.min(1, (window.innerHeight*0.62)/canvas.height, (window.innerWidth*0.8)/canvas.width);
+    canvas.style.width=Math.round(canvas.width*fit)+"px";
+    canvas.style.height=Math.round(canvas.height*fit)+"px";
+  }
+  fitCanvasToScreen();
+  window.addEventListener("resize", fitCanvasToScreen);
+
+  /* 이미 등록된 이미지가 있으면 이어서 고칠 수 있게 불러온다 */
+  let preloadFailed=false;
+  if(charSheetKey(ch)){
+    const preload=new Image();
+    preload.onload=()=>{ ctx.drawImage(preload,0,0,canvas.width,canvas.height); };
+    preload.onerror=()=>{
+      preloadFailed=true;
+      alert("기존 캐릭터 이미지를 불러오지 못했습니다(인터넷 연결 문제일 수 있습니다).\n\n이대로 저장하면 원래 이미지가 사라지니, 저장하지 말고 화면을 새로고침(F5)해 주세요.");
+    };
+    preload.src=charSheetUrl(ch);
+  }
+
+  let drawing=false, lastX=0, lastY=0;
+  function pos(e){
+    const r=canvas.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
+  }
+  function strokeW(){
+    const r=canvas.getBoundingClientRect();
+    const ratio=r.width ? (canvas.width/r.width) : 1;
+    return Math.max(1, curWidth*ratio);
+  }
+  canvas.addEventListener("pointerdown", e=>{
+    snapshotForUndo();
+    drawing=true; canvas.setPointerCapture(e.pointerId);
+    const p=pos(e); lastX=p.x; lastY=p.y;
+    ctx.beginPath(); ctx.arc(p.x,p.y,strokeW()/2,0,Math.PI*2);
+    ctx.fillStyle=erasing?"#fff":curColor; ctx.fill();
+  });
+  canvas.addEventListener("pointermove", e=>{
+    if(!drawing) return;
+    const p=pos(e);
+    ctx.strokeStyle=erasing?"#fff":curColor; ctx.lineWidth=strokeW(); ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
+    lastX=p.x; lastY=p.y;
+  });
+  function endStroke(){ drawing=false; }
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointerleave", endStroke);
+  canvas.addEventListener("pointercancel", endStroke);
+
+  const actions=document.createElement("div"); actions.className="dlg-modal-actions";
+  const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
+  saveBtn.textContent="저장 후 종료";
+  saveBtn.onclick=()=>{
+    if(preloadFailed && !confirm("기존 이미지를 불러오지 못한 상태입니다.\n지금 저장하면 원래 이미지가 사라집니다. 그래도 저장할까요?")) return;
+    saveBtn.disabled=true; saveBtn.textContent="저장 중…";
+    saveCharSheetFromCanvas(ch, canvas, ok=>{
+      if(!ok){ saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
+      if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      onSaved&&onSaved();
     });
   };
   actions.appendChild(saveBtn);

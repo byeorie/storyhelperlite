@@ -1094,3 +1094,17 @@ canvas.draw-canvas{display:block;touch-action:none;cursor:crosshair}
 /* 플롯 — 섹션 설명과 아이디어 카드를 학생 화면처럼 구분 */
 .review-pair.kind-plotIdea .review-before{background:#fff}
 .review-pair.kind-plotIdea .review-before-text{font-weight:600}
+
+
+/* 캐릭터 시트(캐릭터 이미지) · 오른쪽 패널 보기 전환 — 2026-09-14 */
+.char-sheet-row{display:flex;gap:14px;align-items:flex-start;margin:10px 0 4px}
+.char-sheet-thumb{width:70px;height:140px;flex:0 0 auto;border:1px solid var(--line);border-radius:8px;
+  background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.char-sheet-thumb img{width:100%;height:100%;object-fit:contain;display:block}
+.char-sheet-thumb.empty{cursor:default;color:var(--muted);font-size:11px;background:#faf9f6}
+.char-sheet-view{display:block;width:100%;max-width:320px;margin:6px auto 0;border:1px solid var(--line);
+  border-radius:8px;background:#fff;cursor:zoom-in}
+.side-view-tabs{display:flex;gap:6px;margin-bottom:8px}
+.side-view-tab{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 10px;
+  font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
+.side-view-tab.active{background:var(--accent2);border-color:var(--accent);color:var(--accent)}

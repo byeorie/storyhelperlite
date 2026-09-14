@@ -2252,3 +2252,24 @@ MS Word는 이런 결함을 알아서 눈감아주고 셀 너비 기준으로 �
   redos에 넣어두고, 다시 실행하면 그것을 그리면서 원래 그림을 shots로 돌려놓는다(양방향).
 - 새로 획을 긋거나 지우면(`snapshot()`) redos를 비운다 — 일반적인 편집기와 같은 규칙.
 - 전역 `keydown`: 팝업이 있으면 `__drawRedo()`, 없으면 기존 `doRedo()`. 두 스택 모두 30단계 상한.
+
+## 2026-09-14 (3) — 캐릭터 이미지(시트) 등록: 직접 그리기 · 이미지 추가
+
+캐릭터 설정의 프로필 사진(`ch.image`, 300×300 데이터URL)과 **별개로** 전신/설정용 이미지를 한 장
+등록할 수 있게 했다. 세로 1000 × 가로 500px 고정, 500KB 이하로 압축.
+
+- 데이터: `ch.sheet={key}` — 이미지는 콘티와 같은 저장소(R2, `/api/storyboard-image`)에 올리고
+  작품 JSON에는 key만 남긴다(데이터URL로 넣으면 작품 저장 용량이 급격히 커진다).
+- `CHAR_SHEET_W/H/MAX_BYTES`, `charSheetKey/charSheetUrl`, `saveCharSheetFromCanvas`(압축→업로드→
+  `forceSaveToServer`→옛 key 삭제), `handleCharSheetFile`(고른 이미지를 500×1000 안에 비율 유지로 배치,
+  남는 곳은 흰 여백), `removeCharSheet` 신설.
+- `openCharSheetDrawModal(ch)` — 콘티 그리기 팝업과 같은 도구(색·굵기·지우개·전체 지우기·PNG 저장·
+  Ctrl+Z/Ctrl+Shift+Z 30단계). 세로가 길어 화면 높이의 62%에 맞춰 축소해 보여주고 `strokeW()`로 선
+  굵기를 보정한다. 기존 이미지가 있으면 배경으로 불러와 이어서 수정, 불러오기 실패 시 저장 경고.
+- 캐릭터 상세 화면에 `#charSheetRow`(세로 썸네일 + [직접 그리기]/[이미지 추가]/[삭제]) 추가.
+  썸네일 클릭 시 `openStoryboardImageViewer`로 크게 보기.
+- 오른쪽 패널: `mountWithPlanViewer(cardEl, extraViews)`로 확장. 보기가 2개 이상이면 위에
+  `.side-view-tabs`(기획서 미리보기 / 캐릭터 이미지) 탭이 붙는다. 상태는 전역 `sideViewMode`,
+  해당 보기가 없어지면 자동으로 "plan"으로 돌아간다.
+- 캐릭터를 삭제하면 등록된 시트 이미지도 서버에서 함께 지운다.
+- `style.css`: `.char-sheet-row/.char-sheet-thumb/.char-sheet-view/.side-view-tabs/.side-view-tab`.
