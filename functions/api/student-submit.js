@@ -1,7 +1,7 @@
 import { requireAuth, jsonResponse, nowSec, ensureAssignmentSchema, ensureSubmissionSchema } from "./_utils.js";
 
-const VALID_TYPES = ["plan", "plot", "write", "character", "background", "event", "storyboard"];
-const TYPE_LABEL = { plan: "기획서", plot: "플롯", write: "글쓰기", character: "캐릭터 설정", background: "배경 설정", event: "사건 설정", storyboard: "콘티" };
+const VALID_TYPES = ["plan", "plot", "write", "character", "background", "event", "storyboard", "file"];
+const TYPE_LABEL = { plan: "기획서", plot: "플롯", write: "글쓰기", character: "캐릭터 설정", background: "배경 설정", event: "사건 설정", storyboard: "콘티", file: "파일 제출" };
 
 /* POST /api/student-submit — 과제 제출  body: { assignmentId, type, projectName, data }
    2026-08-20: 학생이 여러 교수를 등록할 수 있게 되면서, "가입 여부" 확인을 auth.user.profId(기본

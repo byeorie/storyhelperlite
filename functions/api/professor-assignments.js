@@ -1,7 +1,7 @@
 import { requireProfessor, jsonResponse, nowSec, ensureAssignmentSchema } from "./_utils.js";
 
 /* 과제 종류 — 학생이 그 종류의 탭에서만 제출할 수 있게 제한하는 값. null이면 종류 미지정(모두 허용) */
-const VALID_TYPES = ["plan", "plot", "write", "character", "background", "event", "storyboard"];
+const VALID_TYPES = ["plan", "plot", "write", "character", "background", "event", "storyboard", "file"];
 
 /* GET /api/professor-assignments[?classId=...] — 내가 등록한 과제 목록(+제출 수)
    2026-08-24: 수업(class) 도입 후 classId로 스코프를 좁힐 수 있다.

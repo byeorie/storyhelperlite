@@ -1276,3 +1276,32 @@ canvas.draw-layer-canvas.is-base{position:relative}
 .side-view-tab{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 10px;
   font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
 .side-view-tab.active{background:var(--accent2);border-color:var(--accent);color:var(--accent)}
+
+/* 2026-09-15: 글쓰기 첨삭 — 지문/대사 칸마다 따로 고치는 입력 영역(원본 칸 모양과 맞춤) */
+.rv-after-items{display:flex;flex-direction:column;gap:5px;margin-top:2px}
+.rv-after-item{border:1px solid var(--line);border-radius:8px;padding:5px 8px;display:flex;align-items:flex-start;gap:8px}
+.rv-after-item.is-line{background:#fbf8f3}
+.rv-after-char{flex:0 0 92px;width:92px;margin:0;padding:2px 6px;font-weight:700;color:var(--accent);
+  border:1px solid var(--line);border-radius:6px;background:#fff}
+.rv-after-text{flex:1;min-width:0;margin:0;padding:2px 4px;border:none;background:transparent;resize:none;
+  overflow:hidden;line-height:1.6}
+.rv-after-text:focus{outline:none;background:#fff;border-radius:6px}
+
+/* 2026-09-15: 파일 과제 — 고른 파일 목록 / 제출된 clip 파일 줄 */
+.file-pick-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.file-pick-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.file-pick-thumb{width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:0 0 auto}
+.file-pick-ext{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700}
+.file-pick-name{flex:1;min-width:0;word-break:break-all}
+.file-pick-size{flex:0 0 auto}
+.sb-fb-clip-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px}
+.file-dl-link{text-decoration:none}
+
+/* 2026-09-15: 교수 제출함 — 피드백이 끝난 학생 줄을 색으로 구분
+   (첨삭 완료=연한 초록, [과제 확인]만 한 줄=연한 노랑. 배경은 줄 안의 버튼에도 같이 깔아야
+    흰 카드가 떠 보이지 않는다) */
+.submit-assign-row.row-done > .submit-assign-item{background:#eef6ec;border-color:#bcd9b6}
+.submit-assign-row.row-done > .submit-assign-item:hover{background:#e3f0e0;border-color:#8fbf86}
+.submit-assign-row.row-checked > .submit-assign-item{background:#fdf6e3;border-color:#e7d7a8}
+.submit-assign-row.row-checked > .submit-assign-item:hover{background:#faeecd;border-color:#d8c179}

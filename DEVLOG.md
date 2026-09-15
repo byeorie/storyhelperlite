@@ -2,6 +2,52 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-09-15 (9) — 제출함 줄을 상태별 색으로 구분
+
+교수 제출함에서 피드백이 끝난 학생과 아직 안 본 학생이 한눈에 구분되게 했다.
+- `loadProfAssignmentFolder()`: 줄에 `row-done`(첨삭 완료) / `row-checked`([과제 확인]만) 클래스.
+- `bindSubmitCheckBtns()`: [과제 확인]을 누르면 그 줄의 `row-checked`도 같이 켜고 끈다
+  (이미 첨삭이 끝난 `row-done` 줄은 건드리지 않는다).
+- `style.css`: 첨삭 완료=연한 초록(#eef6ec), 확인함=연한 노랑(#fdf6e3). hover 색도 함께 정의.
+  배경은 줄(.submit-assign-row)이 아니라 그 안의 버튼(.submit-assign-item)에 깔아야 흰 카드가 떠 보이지 않는다.
+
+## 2026-09-15 (8) — 글쓰기 첨삭을 칸별로 · "파일 제출" 과제 종류 신설
+
+### 1) 글쓰기 첨삭 — 지문/대사 칸마다 따로 고치기 (`app.js`, `style.css`)
+예전에는 블록 하나의 지문·대사를 "\n"으로 이어붙인 한 덩어리를 textarea 하나에서 고쳤다.
+**저장 형식(한 덩어리 텍스트)은 그대로 두고 입력 화면만** 칸별로 나눴다 — 형식을 바꾸면 학생의
+[내 작업물에 반영] 역변환(`parseFeedbackTextToItems`)과 옛 제출물 호환이 깨진다.
+- `writeAfterRows(p)` : 아직 손대지 않은 첨삭(after===before)이고 제출물에 `items`가 있으면 그 경계대로,
+  아니면 줄 단위로("이름: 대사" 꼴이면 대사 칸) 나눈다.
+- `writeRowsToText(rows)` / `renderWriteAfterItems(cur,p,onChange)` : 대사 칸은 [캐릭터][대사],
+  지문 칸은 textarea 하나. 고칠 때마다 `p.after`를 바로 갱신한다.
+- 그래서 저장 쪽(`.review-pair.split textarea` 훑기)은 **`:not([data-itemized])`**로 이 블록을 건너뛴다.
+  우클릭 [원본 보기로 되돌리기]도 itemized면 textarea를 읽지 않는다.
+- `style.css`: `.rv-after-items` / `.rv-after-item` / `.rv-after-char` / `.rv-after-text`.
+
+### 2) "파일 제출"(`type="file"`) 과제 종류 신설
+작품 데이터(탭)와 연결되지 않고 **파일만** 내는 과제. jpg · png · clip, **파일당 1MB, 한 번에 10개**.
+- 서버: `professor-assignment(s).js` / `student-submit.js`의 타입 목록에 `file` 추가.
+- **새 API `functions/api/assignment-file.js`** — clip 전용(R2). POST `?name=x.clip`(1MB 상한, 확장자 검사),
+  GET은 `Content-Disposition: attachment`로 내려주고, DELETE는 본인 키만. 이미지가 아니라 브라우저가
+  열 수 없으므로 내려받기 전용이다.
+- jpg · png는 **기존 `/api/storyboard-image`에 올린다** — 그래야 크게 보기·그림 위 피드백 그리기를
+  그대로 쓸 수 있다. 그래서 그쪽 서버 상한을 600KB → **1MB**로 올렸다.
+- 제출 데이터 모양(콘티 피드백 화면이 그대로 읽을 수 있게 블록 배열):
+  `[{id, no, title, key, size:"free:H"|-, fileKind:"image"|"clip", clip?:true, fileName, bytes}]`
+  (`size`는 올린 그림의 실제 비율을 가로 690 기준 프리사이즈 값으로 바꾼 것 — `imageSizeKeyOf`)
+- 학생 화면: 새 탭 **[파일 과제]**(`index.html` data-tab="fileAssign", 렌더러 `rFileAssign`).
+  파일 고르기 → 목록(썸네일·용량·빼기) → 기존 [제출] 모달 그대로. 업로드는 `buildSubmissionData("file")`에서.
+  제출 성공 시 고른 목록을 비운다. 교수 계정에는 고르기 UI를 숨긴다.
+- 교수 첨삭 화면·학생 피드백 화면은 **콘티와 같은 경로**(`renderSbFeedbackBlocks`)를 쓴다.
+  `sub.type==="storyboard"` 분기에 `|| sub.type==="file"`을 더했고, opts에 `submittedLabel`/`emptyText`/
+  `drawByButtonOnly`를 추가했다.
+- ★ **그리기는 [피드백 그리기] 버튼으로만** — 파일 과제는 `drawByButtonOnly:true`라 그림을 눌러도
+  크게 보기만 된다(콘티는 예전처럼 크게 보기 창에서 바로 그리기로 넘어갈 수 있다).
+- clip 블록(`b.clip`)은 `renderSbFeedbackBlocks`에서 내려받기 버튼 줄로 그리고,
+  `submitStoryboardFeedback`은 clip 블록을 제외하고 저장한다.
+- 글 코멘트는 기존 **평가(evaluation)** 칸을 그대로 쓴다(학생 화면에 그대로 보임).
+
 ## 2026-09-15 (7) — 제출기한 시각은 [시간 지정] 체크로 (끄면 23:59)
 
 (6)에서 시·분을 늘 고르게 했더니 "그날까지"만 원할 때 번거로워, 체크박스로 켜고 끄게 바꿨다.

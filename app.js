@@ -688,7 +688,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn};
+      profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn, fileAssign:rFileAssign};
     (renderers[activeTab]||rIdea)();
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
@@ -5372,7 +5372,7 @@ async function doAdminReset(mode){
    제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
    "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
    professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
-const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정", storyboard:"콘티"};
+const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정", storyboard:"콘티", file:"파일 제출"};
 /* "과제 관리" 탭 안의 현재 화면 상태(팝업 대신 같은 탭 안에서 페이지처럼 전환) */
 /* ===== 제출 / 첨삭 알림 토스트 (2026-09-11 추가) =====
    상단바 아래 오른쪽 구석에 [과목명-과제명 제출 n개] 형태의 팝업을 띄운다.
@@ -5696,6 +5696,27 @@ async function buildSubmissionData(type){
     }
     return out;
   }
+  if(type==="file"){
+    /* 2026-09-15: 파일 과제 — 고른 파일을 지금 올리고, 콘티 피드백 화면이 그대로 쓸 수 있는 모양으로 돌려준다
+       (블록 하나 = 파일 하나). 하나라도 업로드에 실패하면 null을 돌려 제출을 멈춘다. */
+    if(!pendingFiles.length) return [];
+    const out=[];
+    for(let i=0;i<pendingFiles.length;i++){
+      const it=pendingFiles[i];
+      if(it.kind==="image"){
+        const key=await uploadStoryboardBlob(it.file);
+        if(!key) return null;
+        out.push({id:it.id, no:i+1, title:it.file.name, key, size:await imageSizeKeyOf(it.file),
+                  fileKind:"image", fileName:it.file.name, bytes:it.file.size});
+      }else{
+        const key=await uploadAssignmentFile(it.file);
+        if(!key) return null;
+        out.push({id:it.id, no:i+1, title:it.file.name, key, clip:true,
+                  fileKind:"clip", fileName:it.file.name, bytes:it.file.size});
+      }
+    }
+    return out;
+  }
   if(type==="plan") return P.planDoc || blankPlanDoc();
   if(type==="plot"){
     /* 2026-09-11: 아이디어를 하나의 덩어리 텍스트로 합치지 않고 카드별(id+text)로 보낸다 —
@@ -5747,6 +5768,111 @@ async function buildSubmissionData(type){
 }
 
 /* 제출 버튼(학생 계정에서만 노출) — innerHTML 템플릿 안에서 쓰는 버전 */
+/* ===== 📎 파일 과제 (2026-09-15) =====
+   다른 탭(작품 데이터)과 전혀 연결되지 않는 과제 종류. 학생이 파일만 골라서 낸다.
+   - jpg · png : /api/storyboard-image 에 올린다 → 교수 첨삭 화면에서 크게 보기와 "그림 위 피드백
+     그리기"(콘티와 똑같은 기능)를 그대로 쓸 수 있다.
+   - clip      : 브라우저가 열 수 없으므로 /api/assignment-file 에 올리고 내려받기만 제공한다.
+   파일 하나당 1MB, 한 번에 10개까지(서버에서도 같은 값으로 막는다). */
+const FILE_MAX_BYTES=1024*1024, FILE_MAX_COUNT=10;
+const FILE_IMAGE_EXT=["jpg","jpeg","png"], FILE_ETC_EXT=["clip"];
+let pendingFiles=[];   /* 고른 파일들 — [제출]을 눌러 과제를 고르는 순간 업로드된다 */
+
+function fileExtOf(name){ const m=/\.([A-Za-z0-9]+)$/.exec(String(name||"")); return m?m[1].toLowerCase():""; }
+function fileSizeText(bytes){
+  const n=Number(bytes)||0;
+  return n>=1024*1024 ? (n/1024/1024).toFixed(1)+"MB" : Math.max(1,Math.round(n/1024))+"KB";
+}
+function fileDownloadUrl(key, name){
+  return "/api/assignment-file?key="+encodeURIComponent(key)+"&name="+encodeURIComponent(name||"assignment.clip");
+}
+async function uploadAssignmentFile(file){
+  const token=typeof getToken==="function" ? getToken() : null;
+  if(!token) return null;
+  try{
+    const r=await fetch("/api/assignment-file?name="+encodeURIComponent(file.name),
+      {method:"POST", headers:{"Authorization":"Bearer "+token, "Content-Type":"application/octet-stream"}, body:file});
+    if(!r.ok) return null;
+    const j=await r.json().catch(()=>null);
+    return (j && j.key) || null;
+  }catch(e){ return null; }
+}
+/* 올린 그림의 실제 비율을 콘티 "프리사이즈"(가로 690 고정) 값으로 바꾼다 —
+   첨삭 화면의 미리보기 크기와 피드백 그리기 캔버스가 이 값을 쓴다(그리기 모달은 실제 해상도를 다시 잰다) */
+function imageSizeKeyOf(file){
+  return new Promise(resolve=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{ const w=img.naturalWidth||1, h=img.naturalHeight||1; URL.revokeObjectURL(url); resolve(sbFreeKey(Math.round(690*h/w))); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); resolve("medium"); };
+    img.src=url;
+  });
+}
+function addPendingFiles(files){
+  const errs=[];
+  files.forEach(f=>{
+    const ext=fileExtOf(f.name);
+    if(!FILE_IMAGE_EXT.includes(ext) && !FILE_ETC_EXT.includes(ext)){ errs.push(`${f.name} — jpg · png · clip 파일만 낼 수 있습니다.`); return; }
+    if(f.size>FILE_MAX_BYTES){ errs.push(`${f.name} — ${fileSizeText(f.size)} (파일 하나당 1MB까지)`); return; }
+    if(pendingFiles.length>=FILE_MAX_COUNT){ errs.push(`${f.name} — 한 번에 ${FILE_MAX_COUNT}개까지만 낼 수 있습니다.`); return; }
+    if(pendingFiles.some(x=>x.file.name===f.name && x.file.size===f.size)) return;   /* 같은 파일 두 번 담기 방지 */
+    pendingFiles.push({id:uid(), file:f, ext, kind:FILE_IMAGE_EXT.includes(ext)?"image":"clip"});
+  });
+  renderFilePickList();
+  if(errs.length) alert("다음 파일은 목록에서 제외했습니다:\n\n"+errs.join("\n"));
+}
+function renderFilePickList(){
+  const wrap=document.getElementById("filePickList"); if(!wrap) return;
+  if(!pendingFiles.length){ wrap.innerHTML=`<p class="hint">아직 고른 파일이 없습니다. [파일 고르기]로 낼 파일을 고른 뒤 [제출]을 누르세요.</p>`; return; }
+  wrap.innerHTML="";
+  pendingFiles.forEach(it=>{
+    const row=document.createElement("div"); row.className="file-pick-row";
+    if(it.kind==="image"){
+      const img=document.createElement("img"); img.className="file-pick-thumb";
+      img.src=URL.createObjectURL(it.file); img.alt=it.file.name;
+      img.onload=()=>URL.revokeObjectURL(img.src);
+      row.appendChild(img);
+    }else{
+      const badge=document.createElement("span"); badge.className="file-pick-ext"; badge.textContent=it.ext.toUpperCase();
+      row.appendChild(badge);
+    }
+    const name=document.createElement("span"); name.className="file-pick-name"; name.textContent=it.file.name;
+    const size=document.createElement("span"); size.className="hint file-pick-size"; size.textContent=fileSizeText(it.file.size);
+    row.append(name, size, iconBtn(ICONS.close, "목록에서 빼기", ()=>{
+      const i=pendingFiles.indexOf(it); if(i>-1) pendingFiles.splice(i,1);
+      renderFilePickList();
+    }));
+    wrap.appendChild(row);
+  });
+  const note=document.createElement("p"); note.className="hint";
+  note.textContent=`${pendingFiles.length}개 선택됨 (최대 ${FILE_MAX_COUNT}개) · [제출]을 누르면 과제를 고른 뒤 올라갑니다.`;
+  wrap.appendChild(note);
+}
+function rFileAssign(){
+  if(feedbackPage && feedbackPage.type==="file"){ rFeedbackPage(); return; }
+  const canSubmit = !isProfessor();
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<div class="card-h2-row"><h2>${ICONS.file} 파일 과제</h2>${submitBtnHtml()}</div>
+    <p class="hint">다른 탭의 작업물과 상관없이 <b>파일만 내는 과제</b>입니다. 교수님이 "파일 제출" 종류로 낸 과제에만 제출됩니다.
+      <b>jpg · png · clip</b> 파일을 파일 하나당 <b>1MB 이하</b>로, 한 번에 <b>${FILE_MAX_COUNT}개</b>까지 낼 수 있습니다.
+      jpg · png는 교수님 화면에 바로 보이고 그 위에 첨삭을 받을 수 있으며, clip 파일은 내려받기만 됩니다.</p>
+    ${canSubmit?`<div class="assign-folder-actions">
+      <button class="btn ghost" id="filePickBtn">${ICONS.plus} 파일 고르기</button>
+      <button class="btn ghost sm" id="fileClearBtn">${ICONS.trash} 모두 비우기</button>
+    </div>
+    <input type="file" id="filePickInput" multiple accept=".jpg,.jpeg,.png,.clip,image/jpeg,image/png" hidden>
+    <div id="filePickList" class="file-pick-list"></div>`
+    :`<p class="hint">교수 계정에서는 제출할 수 없습니다. 학생이 낸 파일은 [수업 관리] → 과제 관리 → 제출함에서 보고 첨삭할 수 있습니다.</p>`}`;
+  app.appendChild(c);
+  wireSubmitBtn(c, "file");
+  if(canSubmit){
+    const input=c.querySelector("#filePickInput");
+    c.querySelector("#filePickBtn").onclick=()=>input.click();
+    c.querySelector("#fileClearBtn").onclick=()=>{ pendingFiles=[]; renderFilePickList(); };
+    input.onchange=()=>{ addPendingFiles(Array.from(input.files||[])); input.value=""; };
+    renderFilePickList();
+  }
+}
 function submitBtnHtml(){
   return (typeof currentUser!=="undefined" && currentUser && currentUser.role!=="professor")
     ? `<div class="submit-btn-group">
@@ -5807,7 +5933,7 @@ async function openSubmitModal(type){
         const already=mine.length
           ? `<span class="submit-already" data-view-id="${mine[0].id}">${lastRound>1?`${lastRound}차까지 제출함`:"이미 제출함"}${mine[0].has_feedback?" · 첨삭 완료(보기)":(mine[0].checked_at?" · 교수님 확인함":"")}</span>`
           : "";
-        return `<button type="button" class="submit-assign-item" data-id="${a.id}">
+        return `<button type="button" class="submit-assign-item" data-id="${a.id}" data-title="${esc(a.title)}">
           <b>${esc(a.title)}</b>${a.class_name?` <span class="assign-type-badge">${esc(a.class_name)}</span>`:""}
           <span class="hint">${a.due_at?("제출기한 "+fmtDue(a.due_at)):"제출기한 없음"}</span>
           ${already}
@@ -5823,8 +5949,11 @@ async function openSubmitModal(type){
   body.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=async ()=>{
       btn.disabled=true; btn.textContent="제출 중…";
+      const restore=()=>{ btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; };
       const data=await buildSubmissionData(type);
-      if(type==="storyboard" && (!data || !data.length)){ alert("아직 만든 콘티가 없습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; return; }
+      if(type==="storyboard" && (!data || !data.length)){ alert("아직 만든 콘티가 없습니다."); restore(); return; }
+      if(type==="file" && !data){ alert("파일을 올리는 데 실패했습니다. 잠시 후 다시 시도해 주세요."); restore(); return; }
+      if(type==="file" && !data.length){ alert("먼저 [파일 고르기]로 낼 파일을 골라주세요."); restore(); return; }
       const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
         assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
       })});
@@ -5835,8 +5964,9 @@ async function openSubmitModal(type){
           ? `${rd}차 제출로 저장되었습니다.\n이전에 낸 내용은 지워지지 않고 "이전 제출 보기"에서 확인할 수 있습니다.`
           : "제출되었습니다.");
         if(overlay.isConnected) document.body.removeChild(overlay);
+        if(type==="file"){ pendingFiles=[]; render(); }   /* 낸 파일 목록은 비운다 */
       }
-      else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); btn.disabled=false; btn.textContent=""; btn.innerHTML=`<b>${esc(btn.dataset.title||"")}</b>`; }
+      else{ alert((r.body&&r.body.error)||"제출에 실패했습니다."); restore(); }
     };
   });
 }
@@ -5923,7 +6053,7 @@ async function rFeedbackDetail(type, id, version){
       : `<p class="hint">아직 첨삭 전입니다.</p>`);
     return;
   }
-  if(sub.type==="storyboard"){
+  if(sub.type==="storyboard" || sub.type==="file"){
     const versionPicker=(sub.versions && sub.versions.length>1)
       ? `<label class="hint" style="display:inline-flex;align-items:center;gap:5px;margin:0 0 10px">버전
           <select id="feedbackVersionSelect" style="font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px">
@@ -5933,7 +6063,11 @@ async function rFeedbackDetail(type, id, version){
     wrap.innerHTML=`${evalHtml}${versionPicker}<div id="feedbackPairs"></div>`;
     const verSel=document.getElementById("feedbackVersionSelect");
     if(verSel) verSel.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(verSel.value)}; render(); };
-    renderSbFeedbackBlocks(document.getElementById("feedbackPairs"), Array.isArray(sub.data)?sub.data:[], sub.feedback, {editable:false, submittedLabel:"내가 제출한 콘티"});
+    renderSbFeedbackBlocks(document.getElementById("feedbackPairs"), Array.isArray(sub.data)?sub.data:[], sub.feedback, {
+      editable:false,
+      submittedLabel: sub.type==="file" ? "내가 낸 파일" : "내가 제출한 콘티",
+      emptyText: sub.type==="file" ? "제출된 파일이 없습니다." : undefined,
+    });
     return;
   }
   const caveat={
@@ -6638,7 +6772,10 @@ async function loadProfAssignmentFolder(c, id){
       id:s.id, studentName:s.student_name, typeLabel:s.type_label,
       rounds, roundNo, versionCount:effCount,
     };
-    return `<div class="submit-assign-row">
+    /* 2026-09-15: 피드백이 끝난 학생과 아직 손대지 않은 학생을 색으로 구분한다
+       (첨삭 완료 = 초록, 확인함만 = 노랑, 아무것도 안 했으면 흰색) */
+    const rowState = s.has_feedback ? " row-done" : (isChecked ? " row-checked" : "");
+    return `<div class="submit-assign-row${rowState}">
       <button type="button" class="submit-assign-item" data-id="${s.id}">
         <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
         <span class="assign-type-badge">${esc(s.type_label)}</span>${roundNo>1?`<span class="assign-type-badge round-badge">${roundNo}차 제출</span>`:""}
@@ -6720,6 +6857,9 @@ function bindSubmitCheckBtns(root){
       btn.dataset.checked=next?"1":"0";
       btn.classList.toggle("checked", next);
       btn.innerHTML=next?(ICONS.check+" 확인함"):"과제 확인";
+      /* 줄 색도 함께 바꾼다 — 첨삭이 이미 끝난 줄(row-done)은 그대로 둔다 */
+      const row=btn.closest(".submit-assign-row");
+      if(row && !row.classList.contains("row-done")) row.classList.toggle("row-checked", next);
       root.querySelectorAll(`.submit-check-state[data-id="${id}"]`).forEach(el=>{ el.textContent=next?" · 확인함":""; });
       /* 2026-09-11: 확인하자마자 오른쪽 위 알림도 바로 줄어들게(20초 폴링을 기다리지 않도록) */
       notifySignature=""; fetchNotifications();
@@ -6856,6 +6996,7 @@ async function rProfSubmissionReview(id, version){
   if(titleEl) titleEl.innerHTML=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}${subRoundNo>1?` <span class="assign-type-badge round-badge">${subRoundNo}차 제출</span>`:""}`;
   const hintEl=document.getElementById("reviewHint");
   if(hintEl && sub.type==="storyboard") hintEl.textContent="그림을 클릭하면 크게 볼 수 있고, [피드백 그리기]로 그 이미지 위에 직접 그릴 수 있습니다. 다 마쳤으면 맨 아래 [피드백 전달]로 평가와 함께 학생에게 돌려주세요.";
+  if(hintEl && sub.type==="file") hintEl.textContent="학생이 낸 파일입니다. jpg · png는 클릭하면 크게 볼 수 있고, [피드백 그리기]를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인하세요. 글로 남길 말은 아래 [평가]에 적고, 맨 아래 [피드백 전달]로 학생에게 돌려주세요.";
   /* 2026-09-08: 첨삭을 하지 않고 읽어보기만 해도 "과제 확인" 표시를 남길 수 있다 */
   const checkBar=document.getElementById("reviewCheckBar");
   if(checkBar){
@@ -6879,7 +7020,7 @@ async function rProfSubmissionReview(id, version){
       bannerEl.innerHTML=`<p class="hint" style="color:var(--accent)">첨삭 버전 ${sub.viewingVersion} / ${sub.latestVersion} 을 보고 있습니다 (과거 기록, 읽기 전용). <button type="button" class="btn ghost sm" id="reviewGoLatestBtn" style="margin-left:6px">최신 버전에서 계속 편집</button></p>`;
       const goBtn=document.getElementById("reviewGoLatestBtn");
       if(goBtn) goBtn.onclick=()=>{ profReviewVersion=null; render(); };
-    }else if(sub.type==="storyboard"){
+    }else if(sub.type==="storyboard" || sub.type==="file"){
       bannerEl.innerHTML = sub.latestVersion ? `<p class="hint">현재 버전 ${sub.latestVersion}입니다. 이미지의 [피드백 그리기]를 누르면 그 즉시 새 버전으로 저장됩니다. 새 버전을 또 만들지 않고 평가만 덧붙여 돌려주려면 맨 아래 [피드백 전달]을 누르세요.</p>` : "";
     }else if(sub.latestVersion){
       bannerEl.innerHTML=`<p class="hint">현재 버전 ${sub.latestVersion}을 이어서 편집하는 중입니다. "피드백 전달"을 누르면 버전 ${sub.latestVersion+1}로 새로 저장됩니다.</p>`;
@@ -6912,9 +7053,14 @@ async function rProfSubmissionReview(id, version){
     evalBox.innerHTML=`<div class="review-eval"><div class="review-eval-label">평가</div><div class="review-eval-view">${esc(sub.evaluation)}</div></div>`;
   }
 
-  if(sub.type==="storyboard"){
+  if(sub.type==="storyboard" || sub.type==="file"){
+    const isFile = sub.type==="file";
     renderSbFeedbackBlocks(pairsEl, Array.isArray(sub.data)?sub.data:[], sub.feedback, {
       editable:isLatest,
+      submittedLabel: isFile ? "학생이 낸 파일" : undefined,
+      emptyText: isFile ? "제출된 파일이 없습니다." : undefined,
+      /* 2026-09-15: 파일 과제는 그림을 눌러도 크게 보기만 — 그리기는 [피드백 그리기] 버튼으로만 */
+      drawByButtonOnly: isFile,
       onFeedback: async (blockId, baseKey, newKey)=>{
         const r=await submitStoryboardFeedback(id, Array.isArray(sub.data)?sub.data:[], sub.feedback, blockId, baseKey, newKey);
         /* 그림 한 장을 저장한 것일 뿐, 아직 "전달"은 아니다 — 전달은 아래 [피드백 전달] 버튼에서 (2026-09-11) */
@@ -6952,7 +7098,8 @@ async function rProfSubmissionReview(id, version){
 
   if(saveBtn) saveBtn.onclick=async ()=>{
     const byId={}; pairs.forEach(p=>byId[p.id]=p);
-    pairsEl.querySelectorAll(".review-pair.split textarea").forEach(ta=>{
+    /* 칸별로 고치는 글쓰기 블록(data-itemized)은 입력할 때마다 p.after가 갱신되므로 제외한다 */
+    pairsEl.querySelectorAll(".review-pair.split:not([data-itemized]) textarea").forEach(ta=>{
       const wrap=ta.closest(".review-pair");
       const pid=wrap && wrap.dataset.id;
       if(pid!=null && byId[pid]) byId[pid].after=ta.value;
@@ -7061,13 +7208,32 @@ function buildReviewPairs(type, data, feedback){
 function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
   opts=opts||{};
   container.innerHTML="";
-  if(!dataBlocks.length){ container.innerHTML=`<p class="hint">제출된 콘티가 없습니다.</p>`; return; }
+  if(!dataBlocks.length){ container.innerHTML=`<p class="hint">${opts.emptyText||"제출된 콘티가 없습니다."}</p>`; return; }
   const fbMap={};
   ((feedback && feedback.blocks)||[]).forEach(b=>{ fbMap[b.id]=b; });
   /* 칸 번호·대사 번호는 제출 데이터에 담겨 오지만(2026-09-14 이후 제출물), 없으면 여기서
      콘티 화면과 같은 방식으로 위에서부터 이어 센다. */
   const counter={row:0, dlg:0};
   dataBlocks.forEach(b=>{
+    /* 2026-09-15: 파일 과제의 clip 파일 — 브라우저가 열 수 없으므로 내려받기 버튼만 놓는다 */
+    if(b.clip){
+      const rowNo=b.no || (++counter.row);
+      counter.row=rowNo;
+      const row=document.createElement("div"); row.className="sb-fb-row";
+      const lbl=document.createElement("div"); lbl.className="sb-fb-label";
+      lbl.textContent=rowNo+". "+(b.fileName||b.title||"파일");
+      const a=document.createElement("a"); a.className="btn ghost sm icon-btn file-dl-link";
+      a.href=fileDownloadUrl(b.key, b.fileName||b.title);
+      a.setAttribute("download", b.fileName||b.title||"assignment.clip");
+      a.innerHTML=ICONS.download+" 내려받기"+(b.bytes?` <span class="hint">(${fileSizeText(b.bytes)})</span>`:"");
+      const note=document.createElement("span"); note.className="hint";
+      note.textContent="clip 파일은 화면에서 바로 볼 수 없어 내려받아 클립스튜디오에서 열어야 합니다.";
+      const body=document.createElement("div"); body.className="sb-fb-clip-row";
+      body.append(a, note);
+      row.append(lbl, body);
+      container.appendChild(row);
+      return;
+    }
     const sz=sbSizeOf(b.size);
     const fb=fbMap[b.id];
     const rowNo=b.no || (++counter.row);
@@ -7094,10 +7260,13 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
       img.src="/api/storyboard-image?key="+encodeURIComponent(key);
       sbThumbStyle(img, sz); img.alt=label;
       img.classList.add("sb-fb-img-zoom");
-      img.title=(drawable && startDraw) ? "클릭하면 크게 보고 바로 피드백을 그릴 수 있습니다" : "클릭하면 크게 볼 수 있습니다";
+      /* 2026-09-15: opts.drawByButtonOnly면 그림을 눌러도 크게 보기만 하고, 그리기는 아래
+         [피드백 그리기] 버튼을 눌렀을 때만 시작한다(실수로 그리기 화면이 열리는 것을 막기 위함). */
+      const canDrawHere = drawable && startDraw && !opts.drawByButtonOnly;
+      img.title=canDrawHere ? "클릭하면 크게 보고 바로 피드백을 그릴 수 있습니다" : "클릭하면 크게 볼 수 있습니다";
       img.onclick=()=>openStoryboardImageViewer(
         (b.title||"콘티")+" — "+label, key,
-        (drawable && startDraw) ? startDraw : null
+        canDrawHere ? startDraw : null
       );
       box.append(cap,img);
       return box;
@@ -7156,7 +7325,7 @@ async function submitStoryboardFeedback(id, dataBlocks, currentFeedback, blockId
   const fbMap={};
   ((currentFeedback && currentFeedback.blocks)||[]).forEach(b=>{ fbMap[b.id]={beforeKey:b.beforeKey, afterKey:b.afterKey}; });
   fbMap[blockId]={beforeKey:baseKey, afterKey:newKey};
-  const blocks=dataBlocks.map(b=>{
+  const blocks=dataBlocks.filter(b=>!b.clip).map(b=>{
     const e=fbMap[b.id];
     return e ? {id:b.id, beforeKey:e.beforeKey, afterKey:e.afterKey} : {id:b.id, beforeKey:b.key, afterKey:b.key};
   });
@@ -7371,6 +7540,49 @@ function renderStyledBeforeText(el, kind, rawText, mine, numMap, colorMap, items
   addGeneral();
 }
 /* 원본 블록 본문 그리기 — 글쓰기/캐릭터만 학생 화면 모양으로, 나머지는 지금까지와 같다 */
+/* ===== 글쓰기 첨삭을 칸(지문/대사)별로 고치기 (2026-09-15) =====
+   예전에는 블록 하나의 지문·대사를 "\n"으로 이어붙인 한 덩어리를 textarea 하나에 넣고 고치게 했다.
+   저장 형식(한 덩어리 텍스트)은 그대로 두고 **입력 화면만** 칸별로 나눈다 —
+   형식을 바꾸면 학생의 [내 작업물에 반영] 역변환(parseFeedbackTextToItems)과 옛 제출물 호환이 깨진다.
+   - 아직 손대지 않은 첨삭(after===before)이고 제출물에 칸 구조(items)가 있으면 그 경계대로 나눈다.
+   - 이미 고쳐진 첨삭(옛 제출물 포함)은 줄 단위로 나누고 "이름: 대사" 꼴이면 대사 칸으로 본다. */
+function writeAfterRows(p){
+  const text=p.after||"";
+  if(Array.isArray(p.items) && p.items.length && text===(p.before||"")){
+    return p.items.map(it=> (it&&it.type==="line")
+      ? {type:"line", char:(it.char||"(미지정)"), text:(it.text||"")}
+      : {type:"text", char:"", text:((it&&it.text)||"")});
+  }
+  return text.split("\n").map(line=>{
+    const m=line.match(/^([^:：\n]{1,20}):\s(.*)$/);
+    return m ? {type:"line", char:m[1].trim(), text:m[2]} : {type:"text", char:"", text:line};
+  });
+}
+function writeRowsToText(rows){
+  return rows.map(r=> r.type==="line" ? `${(r.char||"(미지정)")}: ${r.text}` : r.text).join("\n");
+}
+/* 칸별 입력칸을 cur 안에 그린다. 고칠 때마다 p.after를 곧바로 맞춰두므로(저장 시 DOM을 다시 훑지
+   않는다) 저장 쪽에서는 이 블록을 건너뛴다(.review-pair[data-itemized]). */
+function renderWriteAfterItems(cur, p, onChange){
+  const rows=writeAfterRows(p);
+  const box=document.createElement("div"); box.className="rv-after-items";
+  const sync=()=>{ p.after=writeRowsToText(rows); if(onChange) onChange(); };
+  rows.forEach(r=>{
+    const row=document.createElement("div"); row.className="rv-after-item"+(r.type==="line"?" is-line":" is-text");
+    if(r.type==="line"){
+      const ci=document.createElement("input"); ci.type="text"; ci.className="rv-after-char"; ci.value=r.char; ci.placeholder="캐릭터";
+      ci.oninput=()=>{ r.char=ci.value; sync(); };
+      row.appendChild(ci);
+    }
+    const ta=document.createElement("textarea"); ta.className="rv-after-text"; ta.value=r.text;
+    ta.placeholder = r.type==="line" ? "대사" : "지문";
+    ta.oninput=()=>{ r.text=ta.value; autoGrowTextarea(ta); sync(); };
+    row.appendChild(ta);
+    box.appendChild(row);
+    requestAnimationFrame(()=>autoGrowTextarea(ta));
+  });
+  cur.appendChild(box);
+}
 function renderBeforeBody(el, p, mine, numMap, colorMap){
   if(p.kind==="write" || p.kind==="character") renderStyledBeforeText(el, p.kind, p.before, mine, numMap, colorMap, p.items);
   else renderMemoTargetText(el, p.before, mine, numMap, colorMap);
@@ -7490,7 +7702,12 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       const lbl=document.createElement("label"); lbl.textContent=p.label+(editable?" — 첨삭":" — 교수님 첨삭");
       cur.appendChild(lbl);
       let getAfter;
-      if(editable){
+      if(editable && p.kind==="write"){
+        /* 2026-09-15: 글쓰기는 지문/대사 칸을 합치지 않고 칸마다 따로 고친다 */
+        wrap.dataset.itemized="1";
+        renderWriteAfterItems(cur, p, ()=>{ if(!mine.length) prevText.innerHTML=diffPrevHtml(p.before, p.after); });
+        getAfter=()=>p.after;
+      }else if(editable){
         const ta=document.createElement("textarea"); ta.className="plan-ta-lg"; ta.value=p.after;
         ta.oninput=()=>{ if(!mine.length) prevText.innerHTML=diffPrevHtml(p.before, ta.value); };
         cur.appendChild(ta);
@@ -7529,7 +7746,7 @@ function openReviewBlockCtxMenu(x, y, p, wrap, pairs, splitIds, editable, memos,
   const split=splitIds.has(p.id);
   const items = split
     ? [["원본 보기로 되돌리기",ICONS.eraser,()=>{
-        const ta=wrap.querySelector("textarea"); if(ta) p.after=ta.value;
+        if(!wrap.dataset.itemized){ const ta=wrap.querySelector("textarea"); if(ta) p.after=ta.value; }
         splitIds.delete(p.id); rerender();
       }]]
     : [["첨삭",ICONS.edit,()=>{ splitIds.add(p.id); rerender(); }]];
@@ -7767,8 +7984,9 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
-      <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
+      <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
+      <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 1MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
       <li>학생이 제출하면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 제출함에서 <b>[과제 확인]</b>만 눌러 읽었다는 표시를 남기거나, 제출물을 열어 항목별로 첨삭 · 메모를 달 수 있습니다.</li>
       <li>첨삭 화면 맨 아래에 <b>평가(총평)</b> 입력칸이 있고, <b>[피드백 전달]</b>을 누르면 학생에게 알림이 가며 자동으로 제출함으로 돌아옵니다.</li>
       <li>콘티 과제는 제출된 그림을 크게 열어 <b>그 위에 직접 그려</b> 피드백을 줄 수 있습니다(학생 원본은 지워지지 않습니다).</li>
