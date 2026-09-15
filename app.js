@@ -5271,6 +5271,12 @@ function fmtDate(sec){
   const d=new Date(sec*1000);
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`;
 }
+/* 2026-09-15: 제출 차수 목록용 — 같은 날 여러 번 낸 경우가 많아 날짜만으로는 구분이 안 된다 */
+function fmtDateTime(sec){
+  if(!sec) return "-";
+  const d=new Date(sec*1000);
+  return `${fmtDate(sec)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
 function rAdmin(){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>${ICONS.user} 회원 관리</h2>
@@ -5894,7 +5900,7 @@ async function rFeedbackDetail(type, id, version){
   if(titleEl && subRounds.length>1){
     titleEl.insertAdjacentHTML("afterend", `<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">제출 차수
       <select id="feedbackRoundSelect" style="font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px">
-        ${subRounds.slice().reverse().map(rd=>`<option value="${rd.id}"${rd.id===sub.id?" selected":""}>${rd.round}차 제출${rd.round===subRounds.length?" (최신)":""} · ${fmtDate(rd.submittedAt)}${rd.hasFeedback?" · 첨삭 완료":""}</option>`).join("")}
+        ${subRounds.slice().reverse().map(rd=>`<option value="${rd.id}"${rd.id===sub.id?" selected":""}>${rd.round}차 제출${rd.round===subRounds.length?" (최신)":""} · ${fmtDateTime(rd.submittedAt)}${rd.hasFeedback?" · 첨삭 완료":""}</option>`).join("")}
       </select></p>`);
     const roundSel=document.getElementById("feedbackRoundSelect");
     if(roundSel) roundSel.onchange=()=>{ feedbackPage={type, mode:"detail", id:Number(roundSel.value)}; render(); };
@@ -6562,7 +6568,7 @@ function openSubmitHistoryModal(info){
     <div class="submit-assign-list">${rounds.slice().reverse().map(rd=>`
       <button type="button" class="submit-assign-item" data-round-id="${rd.id}">
         <b>${rd.round}차 제출${rd.id===info.id?" (최신)":""}</b>
-        <span class="hint">${fmtDate(rd.submitted_at)} · ${rd.has_feedback?"첨삭 완료":"첨삭 전"}</span>
+        <span class="hint">${fmtDateTime(rd.submitted_at)} · ${rd.has_feedback?"첨삭 완료":"첨삭 전"}</span>
       </button>`).join("")}</div>`:""}
     ${vCount>1?`<p class="hint" style="margin-top:14px">첨삭 버전 — 최신 차수(${info.roundNo}차)에 교수님이 저장한 첨삭 기록입니다. 과거 버전은 읽기 전용입니다.</p>
     <div class="submit-assign-list">${Array.from({length:vCount},(_,i)=>vCount-i).map(v=>`
@@ -6740,7 +6746,7 @@ async function rProfSubmissionReview(id, version){
     const roundBar=subRounds.length>1
       ? `<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 8px">제출 차수
           <select id="reviewRoundSelect" style="font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px">
-            ${subRounds.slice().reverse().map(rd=>`<option value="${rd.id}"${rd.id===sub.id?" selected":""}>${rd.round}차 제출${rd.round===subRounds.length?" (최신)":""} · ${fmtDate(rd.submittedAt)}${rd.hasFeedback?" · 첨삭 완료":""}</option>`).join("")}
+            ${subRounds.slice().reverse().map(rd=>`<option value="${rd.id}"${rd.id===sub.id?" selected":""}>${rd.round}차 제출${rd.round===subRounds.length?" (최신)":""} · ${fmtDateTime(rd.submittedAt)}${rd.hasFeedback?" · 첨삭 완료":""}</option>`).join("")}
           </select>
           <span>학생이 다시 제출한 내용은 이렇게 차수로 나뉘어 저장됩니다(이전 차수는 그대로 보존).</span></p>`
       : "";
