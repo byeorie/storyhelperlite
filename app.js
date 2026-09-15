@@ -3501,12 +3501,16 @@ async function exportScript(){
 }
 
 /* 2) 대사만 출력 — Word(.docx), 캐릭터명은 제외하고 대사만. 대사 한 줄마다 문단을 따로 만들고,
-   그 사이를 빈 줄 2개(2줄)로 띄워서 한 줄로 이어 붙지 않고 구분되어 보이도록 함 (2026-08-20 수정 —
-   예전엔 같은 블록 안 대사를 공백으로 이어붙여 한 줄로 출력했었음) */
+   그 사이를 빈 줄 1개(1줄)로 띄운다. 글꼴은 맑은 고딕 10pt 고정.
+   (2026-08-20 수정 — 예전엔 같은 블록 안 대사를 공백으로 이어붙여 한 줄로 출력했었음)
+   (2026-09-15 수정 — 빈 줄 2개 → 1개, 맑은 고딕 10pt 지정. docx의 size는 half-point 단위라
+   10pt = 20. font에 문자열을 주면 ascii/hAnsi/eastAsia/cs에 모두 적용되어 한글도 같은 글꼴로 나온다.
+   빈 줄 문단에도 같은 글꼴·크기를 줘야 줄 간격이 들쭉날쭉하지 않다.) */
 async function exportDialogueOnly(){
   const blocks=allWriteBlocksOrdered();
   if(typeof docx==="undefined"){ alert("Word 변환 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."); return; }
   const {Document,Packer,Paragraph,TextRun}=docx;
+  const DLG_FONT="맑은 고딕", DLG_SIZE=20; /* size는 half-point 단위 → 20 = 10pt */
   const lines=[];
   blocks.forEach(bl=>{
     (bl.items||[]).forEach(it=>{
@@ -3516,10 +3520,12 @@ async function exportDialogueOnly(){
   if(!lines.length){ alert("작성된 대사가 없습니다."); return; }
   const paras=[];
   lines.forEach((text,i)=>{
-    paras.push(new Paragraph({children:[new TextRun({text, bold:true})]}));
-    if(i<lines.length-1){ paras.push(new Paragraph("")); paras.push(new Paragraph("")); }
+    paras.push(new Paragraph({children:[new TextRun({text, bold:true, font:DLG_FONT, size:DLG_SIZE})]}));
+    if(i<lines.length-1){ paras.push(new Paragraph({children:[new TextRun({text:"", font:DLG_FONT, size:DLG_SIZE})]})); }
   });
-  const doc=new Document({sections:[{children:paras}]});
+  const doc=new Document({
+    styles:{default:{document:{run:{font:DLG_FONT, size:DLG_SIZE}}}},
+    sections:[{children:paras}]});
   const blob=await Packer.toBlob(doc);
   triggerDownload(blob, (P.name||"story")+"_대사.docx");
 }
