@@ -6100,8 +6100,13 @@ async function rFeedbackDetail(type, id, version){
   document.getElementById("applyFeedbackBtn").onclick=()=>{
     if(!confirm(`이 첨삭 내용을 지금 작업 중인 "${P.name||""}"의 ${TYPE_LABEL[sub.type]}에 덮어씁니다.\n제출 이후 더 수정한 내용이 있다면 사라질 수 있습니다. 계속할까요?`)) return;
     applyFeedbackToProject(sub.type, sub.feedback, memos);
-    alert("내 작업물에 반영했습니다.");
-    feedbackPage=null; render();
+    feedbackPage=null;
+    /* 2026-09-15: 글쓰기 첨삭 반영 후 플롯이 없으면 rWrite()가 early-return해서 내용이 사라진 것처럼
+       보이는 버그 수정 — 플롯이 없을 때는 안내 메시지를 주고 플롯 탭으로 이동한다. */
+    const _noPlot=sub.type==="write"&&(!P.plotDoc||!P.plotDoc.structure||!Array.isArray(P.plotDoc.sections)||!P.plotDoc.sections.length);
+    if(_noPlot){ alert("글쓰기 첨삭 내용이 저장되었습니다.\n플롯 구조가 없어서 글쓰기 탭이 바로 열리지 않습니다. [플롯 생성] 탭에서 플롯을 만들면 글쓰기 내용을 확인할 수 있습니다."); P.tab="plot"; }
+    else alert("내 작업물에 반영했습니다.");
+    render();
   };
 }
 
@@ -7907,7 +7912,9 @@ function applyFeedbackToProject(type, feedback, memos){
     if(!P.writeDoc || !Array.isArray(P.writeDoc.blocks)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
       const bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
-      if(bl){ bl.items=parseFeedbackTextToItems(fb.text||""); setAppliedMemos("write",fb.id,memos); }
+      /* 2026-09-15: 피드백 텍스트가 비어있으면 items를 건드리지 않는다 — 빈 텍스트로 덮어써서
+         블록 내용이 사라지는 버그 방지. 텍스트가 있을 때만 items를 재구성한다. */
+      if(bl){ if(fb.text&&fb.text.trim()) bl.items=parseFeedbackTextToItems(fb.text); setAppliedMemos("write",fb.id,memos); }
     });
   }else if(type==="background"){
     if(!P.world) P.world={}; if(!P.background) P.background={};
