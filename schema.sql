@@ -58,7 +58,10 @@ CREATE TABLE IF NOT EXISTS user_data (
   data TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_user_data_updated ON user_data(updated_at);
+-- (2026-09-15) idx_user_data_updated 인덱스는 만들지 않는다.
+-- user_data는 항상 user_id(기본키)로만 조회하므로 updated_at 인덱스를 쓰는 곳이 없는데,
+-- 인덱스가 있으면 자동저장 1회당 D1 "쓴 행"이 1행이 아니라 2행으로 계산되어 무료 한도를 두 배로
+-- 소모한다. 이미 만들어진 DB에서는 아래 "2026-09-15" 절의 DROP INDEX를 한 번 실행할 것.
 
 -- 관리자(교수) 계정 시드: 아이디 profh / 임시 비밀번호 1234
 -- (비밀번호는 PBKDF2-SHA256 100,000회로 해시되어 저장됨. 접속 후 반드시 변경할 것)
@@ -235,3 +238,10 @@ ALTER TABLE submissions ADD COLUMN checked_at INTEGER;
 -- ===== 2026-09-11: 제출/첨삭 알림 =====
 -- 학생이 교수님의 첨삭·확인 알림을 열어본 시각. 서버 코드가 자동으로 추가하므로 보통 손댈 필요 없음.
 ALTER TABLE submissions ADD COLUMN feedback_seen_at INTEGER;
+
+-- ===== 2026-09-15: D1 "쓴 행" 절약 — 쓰이지 않는 인덱스 제거 =====
+-- user_data는 항상 user_id(기본키)로만 조회하므로 updated_at 인덱스를 쓰는 곳이 없습니다.
+-- 그런데 인덱스가 있으면 자동저장 1회당 쓰기가 2행(데이터 1행 + 인덱스 1행)으로 계산되어
+-- 무료 한도(하루 10만 행)를 두 배로 소모합니다. 아래 한 줄을 Cloudflare D1 Console에서
+-- 한 번만 실행하세요. (데이터는 전혀 지워지지 않습니다 — 인덱스만 없어집니다)
+DROP INDEX IF EXISTS idx_user_data_updated;

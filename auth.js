@@ -315,6 +315,9 @@ async function loadSettingsProfList() {
 
 async function signOut() {
   try { await apiFetch("logout", { method: "POST" }); } catch (e) {}
+  /* (2026-09-15) 계정이 바뀌면 "이미 서버에 올린 내용" 기억을 반드시 비운다 —
+     남겨두면 다음 계정의 첫 저장이 엉뚱하게 생략될 수 있다. */
+  if (typeof resetServerSaveCache === "function") resetServerSaveCache();
   clearAuth();
   setLoggedOutUI();
 }
@@ -412,18 +415,44 @@ async function loadFromServer() {
 
 let saveToServerTimer = null;
 let serverSaveRetryTimer = null;
-async function doServerSave(pid, isRetry) {
+
+/* (2026-09-15) Cloudflare D1 쓰기 절약 — 두 가지 장치
+   (1) lastSavedJson: 마지막으로 서버에 올리는 데 성공한 내용을 기억해 두고, 보내려는 내용이 그와
+       완전히 같으면 요청 자체를 보내지 않는다. app.js의 save()는 109군데에서 호출되는데 그중 상당수는
+       탭 전환·접기/펼치기처럼 작품 내용이 전혀 바뀌지 않는 조작이라, 예전에는 그때마다 작품 전체를
+       서버에 다시 써서 D1 "쓴 행" 한도를 헛되이 소모했다.
+   (2) SAVE_DEBOUNCE_MS: 자동저장 대기시간을 0.6초 → 2.5초로 늘려, 글을 이어 쓰는 동안 발생하는
+       저장 횟수를 줄인다. 탭을 닫거나 화면을 벗어날 때는 아래 flushPendingServerSave()가 대기 중이던
+       저장을 즉시 내보내므로 유실 위험은 늘지 않는다.
+   주의: lastSavedJson은 "서버에 실제로 올라간 내용"만 기억해야 한다. 서버에서 불러온 직후에 미리
+   채워두면 fillProject()/migrate...() 같은 보정 결과가 영영 서버에 반영되지 않으므로 그렇게 하지 말 것. */
+const SAVE_DEBOUNCE_MS = 2500;
+let lastSavedJson = null;
+function dbJson() { try { return JSON.stringify(DB); } catch (e) { return null; } }
+function resetServerSaveCache() { lastSavedJson = null; }
+
+async function doServerSave(pid, isRetry, json) {
   const st = document.getElementById("serverStatus");
-  const res = await apiFetch("data", { method: "POST", body: JSON.stringify({ data: DB }) });
+  const payload = (typeof json === "string" && json) ? json : dbJson();
+  if (payload === null) return; // 직렬화 자체가 실패하면 보낼 것이 없다
+  if (!isRetry && payload === lastSavedJson) {
+    // 서버에 있는 내용과 똑같다 — 요청을 보내지 않는다(쓰기 절약)
+    if (st) st.innerHTML = CLOUD_ICON + " 서버에 저장됨";
+    if (typeof projSaveState === "object") projSaveState[pid] = "saved";
+    if (typeof updateTabDot === "function") updateTabDot(pid);
+    return;
+  }
+  const res = await apiFetch("data", { method: "POST", body: '{"data":' + payload + '}' });
   if (res.status === 401) { signOut(); return; }
   /* (2026-09-08) 일시적인 통신 오류로 저장이 실패하면 2초 뒤 한 번 자동 재시도한다.
      재시도까지 실패했을 때만 "저장 실패"로 표시한다. */
   if (!res.ok && !isRetry) {
     if (st) st.innerHTML = CLOUD_ICON + " 저장 재시도 중…";
     clearTimeout(serverSaveRetryTimer);
-    serverSaveRetryTimer = setTimeout(() => doServerSave(pid, true), 2000);
+    serverSaveRetryTimer = setTimeout(() => doServerSave(pid, true, payload), 2000);
     return;
   }
+  if (res.ok) lastSavedJson = payload;
   if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
   if (typeof projSaveState === "object") projSaveState[pid] = res.ok ? "saved" : "error";
   if (typeof updateTabDot === "function") updateTabDot(pid);
@@ -435,7 +464,7 @@ function saveToServer() {
   clearTimeout(saveToServerTimer);
   // (2026-09-03) 타이머가 실제로 발동해 저장을 시작하는 순간 saveToServerTimer를 null로 되돌려서,
   // flushPendingServerSave()가 "지금 대기 중인 저장이 있는지"를 정확히 판단할 수 있게 한다.
-  saveToServerTimer = setTimeout(() => { saveToServerTimer = null; doServerSave(pid); }, 600);
+  saveToServerTimer = setTimeout(() => { saveToServerTimer = null; doServerSave(pid); }, SAVE_DEBOUNCE_MS);
 }
 /* Ctrl+S 등 즉시저장 — 디바운스를 건너뛰고 바로 서버에 저장 */
 function forceSaveToServer() {
@@ -458,13 +487,16 @@ function flushPendingServerSave(useKeepalive) {
   clearTimeout(saveToServerTimer);
   saveToServerTimer = null;
   if (useKeepalive) {
+    const payload = dbJson();
+    if (payload === null || payload === lastSavedJson) return; // 내용이 그대로면 보내지 않는다(2026-09-15)
     try {
       fetch("/api/data", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + getToken() },
-        body: JSON.stringify({ data: DB }),
+        body: '{"data":' + payload + '}',
         keepalive: true,
       });
+      lastSavedJson = payload;
     } catch (e) {}
   } else {
     doServerSave(DB.current);

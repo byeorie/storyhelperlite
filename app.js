@@ -6649,7 +6649,7 @@ function openAssignmentModal(classId, assignment){
     `<label>과제명</label><input type="text" id="newAssignTitle" placeholder="예: 1차 기획서 과제" value="${editing?esc(assignment.title||""):""}">
      <label>과제 종류</label>
      <select id="newAssignType"><option value="none"${(editing&&assignment.type)?"":" selected"}>지정 안 함(어느 탭에서든 제출 가능)</option>${typeOpts}</select>
-     <p class="hint" style="margin:4px 0 0">종류를 지정하면 학생이 그 탭에서 제출할 때만 이 과제가 목록에 보입니다.</p>
+     <p class="hint" style="margin:4px 0 0" id="newAssignTypeHint">종류를 지정하면 학생이 그 탭에서 제출할 때만 이 과제가 목록에 보입니다.</p>
      <label>제출기한 (선택 · 비워두면 기한 없음)</label>
      <div class="due-row">
        <input type="date" id="newAssignDue" value="${editing?unixToDateInput(assignment.due_at):""}">
@@ -6664,6 +6664,18 @@ function openAssignmentModal(classId, assignment){
      </label>`:""}
      <button class="btn" id="newAssignSaveBtn" style="margin-top:14px;width:100%">${editing?"변경 내용 저장":"등록"}</button>`);
   overlay.appendChild(box); document.body.appendChild(overlay);
+
+  /* 2026-09-15: "파일 제출"을 고르면 이 종류가 어떤 과제인지 바로 알려준다
+     (다른 종류와 달리 작품 탭이 아니라 [파일 과제] 탭에서 파일만 받는다) */
+  const typeSel=box.querySelector("#newAssignType"), typeHint=box.querySelector("#newAssignTypeHint");
+  const syncTypeHint=()=>{
+    if(!typeSel || !typeHint) return;
+    typeHint.innerHTML = typeSel.value==="file"
+      ? `학생은 왼쪽 <b>[파일 과제]</b> 탭에서 <b>jpg · png · clip</b> 파일을 올려 냅니다(파일 하나당 1MB, 한 번에 ${FILE_MAX_COUNT}개까지).
+         작품 내용(다른 탭)과는 연결되지 않으며, 제출함에서 jpg · png는 바로 보이고 clip은 내려받게 됩니다.`
+      : "종류를 지정하면 학생이 그 탭에서 제출할 때만 이 과제가 목록에 보입니다.";
+  };
+  if(typeSel){ typeSel.onchange=syncTypeHint; syncTypeHint(); }
 
   /* [시간 지정] 체크를 끄면 시·분 칸을 잠근다(끈 상태로 저장하면 23:59) */
   const dueOnChk=box.querySelector("#newAssignDueTimeOn");

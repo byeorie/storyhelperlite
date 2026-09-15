@@ -2772,3 +2772,33 @@ Chromium(Playwright)으로 실제 획을 긋고 확인: 층별 그리기·마커
 - `app.js` `fmtDateTime(sec)` 신규(= `fmtDate` + `HH:MM`).
 - 적용 3곳: 교수 제출함의 [이전 버전] 팝업 항목, 교수 첨삭 화면의 "제출 차수" 드롭다운,
   학생 피드백 상세의 "제출 차수" 드롭다운. (목록 줄의 "제출 2026.09.15"는 그대로 날짜만)
+
+## 2026-09-15 (6) — D1 "쓴 행" 절약 (자동저장 최적화)
+
+Cloudflare D1 무료 한도는 **하루 쓴 행 10만**인데 사용량이 21k까지 올라와, 원인을 확인하고 네 군데를
+고쳤다. 확인 결과 쓰기의 거의 전부가 자동저장(`POST /api/data` → `user_data`) 한 곳에서 나왔고,
+저장 1회당 실제로는 **2행**(데이터 1행 + `idx_user_data_updated` 인덱스 1행)이 기록되고 있었다.
+
+1. **내용이 그대로면 저장하지 않는다** (`auth.js`)
+   `lastSavedJson`에 마지막으로 서버에 올리는 데 성공한 내용을 기억해 두고, 보낼 내용이 그와 같으면
+   요청 자체를 보내지 않는다. `app.js`의 `save()`는 109군데에서 불리는데 상당수가 탭 전환·접기/펼치기
+   처럼 작품 내용이 전혀 바뀌지 않는 조작이라, 예전에는 그때마다 작품 전체를 다시 쓰고 있었다.
+   - 주의: `lastSavedJson`은 "서버에 실제로 올라간 내용"만 기억해야 한다. 서버에서 불러온 직후에
+     미리 채워두면 `fillProject()`/`migrate...()` 보정 결과가 영영 서버에 반영되지 않는다.
+   - `signOut()`에서 `resetServerSaveCache()`로 비운다(계정이 바뀌면 첫 저장이 생략되면 안 됨).
+2. **자동저장 대기시간 0.6초 → 2.5초** (`auth.js` `SAVE_DEBOUNCE_MS`)
+   탭을 닫거나 화면을 벗어날 때 대기 중이던 저장을 즉시 내보내는 `flushPendingServerSave()`가
+   이미 있으므로 유실 위험은 늘지 않는다. `flushPendingServerSave`의 keepalive 경로에도 같은
+   "내용 동일" 검사를 넣었다.
+3. **서버에서도 같은 내용이면 UPDATE 생략** (`functions/api/data.js`)
+   upsert에 `WHERE user_data.data <> excluded.data`를 붙였다. 클라이언트 검사가 뚫리거나 예전 버전
+   화면에서 요청이 와도 막힌다.
+4. **`idx_user_data_updated` 인덱스 제거** (`schema.sql`)
+   `updated_at`으로 조회하는 코드가 없는데 인덱스 때문에 쓰기가 두 배로 계산되고 있었다.
+   새 DB에서는 만들지 않으며, 운영 중인 DB는 D1 Console에서 아래를 한 번 실행해야 한다.
+   ```sql
+   DROP INDEX IF EXISTS idx_user_data_updated;
+   ```
+
+예상 효과: 하루 21k → 5k 안팎. (1+4만으로도 절반 이하, 2까지 더하면 이어 쓰는 동안의 저장 횟수가
+추가로 2~4배 줄어든다)

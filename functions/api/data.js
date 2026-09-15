@@ -30,9 +30,14 @@ export async function onRequestPost({ request, env }) {
 
   const json = JSON.stringify(body.data);
   const now = nowSec();
+  /* (2026-09-15) 내용이 이전과 똑같으면 아예 쓰지 않는다(WHERE 절) — Cloudflare D1은 "쓴 행" 수로
+     무료 한도를 계산하므로, 바뀐 것이 없는 저장 요청까지 매번 기록하면 한도를 헛되이 소모한다.
+     클라이언트(auth.js)도 같은 내용이면 요청 자체를 보내지 않지만, 여러 기기나 예전 버전 화면에서
+     오는 요청까지 막으려면 서버에도 이 장치가 있어야 한다. */
   await env.DB.prepare(
     "INSERT INTO user_data (user_id, data, updated_at) VALUES (?, ?, ?) " +
-    "ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at"
+    "ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at " +
+    "WHERE user_data.data <> excluded.data"
   ).bind(auth.user.id, json, now).run();
 
   return jsonResponse({ ok: true, updatedAt: now });
