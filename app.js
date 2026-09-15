@@ -6099,14 +6099,11 @@ async function rFeedbackDetail(type, id, version){
   });
   document.getElementById("applyFeedbackBtn").onclick=()=>{
     if(!confirm(`이 첨삭 내용을 지금 작업 중인 "${P.name||""}"의 ${TYPE_LABEL[sub.type]}에 덮어씁니다.\n제출 이후 더 수정한 내용이 있다면 사라질 수 있습니다. 계속할까요?`)) return;
-    applyFeedbackToProject(sub.type, sub.feedback, memos);
-    feedbackPage=null;
-    /* 2026-09-15: 글쓰기 첨삭 반영 후 플롯이 없으면 rWrite()가 early-return해서 내용이 사라진 것처럼
-       보이는 버그 수정 — 플롯이 없을 때는 안내 메시지를 주고 플롯 탭으로 이동한다. */
-    const _noPlot=sub.type==="write"&&(!P.plotDoc||!P.plotDoc.structure||!Array.isArray(P.plotDoc.sections)||!P.plotDoc.sections.length);
-    if(_noPlot){ alert("글쓰기 첨삭 내용이 저장되었습니다.\n플롯 구조가 없어서 글쓰기 탭이 바로 열리지 않습니다. [플롯 생성] 탭에서 플롯을 만들면 글쓰기 내용을 확인할 수 있습니다."); P.tab="plot"; }
-    else alert("내 작업물에 반영했습니다.");
-    render();
+    /* 2026-09-15: sub.data(제출 당시 원본)를 함께 넘긴다 — 로컬에서 블록이 사라졌거나 플롯이 비어 있어도
+       제출물 정보로 블록·섹션을 되살려 첨삭 내용이 반드시 글쓰기에 들어오게 하기 위함. */
+    applyFeedbackToProject(sub.type, sub.feedback, memos, sub.data);
+    alert("내 작업물에 반영했습니다.");
+    feedbackPage=null; render();
   };
 }
 
@@ -7885,7 +7882,69 @@ function renderAppliedMemoBlockAfter(afterEl, type, key){
    plot(플롯): 섹션의 desc(설명)에 첨삭 텍스트 전체를 대입 — 아이디어 카드 배치(ideaIds)는 건드리지 않음
    write(글쓰기): 위 parseFeedbackTextToItems로 블록의 items를 다시 만듦(분기는 복원 안 됨)
    memos(각 항목에 달린 메모)는 있으면 setAppliedMemos로 별도 저장되어 각 탭에서 메모 블럭으로 표시된다. */
-function applyFeedbackToProject(type, feedback, memos){
+/* 2026-09-15: 글쓰기 첨삭 반영 — 플롯이 비어 있거나 블록이 사라진 뒤에도 내용이 반드시 넘어오게 한다.
+   (1) 로컬에 그 블록이 없으면 제출물(data)의 블록을 되살린다 — 예전에는 id를 못 찾으면 조용히
+       아무것도 안 해서 "반영을 눌러도 내용이 안 넘어온다"가 됐다.
+   (2) 첨삭 텍스트가 비어 있으면 제출 당시 원문으로 채운다 — 빈 텍스트로 덮어써서 내용이 사라지던 문제.
+   (3) 블록이 속한 플롯 섹션이 없으면 제출물의 섹션 이름으로 되살린다 — 플롯이 비어 있으면 글쓰기 탭이
+       "플롯을 먼저 만드세요"만 보여줘 학생 눈에는 내용이 통째로 사라진 것처럼 보였다. */
+function applyWriteFeedback(feedback, memos, data){
+  if(!P.writeDoc || typeof P.writeDoc!=="object") P.writeDoc={blocks:[], groups:[]};
+  if(!Array.isArray(P.writeDoc.blocks)) P.writeDoc.blocks=[];
+  if(!Array.isArray(P.writeDoc.groups)) P.writeDoc.groups=[];
+  const subBlocks=Array.isArray(data)?data:[];
+  const fbArr=Array.isArray(feedback)?feedback:[];
+
+  fbArr.forEach((fb,i)=>{
+    if(!fb) return;
+    const src=subBlocks.find(b=>b&&b.id===fb.id) || subBlocks[i] || null;
+    let bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
+    if(!bl && src){
+      /* 제출 당시의 그룹(섹션 블럭)이 지금 없으면 그것도 함께 되살린다 */
+      const gid=src.groupId||"";
+      if(gid && !P.writeDoc.groups.some(g=>g.id===gid))
+        P.writeDoc.groups.push({id:gid, name:src.groupName||"그룹", fromIdea:"", sectionId:src.sectionId||""});
+      bl={id:fb.id||src.id||uid(), sectionId:src.sectionId||"", fromIdea:"", title:src.title||"",
+          items:[], groupId:gid, backgrounds:[], characters:[], storyboard:null};
+      P.writeDoc.blocks.push(bl);
+    }
+    if(!bl) return;
+    const txt=(fb.text && fb.text.trim()) ? fb.text : ((src && src.text) || "");
+    if(txt.trim()) bl.items=parseFeedbackTextToItems(txt);
+    setAppliedMemos("write", fb.id, memos);
+  });
+
+  ensureWriteSections(subBlocks);
+}
+
+/* 글쓰기 블록이 기대는 플롯 섹션이 없으면 만들어 준다 — 플롯 구조를 아직 안 만든 학생도
+   글쓰기 탭에서 자기 글과 첨삭 내용을 바로 볼 수 있게 하기 위함(rWrite의 early-return 회피). */
+function ensureWriteSections(subBlocks){
+  if(!P.plotDoc || typeof P.plotDoc!=="object") P.plotDoc=fillPlotDoc(null);
+  if(!Array.isArray(P.plotDoc.sections)) P.plotDoc.sections=[];
+  const blocks=P.writeDoc.blocks||[];
+  if(!blocks.length) return;
+
+  /* 제출물이 갖고 있던 섹션 이름(sectionId→sectionName) */
+  const nameOf={};
+  (Array.isArray(subBlocks)?subBlocks:[]).forEach(b=>{ if(b && b.sectionId && b.sectionName) nameOf[b.sectionId]=b.sectionName; });
+
+  const have=new Set(P.plotDoc.sections.map(s=>s.id));
+  const order=[];
+  blocks.forEach(b=>{ if(b.sectionId && !have.has(b.sectionId) && order.indexOf(b.sectionId)<0) order.push(b.sectionId); });
+  order.forEach(id=>{ P.plotDoc.sections.push({id, name:nameOf[id]||"글쓰기", desc:"", ideaIds:[]}); have.add(id); });
+
+  /* 섹션 정보 자체가 없던 블록은 첫 섹션(없으면 새로 만든 "글쓰기")으로 모은다 */
+  if(!P.plotDoc.sections.length) P.plotDoc.sections.push({id:uid(), name:"글쓰기", desc:"", ideaIds:[]});
+  const first=P.plotDoc.sections[0].id;
+  blocks.forEach(b=>{ if(!b.sectionId || !have.has(b.sectionId)) b.sectionId=first; });
+
+  /* 구조를 아직 안 고른 상태면 "사용자 구조"로 두어 글쓰기 탭이 열리게 한다
+     (PLOT_STRUCTURES에 없는 키라 플롯 탭은 "사용자 구조"로 표시되고 섹션은 그대로 보인다) */
+  if(!P.plotDoc.structure) P.plotDoc.structure="custom";
+}
+
+function applyFeedbackToProject(type, feedback, memos, data){
   if(!feedback) return;
   if(type==="plan"){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
@@ -7909,13 +7968,7 @@ function applyFeedbackToProject(type, feedback, memos){
       setAppliedMemos("plot",key,memos);
     });
   }else if(type==="write"){
-    if(!P.writeDoc || !Array.isArray(P.writeDoc.blocks)) return;
-    (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
-      const bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
-      /* 2026-09-15: 피드백 텍스트가 비어있으면 items를 건드리지 않는다 — 빈 텍스트로 덮어써서
-         블록 내용이 사라지는 버그 방지. 텍스트가 있을 때만 items를 재구성한다. */
-      if(bl){ if(fb.text&&fb.text.trim()) bl.items=parseFeedbackTextToItems(fb.text); setAppliedMemos("write",fb.id,memos); }
-    });
+    applyWriteFeedback(feedback, memos, data);
   }else if(type==="background"){
     if(!P.world) P.world={}; if(!P.background) P.background={};
     BG_FIELDS.forEach(f=>{

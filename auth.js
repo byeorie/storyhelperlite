@@ -440,6 +440,11 @@ async function doServerSave(pid, isRetry, json) {
     if (st) st.innerHTML = CLOUD_ICON + " 서버에 저장됨";
     if (typeof projSaveState === "object") projSaveState[pid] = "saved";
     if (typeof updateTabDot === "function") updateTabDot(pid);
+    /* 2026-09-15: 이 경로에서만 showSaveToast를 부르지 않아 화면 위 "저장 중…" 배너가 영영 사라지지
+       않았다. save()는 이미 "saving"을 띄운 뒤라, 보낼 내용이 없으면 여기서 닫아줘야 한다.
+       (내용이 하나도 바뀌지 않는 조작을 했을 때 이 경로로 들어온다 — 배너가 계속 떠 있으면
+       "저장이 안 되고 있다"는 오해를 준다) */
+    if (typeof showSaveToast === "function") showSaveToast("saved");
     return;
   }
   const res = await apiFetch("data", { method: "POST", body: '{"data":' + payload + '}' });
