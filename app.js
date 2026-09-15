@@ -6350,7 +6350,8 @@ function openAddClassStudentModal(classId, available){
    - 다른 브라우저 탭을 보고 있거나(document.hidden) 팝업(.plot-modal-overlay 등)이 열려 있으면
      그 차례는 건너뛴다 — 입력하던 내용이 사라지거나 팝업 뒤 목록이 흔들리는 것을 막기 위함.
    - [자동] 체크 상태는 localStorage에 기억한다. */
-const PROF_AUTO_SEC=20;
+const PROF_AUTO_SEC=60;            /* 자동 새로고침 주기(초) — 2026-09-15 20초 → 1분 */
+const PROF_AUTO_LABEL="1분";        /* 화면에 보여줄 주기 문구 */
 const PROF_AUTO_KEY="storyhelper_prof_autorefresh";
 let profAutoTimer=null;
 /* 자동 새로고침이 내용이 똑같은 목록을 20초마다 새로 그리면, 마침 누르려던 버튼이 사라졌다 생기며
@@ -6372,7 +6373,7 @@ function profAutoStart(reload){
 function profRefreshBarHtml(id){
   return `<span class="refresh-bar">
     <button type="button" class="btn ghost sm" id="${id}Btn" title="지금 다시 불러옵니다">${ICONS.refresh} 새로고침</button>
-    <label class="refresh-auto" title="${PROF_AUTO_SEC}초마다 저절로 다시 불러옵니다"><input type="checkbox" id="${id}Auto"${profAutoOn()?" checked":""}> 자동 (${PROF_AUTO_SEC}초)</label>
+    <label class="refresh-auto" title="${PROF_AUTO_LABEL}마다 저절로 다시 불러옵니다"><input type="checkbox" id="${id}Auto"${profAutoOn()?" checked":""}> 자동 (${PROF_AUTO_LABEL})</label>
     <span class="hint refresh-stamp" id="${id}Stamp"></span>
   </span>`;
 }
@@ -7730,7 +7731,7 @@ const GUIDE_SECTIONS=[
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티)</b>와 제출기한을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
-      <li><b>과제 목록</b>과 <b>제출함</b>은 20초마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
+      <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li>학생이 제출하면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 제출함에서 <b>[과제 확인]</b>만 눌러 읽었다는 표시를 남기거나, 제출물을 열어 항목별로 첨삭 · 메모를 달 수 있습니다.</li>
       <li>첨삭 화면 맨 아래에 <b>평가(총평)</b> 입력칸이 있고, <b>[피드백 전달]</b>을 누르면 학생에게 알림이 가며 자동으로 제출함으로 돌아옵니다.</li>
       <li>콘티 과제는 제출된 그림을 크게 열어 <b>그 위에 직접 그려</b> 피드백을 줄 수 있습니다(학생 원본은 지워지지 않습니다).</li>
