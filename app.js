@@ -3194,7 +3194,11 @@ function subBlockEl(bl, it, liveRefresh, main){
     /* 대사 텍스트 — 클릭하면 바로 편집(플롯/제목과 동일한 방식) */
     const tx=document.createElement("span"); tx.className="dlg-text"; tx.contentEditable="false"; tx.spellcheck=false;
     tx.textContent=it.text;
-    tx.oninput=()=>{ it.text=tx.textContent; save(); liveRefresh&&liveRefresh(); };
+    /* 2026-09-15: 대사 한 칸은 늘 한 줄로 다룬다 — 이 칸은 줄바꿈을 그대로 보여주지 않아서(한 줄로 보임)
+       엔터로 넣은 개행이 눈에 띄지 않은 채 데이터에만 남고, 교수 첨삭 화면에서는 그 아랫줄이 지문 칸으로
+       떨어져 나갔다. 엔터는 편집 끝내기로 쓰고, 붙여넣기 등으로 들어온 개행은 공백으로 바꾼다. */
+    tx.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); tx.blur(); } });
+    tx.oninput=()=>{ it.text=tx.textContent.replace(/[\r\n]+/g, " "); save(); liveRefresh&&liveRefresh(); };
     tx.addEventListener("blur", ()=>{ tx.contentEditable="false"; });
     tx.addEventListener("click", ()=>{ if(tx.contentEditable!=="true"){ tx.contentEditable="true"; tx.focus(); selectAllEditable(tx); } });
     d.append(handle, who, tx, del);
@@ -5694,13 +5698,23 @@ async function buildSubmissionData(type){
        교수 첨삭 화면에서도 학생 글쓰기 화면과 같은 블럭 구성으로 보이게 하기 위함. */
     const secName={}; (P.plotDoc.sections||[]).forEach(s=>{ secName[s.id]=s.name||""; });
     const grpName={}; (P.writeDoc.groups||[]).forEach(g=>{ grpName[g.id]=g.name||""; });
-    return allWriteBlocksOrdered().map(bl=>({
-      id:bl.id, title:bl.title||"",
-      sectionId:bl.sectionId||"", sectionName:secName[bl.sectionId]||"",
-      groupId:bl.groupId||"", groupName:bl.groupId?(grpName[bl.groupId]||"그룹"):"",
-      text:(bl.items||[]).filter(it=>(it.text||"").trim())
-        .map(it=> it.type==="line" ? `${it.char||"(미지정)"}: ${it.text.trim()}` : it.text.trim()).join("\n"),
-    }));
+    /* 2026-09-15: 지문/대사 칸(items)을 구조 그대로 함께 보낸다 — 첨삭 화면이 합친 text를 줄 단위로
+       다시 쪼개다 보니, 대사 한 칸 안에 줄바꿈이 들어 있으면 그 아랫줄이 지문 칸으로 떨어져 나갔다.
+       text는 예전과 똑같이 items를 "\n"으로 이어붙인 것이라 기존 기능([내 작업물에 반영] 등)은 그대로다. */
+    return allWriteBlocksOrdered().map(bl=>{
+      const kept=(bl.items||[]).filter(it=>(it.text||"").trim()).map(it=>({
+        type: it.type==="line" ? "line" : "text",
+        char: it.type==="line" ? (it.char||"(미지정)") : "",
+        text: (it.text||"").trim(),
+      }));
+      return {
+        id:bl.id, title:bl.title||"",
+        sectionId:bl.sectionId||"", sectionName:secName[bl.sectionId]||"",
+        groupId:bl.groupId||"", groupName:bl.groupId?(grpName[bl.groupId]||"그룹"):"",
+        items:kept,
+        text:kept.map(it=> it.type==="line" ? `${it.char}: ${it.text}` : it.text).join("\n"),
+      };
+    });
   }
   if(type==="background"){
     const obj={};
@@ -6884,6 +6898,8 @@ function buildReviewPairs(type, data, feedback){
         subgroup: b.groupId ? {id:b.groupId, name:b.groupName||"그룹"} : null,
         before:b.text||"",
         after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||""),
+        /* 2026-09-15: 지문/대사 칸 구조 — 있으면 이 경계대로 그린다(옛 제출물은 없어서 null) */
+        items: Array.isArray(b.items) ? b.items : null,
       };
     });
   }
@@ -7133,7 +7149,24 @@ function memoTextLines(rawText){
   arr.forEach((t,i)=>{ out.push({text:t, start:pos, end:pos+t.length, nl:i<arr.length-1}); pos+=t.length+1; });
   return out;
 }
-function renderStyledBeforeText(el, kind, rawText, mine, numMap, colorMap){
+/* 2026-09-15: 제출 데이터의 items(지문/대사 칸)를 rawText 안의 글자 구간으로 되돌린다.
+   rawText는 각 칸을 "\n"으로 이어붙인 것이므로 순서대로 길이를 더해가며 구간을 잡는다.
+   되돌린 전체 길이가 rawText와 한 글자라도 다르면(형식이 다른 옛 제출물 등) null을 돌려주고,
+   부르는 쪽은 예전처럼 줄 단위로 나눠 그린다. */
+function writeItemSegments(items, rawText){
+  if(!Array.isArray(items) || !items.length) return null;
+  const segs=[]; let pos=0;
+  for(const it of items){
+    const isLine = it && it.type==="line";
+    const head = isLine ? `${(it&&it.char)||"(미지정)"}: ` : "";
+    const seg = head + (((it&&it.text)||""));
+    segs.push({isLine, headEnd:pos+head.length, start:pos, end:pos+seg.length});
+    pos += seg.length + 1; // 칸 사이의 개행
+  }
+  if(pos-1 !== (rawText||"").length) return null;
+  return segs;
+}
+function renderStyledBeforeText(el, kind, rawText, mine, numMap, colorMap, items){
   const cls=(id)=>(colorMap&&colorMap.get(id))||"memo-c0";
   el.textContent="";
   const ranged=mine.filter(m=>m.start!=null && m.end!=null && m.end>m.start).sort((a,b)=>a.start-b.start);
@@ -7148,6 +7181,29 @@ function renderStyledBeforeText(el, kind, rawText, mine, numMap, colorMap){
   }
   const nlSpan=()=>{ const sp=document.createElement("span"); sp.className="nl-keep"; sp.textContent="\n"; return sp; };
   const lines=memoTextLines(rawText);
+  const segs = kind==="write" ? writeItemSegments(items, rawText) : null;
+  if(segs){
+    /* 학생이 만든 칸 그대로 — 대사 칸 안에 줄바꿈이 있어도 한 칸으로 유지된다 */
+    segs.forEach((sg,i)=>{
+      const row=document.createElement("div");
+      const last=i===segs.length-1;
+      if(sg.isLine){
+        row.className="rv-sub rv-line";
+        const who=document.createElement("span"); who.className="dlg-who";
+        appendMemoRange(who, rawText, sg.start, sg.headEnd, ranged, numMap, colorMap, cls);
+        const txt=document.createElement("span"); txt.className="dlg-text";
+        appendMemoRange(txt, rawText, sg.headEnd, sg.end, ranged, numMap, colorMap, cls);
+        if(!last) txt.appendChild(nlSpan());
+        row.append(who, txt);
+      }else{
+        row.className="rv-sub rv-text";
+        appendMemoRange(row, rawText, sg.start, sg.end, ranged, numMap, colorMap, cls);
+        if(!last) row.appendChild(nlSpan());
+      }
+      el.appendChild(row);
+    });
+    addGeneral(); return;
+  }
   if(kind==="write"){
     lines.forEach(ln=>{
       if(!ln.text.trim()){ const g=document.createElement("span"); g.className="nl-keep"; g.textContent=ln.text+(ln.nl?"\n":""); el.appendChild(g); return; }
@@ -7193,7 +7249,7 @@ function renderStyledBeforeText(el, kind, rawText, mine, numMap, colorMap){
 }
 /* 원본 블록 본문 그리기 — 글쓰기/캐릭터만 학생 화면 모양으로, 나머지는 지금까지와 같다 */
 function renderBeforeBody(el, p, mine, numMap, colorMap){
-  if(p.kind==="write" || p.kind==="character") renderStyledBeforeText(el, p.kind, p.before, mine, numMap, colorMap);
+  if(p.kind==="write" || p.kind==="character") renderStyledBeforeText(el, p.kind, p.before, mine, numMap, colorMap, p.items);
   else renderMemoTargetText(el, p.before, mine, numMap, colorMap);
 }
 /* container(블록 el의 부모, 예: box/prev) 맨 아래에 이 블록(mine)에 달린 메모들을 카드로 나열한다.
