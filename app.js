@@ -5809,7 +5809,7 @@ async function openSubmitModal(type){
           : "";
         return `<button type="button" class="submit-assign-item" data-id="${a.id}">
           <b>${esc(a.title)}</b>${a.class_name?` <span class="assign-type-badge">${esc(a.class_name)}</span>`:""}
-          <span class="hint">${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"}</span>
+          <span class="hint">${a.due_at?("제출기한 "+fmtDue(a.due_at)):"제출기한 없음"}</span>
           ${already}
         </button>`;
       }).join("")}</div>`;
@@ -6424,7 +6424,7 @@ async function renderProfAssignList(classId){
         <button type="button" class="assign-folder-del" data-id="${a.id}" title="과제 삭제">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
+    <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.due_at?("제출기한 "+fmtDue(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
   </div>`).join("");
   if(profAssignSig===listHtml) return;   // 바뀐 게 없으면 그대로 둔다
   profAssignSig=listHtml;
@@ -6474,6 +6474,24 @@ function unixToDateInput(sec){
   const p=n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
 }
+/* 제출기한의 시각 부분 (2026-09-15)
+   [시간 지정]을 켜지 않으면 그날 23:59로 저장한다 — 예전에 날짜만 고르던 때와 같은 뜻(그날까지).
+   그래서 23:59로 저장된 기한은 "시간 미지정"으로 되돌려 읽는다(예전에 만든 과제도 그대로 맞는다).
+   분은 10분 단위로 내림한다(저장된 값이 15분이면 10분 칸이 선택됨). */
+const DUE_END_H=23, DUE_END_M=59;
+function dueTimeState(sec){
+  if(!sec) return {on:false, h:"23", m:"50"};
+  const d=new Date(sec*1000), p=n=>String(n).padStart(2,"0");
+  const hh=d.getHours(), mm=d.getMinutes();
+  if(hh===DUE_END_H && mm>=DUE_END_M) return {on:false, h:"23", m:"50"};
+  return {on:true, h:p(hh), m:p(Math.floor(mm/10)*10)};
+}
+/* 목록에 보여줄 제출기한 — 시간 미지정(23:59)이면 날짜만, 지정했으면 시각까지 */
+function fmtDue(sec){
+  if(!sec) return "-";
+  const d=new Date(sec*1000);
+  return (d.getHours()===DUE_END_H && d.getMinutes()>=DUE_END_M) ? fmtDate(sec) : fmtDateTime(sec);
+}
 function openNewAssignmentModal(classId){ openAssignmentModal(classId, null); }
 
 /* 과제 등록 / 설정 변경 공용 모달 (2026-09-08: 등록 후에도 과제명·제출기한·수업·마감 여부를 고칠 수
@@ -6490,6 +6508,7 @@ function openAssignmentModal(classId, assignment){
   box.appendChild(top);
   /* 2026-09-12: 과제 종류 — 지정해두면 학생은 그 종류의 탭에서만 이 과제에 제출할 수 있다
      (예: "글쓰기" 과제에 플롯을 제출하던 실수 방지). 미지정이면 예전처럼 모든 종류를 받는다. */
+  const dueTime=dueTimeState(editing?assignment.due_at:null);
   const typeOpts=Object.keys(TYPE_LABEL).map(k=>
     `<option value="${k}"${(editing&&assignment.type===k)?" selected":""}>${esc(TYPE_LABEL[k])}</option>`).join("");
   box.insertAdjacentHTML("beforeend",
@@ -6497,13 +6516,27 @@ function openAssignmentModal(classId, assignment){
      <label>과제 종류</label>
      <select id="newAssignType"><option value="none"${(editing&&assignment.type)?"":" selected"}>지정 안 함(어느 탭에서든 제출 가능)</option>${typeOpts}</select>
      <p class="hint" style="margin:4px 0 0">종류를 지정하면 학생이 그 탭에서 제출할 때만 이 과제가 목록에 보입니다.</p>
-     <label>제출기한 (선택 · 비워두면 기한 없음)</label><input type="date" id="newAssignDue" value="${editing?unixToDateInput(assignment.due_at):""}">
+     <label>제출기한 (선택 · 비워두면 기한 없음)</label>
+     <div class="due-row">
+       <input type="date" id="newAssignDue" value="${editing?unixToDateInput(assignment.due_at):""}">
+       <label class="due-time-on"><input type="checkbox" id="newAssignDueTimeOn"${dueTime.on?" checked":""}> 시간 지정</label>
+       <select id="newAssignDueH" title="시 (24시간)"${dueTime.on?"":" disabled"}>${Array.from({length:24},(_,i)=>String(i).padStart(2,"0")).map(h=>`<option value="${h}"${h===dueTime.h?" selected":""}>${h}시</option>`).join("")}</select>
+       <select id="newAssignDueM" title="분 (10분 단위)"${dueTime.on?"":" disabled"}>${["00","10","20","30","40","50"].map(m=>`<option value="${m}"${m===dueTime.m?" selected":""}>${m}분</option>`).join("")}</select>
+     </div>
+     <p class="hint" style="margin:4px 0 0">[시간 지정]을 켜면 24시간 · 10분 단위로 고를 수 있고, 켜지 않으면 그날 23:59까지입니다. 날짜를 비워두면 기한이 없습니다.</p>
      ${editing?`<label>소속 수업</label><select id="newAssignClass"><option value="none">수업 미지정(전체 공개)</option></select>
      <label style="display:flex;align-items:center;gap:8px;margin-top:12px">
        <input type="checkbox" id="newAssignOpen" style="width:auto;margin:0"${assignment.open?" checked":""}> 학생이 제출할 수 있음(마감 안 함)
      </label>`:""}
      <button class="btn" id="newAssignSaveBtn" style="margin-top:14px;width:100%">${editing?"변경 내용 저장":"등록"}</button>`);
   overlay.appendChild(box); document.body.appendChild(overlay);
+
+  /* [시간 지정] 체크를 끄면 시·분 칸을 잠근다(끈 상태로 저장하면 23:59) */
+  const dueOnChk=box.querySelector("#newAssignDueTimeOn");
+  dueOnChk.onchange=()=>{
+    box.querySelector("#newAssignDueH").disabled=!dueOnChk.checked;
+    box.querySelector("#newAssignDueM").disabled=!dueOnChk.checked;
+  };
 
   // 수업 이동용 목록은 열어본 뒤 채운다(등록 화면에서는 이미 그 수업 안에 있으므로 필요 없음)
   if(editing){
@@ -6525,7 +6558,11 @@ function openAssignmentModal(classId, assignment){
     const title=box.querySelector("#newAssignTitle").value.trim();
     if(!title){ alert("과제명을 입력해주세요."); return; }
     const dueStr=box.querySelector("#newAssignDue").value;
-    const dueAt=dueStr ? Math.floor(new Date(dueStr+"T23:59:59").getTime()/1000) : null;
+    const useTime=box.querySelector("#newAssignDueTimeOn").checked;
+    const dueH=box.querySelector("#newAssignDueH").value, dueM=box.querySelector("#newAssignDueM").value;
+    /* 시간을 지정하지 않으면 그날 23:59:59 — 예전(날짜만 고르던 때)과 같은 뜻 */
+    const dueTimeStr = useTime ? `${dueH}:${dueM}:00` : "23:59:59";
+    const dueAt=dueStr ? Math.floor(new Date(`${dueStr}T${dueTimeStr}`).getTime()/1000) : null;
     btn.disabled=true;
     let r;
     if(editing){
@@ -7730,7 +7767,7 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
-      <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티)</b>와 제출기한을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
+      <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li>학생이 제출하면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 제출함에서 <b>[과제 확인]</b>만 눌러 읽었다는 표시를 남기거나, 제출물을 열어 항목별로 첨삭 · 메모를 달 수 있습니다.</li>
       <li>첨삭 화면 맨 아래에 <b>평가(총평)</b> 입력칸이 있고, <b>[피드백 전달]</b>을 누르면 학생에게 알림이 가며 자동으로 제출함으로 돌아옵니다.</li>
