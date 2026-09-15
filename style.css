@@ -1003,6 +1003,11 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
 .sb-size-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;min-width:240px}
 .sb-size-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px}
 .sb-size-btn .hint{margin:0}
+/* 2026-09-15: 프리사이즈(세로 직접 입력) 줄 */
+.sb-size-free{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.sb-size-free .hint{margin:0}
+.sb-size-free-row{display:flex;align-items:center;gap:6px;margin-top:4px}
+.sb-size-free-input{width:96px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit}
 
 /* ===== 그리기 도구 (2026-09-14 개편) =====
    콘티·캐릭터는 "페이지"(.draw-page)로, 교수 첨삭만 팝업(.draw-modal)으로 뜬다.

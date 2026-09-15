@@ -420,7 +420,7 @@ function fillWriteDoc(wd){
     const backgrounds=Array.isArray(x.backgrounds)?x.backgrounds.filter(s=>typeof s==="string"&&s.trim()):[];
     const characters=Array.isArray(x.characters)?x.characters.filter(s=>typeof s==="string"&&s.trim()):[];
     const storyboard=(x.storyboard && typeof x.storyboard==="object" && x.storyboard.key)
-      ? {key:String(x.storyboard.key), size:(["large","medium","small"].includes(x.storyboard.size)?x.storyboard.size:"medium")}
+      ? {key:String(x.storyboard.key), size:sbNormalizeSize(x.storyboard.size)}
       : null;
     return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items, groupId, backgrounds, characters, storyboard};
   }) : []);
@@ -3880,16 +3880,49 @@ function importStory(e){
 
 /* ===== 🖼 콘티제작 (글쓰기 탭의 장면 블록과 행 단위로 연동) ===== */
 
+/* (2026-09-15) 칸 크기를 웹툰 원고 실치수로 바꿨다. 가로는 모두 690px 고정이고 세로만 다르다.
+   예전에는 캔버스를 350px로 만들고 화면 문구만 2배로 적었는데, 이제는 캔버스 해상도 자체가
+   아래 숫자 그대로다(= 표시 배율 1). */
 const SB_SIZES = {
-  large: {w:350, h:500, label:"큰 칸"},
-  medium:{w:350, h:350, label:"중간 칸"},
-  small: {w:350, h:250, label:"작은 칸"}
+  large: {w:690, h:1500, label:"큰 칸"},
+  medium:{w:690, h:750,  label:"중간 칸"},
+  small: {w:690, h:500,  label:"작은 칸"}
 };
-/* (2026-09-14) 화면에 적어 주는 칸 크기는 실제 캔버스의 2배로 표시한다(웹툰 원고 기준 치수 안내용).
-   캔버스·저장 해상도는 위 SB_SIZES 그대로이고, 여기서는 "표시 문구"만 2배로 만든다. */
-const SB_SIZE_LABEL_SCALE = 2;
+/* 프리사이즈 — 가로 690px 고정, 세로만 사용자가 정한다(최대 3000px).
+   저장되는 크기 값은 "free:1200" 꼴의 문자열이라 기존 3종("large"/"medium"/"small")과 섞이지 않는다. */
+const SB_FREE_W=690, SB_FREE_MIN_H=200, SB_FREE_MAX_H=3000, SB_FREE_DEFAULT_H=1000;
+const SB_SIZE_LABEL_SCALE = 1;
+function sbFreeKey(h){
+  let n=Math.round(Number(h)||0);
+  if(!(n>0)) n=SB_FREE_DEFAULT_H;
+  n=Math.min(SB_FREE_MAX_H, Math.max(SB_FREE_MIN_H, n));
+  return "free:"+n;
+}
+/* 크기 값(문자열) → {w,h,label}. 정해진 3종이 아니면 프리사이즈로 풀어 읽고, 그것도 아니면 중간 칸. */
+function sbSizeOf(key){
+  if(SB_SIZES[key]) return SB_SIZES[key];
+  const m=/^free:(\d+)$/.exec(String(key||""));
+  if(m){
+    const h=Math.min(SB_FREE_MAX_H, Math.max(SB_FREE_MIN_H, parseInt(m[1],10)||SB_FREE_DEFAULT_H));
+    return {w:SB_FREE_W, h:h, label:"프리사이즈"};
+  }
+  return SB_SIZES.medium;
+}
+function sbNormalizeSize(key){
+  if(SB_SIZES[key]) return key;
+  const m=/^free:(\d+)$/.exec(String(key||""));
+  return m ? sbFreeKey(m[1]) : "medium";
+}
 function sbSizeText(s){
   return `가로 ${s.w*SB_SIZE_LABEL_SCALE} · 세로 ${s.h*SB_SIZE_LABEL_SCALE}px`;
+}
+/* 화면 미리보기 배율 — 실제 캔버스가 690×최대 3000px이라 그대로 걸면 너무 크다.
+   기본 절반으로 줄이고, 아주 긴 프리사이즈는 세로 900px 안쪽으로 더 줄인다. */
+function sbThumbScale(s){ return Math.min(0.5, 900/Math.max(1, s.h)); }
+function sbThumbStyle(img, s){
+  const k=sbThumbScale(s);
+  img.style.width=Math.round(s.w*k)+"px";
+  img.style.height=Math.round(s.h*k)+"px";
 }
 
 function rStoryboard(){
@@ -3969,11 +4002,11 @@ function storyboardRow(bl, no, dlgNo){
 function storyboardSlot(bl){
   const wrap=document.createElement("div"); wrap.className="sb-slot";
   if(bl.storyboard && bl.storyboard.key){
-    const sz=SB_SIZES[bl.storyboard.size]||SB_SIZES.medium;
+    const sz=sbSizeOf(bl.storyboard.size);
     const tw=document.createElement("div"); tw.className="sb-thumb-wrap";
     const img=document.createElement("img");
     img.src="/api/storyboard-image?key="+encodeURIComponent(bl.storyboard.key);
-    img.style.width=sz.w+"px"; img.style.height=sz.h+"px";
+    sbThumbStyle(img, sz);
     img.alt="콘티";
     tw.appendChild(img);
     const actions=document.createElement("div"); actions.className="sb-thumb-actions";
@@ -4085,7 +4118,7 @@ function compressImageToLimit(img, maxBytes, cb){
 }
 /* 콘티 칸별 업로드 용량 상한 — 큰 칸은 세로가 길어 선이 많이 들어가므로 여유를 더 준다.
    (2026-09-09) 서버(functions/api/storyboard-image.js)의 상한 600KB보다 반드시 작아야 한다. */
-function sbMaxBytes(sizeKey){ return sizeKey==="large" ? 500*1024 : 300*1024; }
+function sbMaxBytes(sizeKey){ const s=sbSizeOf(sizeKey); return (s.w*s.h)>=600000 ? 500*1024 : 300*1024; }
 
 /* 캔버스(직접 그리기) 압축 — 화질을 단계적으로 낮추고, 그래도 모자라면 그림 크기(해상도)까지 줄여
    maxBytes 이하로 맞춘다.
@@ -4186,7 +4219,7 @@ async function saveStoryboardDrawing(bl, flatBlob, layerBlobs, size){
     return false;
   }
   const oldKeys=sbAllKeys(target.storyboard);
-  target.storyboard={key, size:size||"medium", layers:layerKeys};
+  target.storyboard={key, size:sbNormalizeSize(size), layers:layerKeys};
   save();
   /* 0.6초 디바운스를 기다리지 않고 바로 서버에 올린다 — 저장 직후 창을 닫아도 유실되지 않게 */
   if(typeof forceSaveToServer==="function") forceSaveToServer();
@@ -4224,6 +4257,30 @@ function openSizePicker(bl, onPick){
     b.onclick=()=>{ document.body.removeChild(overlay); onPick(k); };
     list.appendChild(b);
   });
+  /* (2026-09-15) 프리사이즈 — 가로는 690px 그대로, 세로만 직접 적는다(200~3000px) */
+  const free=document.createElement("div"); free.className="sb-size-free";
+  const freeTitle=document.createElement("b"); freeTitle.textContent="프리사이즈";
+  const freeHint=document.createElement("span"); freeHint.className="hint";
+  freeHint.textContent=`가로 ${SB_FREE_W}px 고정 · 세로는 직접 (${SB_FREE_MIN_H}~${SB_FREE_MAX_H}px)`;
+  const freeRow=document.createElement("div"); freeRow.className="sb-size-free-row";
+  const freeInput=document.createElement("input");
+  freeInput.type="number"; freeInput.min=String(SB_FREE_MIN_H); freeInput.max=String(SB_FREE_MAX_H);
+  freeInput.step="10"; freeInput.value=String(SB_FREE_DEFAULT_H); freeInput.className="sb-size-free-input";
+  const freeUnit=document.createElement("span"); freeUnit.className="hint"; freeUnit.textContent="px";
+  const freeBtn=document.createElement("button"); freeBtn.type="button"; freeBtn.className="btn sm";
+  freeBtn.textContent="이 크기로";
+  const pickFree=()=>{
+    const raw=Number(freeInput.value);
+    if(!(raw>=SB_FREE_MIN_H && raw<=SB_FREE_MAX_H)){
+      alert(`세로는 ${SB_FREE_MIN_H}px부터 ${SB_FREE_MAX_H}px까지 정할 수 있습니다.`); return;
+    }
+    document.body.removeChild(overlay); onPick(sbFreeKey(raw));
+  };
+  freeBtn.onclick=pickFree;
+  freeInput.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); pickFree(); } };
+  freeRow.append(freeInput, freeUnit, freeBtn);
+  free.append(freeTitle, freeHint, freeRow);
+  list.appendChild(free);
   box.appendChild(list);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
@@ -5054,7 +5111,7 @@ function openDrawPage(bl, sizeKey){
        (여기서 되돌려 보내면 버튼이 아무 반응 없는 것처럼 보인다) */
     const cur=allWriteBlocksOrdered().find(x=>x.id===blId) || bl;
     if(!cur){ alert("이 콘티 칸을 찾지 못했습니다. 화면을 새로고침(F5)해 주세요."); closeDrawPage(); return; }
-    const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
+    const sz=sbSizeOf(sizeKey);
     buildDrawPageShell(host, {
       title:"콘티 그리기 — "+sz.label+" ("+sbSizeText(sz)+")",
       hint:"저장하면 지금 화면에 보이는 그대로 한 장으로 합쳐집니다. 숨긴 층은 그림에서 빠지지만 지워지지는 않아서, 다음에 다시 열면 층이 그대로 살아 있습니다.",
@@ -5123,7 +5180,7 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   overlay.appendChild(box); document.body.appendChild(overlay);
 
   let fbEd=null;
-  const sz=SB_SIZES[sizeKey] || SB_SIZES.medium;
+  const sz=sbSizeOf(sizeKey);
   const probe=new Image();
   probe.onload=()=>build(probe.naturalWidth||sz.w, probe.naturalHeight||sz.h);
   probe.onerror=()=>build(sz.w, sz.h);
@@ -5617,7 +5674,7 @@ async function buildSubmissionData(type){
         : {type:"text", char:"", text:it.text.trim()});
       if(!(bl.storyboard && bl.storyboard.key)) continue;
       const key=await duplicateStoryboardImage(bl.storyboard.key);
-      if(key) out.push({id:bl.id, no:rowNo, title:bl.title||"", key, size:(bl.storyboard.size||"medium"), items});
+      if(key) out.push({id:bl.id, no:rowNo, title:bl.title||"", key, size:sbNormalizeSize(bl.storyboard.size), items});
     }
     return out;
   }
@@ -6780,7 +6837,7 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
      콘티 화면과 같은 방식으로 위에서부터 이어 센다. */
   const counter={row:0, dlg:0};
   dataBlocks.forEach(b=>{
-    const sz=SB_SIZES[b.size]||SB_SIZES.medium;
+    const sz=sbSizeOf(b.size);
     const fb=fbMap[b.id];
     const rowNo=b.no || (++counter.row);
     counter.row=rowNo;
@@ -6792,7 +6849,7 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     /* 지금 피드백을 그릴 기준이 되는 그림(첨삭 전이면 학생이 낸 원본, 뒤면 지금까지의 피드백본) */
     const baseKey = fb ? fb.afterKey : b.key;
     const startDraw = opts.editable ? ()=>{
-      openStoryboardFeedbackDrawModal(b.title||"", b.size||"medium", baseKey, async (newKey)=>{
+      openStoryboardFeedbackDrawModal(b.title||"", sbNormalizeSize(b.size), baseKey, async (newKey)=>{
         const r=await opts.onFeedback(b.id, baseKey, newKey);
         if(!r || !r.ok) alert((r&&r.body&&r.body.error)||"저장에 실패했습니다.");
       });
@@ -6804,7 +6861,7 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
       const cap=document.createElement("span"); cap.className="sb-fb-imglabel"; cap.textContent=label;
       const img=document.createElement("img");
       img.src="/api/storyboard-image?key="+encodeURIComponent(key);
-      img.style.width=sz.w+"px"; img.style.height=sz.h+"px"; img.alt=label;
+      sbThumbStyle(img, sz); img.alt=label;
       img.classList.add("sb-fb-img-zoom");
       img.title=(drawable && startDraw) ? "클릭하면 크게 보고 바로 피드백을 그릴 수 있습니다" : "클릭하면 크게 볼 수 있습니다";
       img.onclick=()=>openStoryboardImageViewer(
