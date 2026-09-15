@@ -2,6 +2,41 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-09-15 (3) — 과제 관리: 자동 새로고침 + [새로고침] 버튼
+
+교수의 **과제 목록**(수업 상세 → 과제 관리 탭)과 **제출함** 두 화면에 넣었다.
+학생이 새로 제출해도 화면이 그대로여서 탭을 다시 눌러야 보이던 문제를 없앤 것.
+
+### 1) 공통 도우미 (`app.js`)
+- `PROF_AUTO_SEC=20` · `PROF_AUTO_KEY="storyhelper_prof_autorefresh"`
+- `profAutoStart(reload)` / `profAutoStop()` — 타이머는 **언제나 하나만** 돈다.
+  `render()`가 `app.innerHTML=""` 직후 `profAutoStop()`을 부르고, 목록을 그린 화면이
+  `bindProfRefreshBar()`로 다시 켠다. (다른 탭으로 옮겨가도 타이머가 남지 않음)
+- 건너뛰는 경우: 다른 브라우저 탭을 보고 있을 때(`document.hidden`),
+  팝업이 열려 있을 때(`.plot-modal-overlay` / `.draw-modal-overlay`).
+- `profRefreshBarHtml(id)` / `bindProfRefreshBar(root,id,reload)` / `profRefreshStamp(id)`
+  — [새로고침] 버튼 + [자동 (20초)] 체크 + "hh:mm:ss 기준" 한 줄. 두 화면이 같은 모양을 쓴다.
+  [자동] 체크 상태는 localStorage에 기억.
+- `ICONS.refresh` 추가.
+
+### 2) 제출함 화면을 껍데기 / 내용으로 분리
+- `rProfAssignmentFolder(id)`(껍데기, 더 이상 async 아님) → `loadProfAssignmentFolder(c,id)`(내용).
+- Why: 껍데기 함수를 다시 부르면 `app.appendChild(c)` 때문에 카드가 하나 더 붙는다.
+  새로고침은 반드시 내용 함수만 부를 것.
+- PDF 일괄 다운로드 중에는 버튼을 건드리지 않도록 `btn.dataset.busy` 표시를 넣었다
+  (자동 새로고침이 "PDF 생성 중… (3/12)" 표시를 지우고 버튼을 다시 켜 버리던 문제 방지).
+
+### 3) 내용이 같으면 다시 그리지 않음
+- `profAssignSig` / `assignFolderSig`에 직전 목록 HTML을 기억해 두고 같으면 건너뛴다.
+- Why: 20초마다 같은 목록을 새로 그리면 마침 누르려던 버튼이 사라졌다 생기며 클릭이 헛나간다.
+- 화면을 새로 만들 때(`renderClassAssignmentsTab` / `rProfAssignmentFolder`) `""`로 초기화.
+
+### 4) `style.css`
+- `.refresh-bar`(`margin-left:auto`로 버튼 줄 오른쪽 끝) / `.refresh-auto` / `.refresh-stamp`,
+  좁은 화면에서는 `margin-left:0`.
+
+### 5) 사용법(`rLearn`) 교수 항목에 한 줄 추가
+
 ## 2026-09-15 (2) — 대사만 출력: 줄 간격 1줄 · 맑은 고딕 10pt
 
 `app.js` `exportDialogueOnly()` 수정.

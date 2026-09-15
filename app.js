@@ -38,6 +38,7 @@ const ICONS = {
   image:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
   pencil:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
   bucket:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5L19 13a2 2 0 0 1 0 2.8l-4.2 4.2a2 2 0 0 1-2.8 0L3.5 11.5z"/><path d="M7 6L4.5 3.5"/><path d="M20.5 16.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z"/></svg>',
+  refresh:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
   eraser:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a2 2 0 0 1 0-2.8l9.6-9.6a2 2 0 0 1 2.8 0l5.7 5.7a2 2 0 0 1 0 2.8L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>'
 };
 function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
@@ -675,6 +676,7 @@ function render(){
     }
     refreshProjSelect();
     app.innerHTML="";
+    profAutoStop();  // 2026-09-15: 화면이 바뀌면 과제 관리 자동 새로고침 타이머를 끈다(그 화면이 다시 켠다)
     // 2026-08-20: 캐릭터 탭은 상세 편집 화면(charDetailFor 있음)일 때만 넓게 표시됐는데,
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
@@ -6339,23 +6341,77 @@ function openAddClassStudentModal(classId, available){
     else alert((r.body&&r.body.error)||"추가에 실패했습니다.");
   };
 }
+/* ===== 과제 관리 자동 새로고침 (2026-09-15) =====
+   과제 목록·제출함은 한 번 그리면 그대로여서, 학생이 새로 제출해도 탭을 다시 눌러야 보였다.
+   화면을 통째로 다시 그리면(render()) 스크롤이 맨 위로 튀고 열어둔 팝업이 닫히므로, 목록 부분만
+   다시 불러온다. 지켜야 할 점:
+   - 타이머는 언제나 하나만 돈다. render()가 화면을 지울 때 profAutoStop()으로 끄고, 목록을 그린
+     화면이 bindProfRefreshBar()로 다시 켠다(다른 탭으로 옮겨가도 타이머가 남지 않는다).
+   - 다른 브라우저 탭을 보고 있거나(document.hidden) 팝업(.plot-modal-overlay 등)이 열려 있으면
+     그 차례는 건너뛴다 — 입력하던 내용이 사라지거나 팝업 뒤 목록이 흔들리는 것을 막기 위함.
+   - [자동] 체크 상태는 localStorage에 기억한다. */
+const PROF_AUTO_SEC=20;
+const PROF_AUTO_KEY="storyhelper_prof_autorefresh";
+let profAutoTimer=null;
+/* 자동 새로고침이 내용이 똑같은 목록을 20초마다 새로 그리면, 마침 누르려던 버튼이 사라졌다 생기며
+   클릭이 헛나간다. 직전에 그린 HTML을 기억해 두고 같으면 건너뛴다(화면을 새로 만들 때 ""로 초기화). */
+let profAssignSig="", assignFolderSig="";
+function profAutoOn(){ try{ return localStorage.getItem(PROF_AUTO_KEY)!=="0"; }catch(e){ return true; } }
+function profAutoSet(on){ try{ localStorage.setItem(PROF_AUTO_KEY, on?"1":"0"); }catch(e){} }
+function profAutoStop(){ if(profAutoTimer){ clearInterval(profAutoTimer); profAutoTimer=null; } }
+function profAutoStart(reload){
+  profAutoStop();
+  if(!profAutoOn()) return;
+  profAutoTimer=setInterval(()=>{
+    if(document.hidden) return;
+    if(document.querySelector(".plot-modal-overlay, .draw-modal-overlay")) return;
+    reload();
+  }, PROF_AUTO_SEC*1000);
+}
+/* [새로고침] 버튼 + [자동] 체크 + 마지막 갱신 시각 — 과제 목록·제출함이 같은 모양을 쓴다 */
+function profRefreshBarHtml(id){
+  return `<span class="refresh-bar">
+    <button type="button" class="btn ghost sm" id="${id}Btn" title="지금 다시 불러옵니다">${ICONS.refresh} 새로고침</button>
+    <label class="refresh-auto" title="${PROF_AUTO_SEC}초마다 저절로 다시 불러옵니다"><input type="checkbox" id="${id}Auto"${profAutoOn()?" checked":""}> 자동 (${PROF_AUTO_SEC}초)</label>
+    <span class="hint refresh-stamp" id="${id}Stamp"></span>
+  </span>`;
+}
+function bindProfRefreshBar(root, id, reload){
+  const btn=root.querySelector("#"+id+"Btn"), chk=root.querySelector("#"+id+"Auto");
+  if(btn) btn.onclick=()=>reload();
+  if(chk) chk.onchange=()=>{ profAutoSet(chk.checked); if(chk.checked) profAutoStart(reload); else profAutoStop(); };
+  profAutoStart(reload);
+}
+/* 목록을 다 그린 뒤 "hh:mm:ss 기준"을 찍는다(자동으로 갱신됐는지 눈으로 확인할 수 있게) */
+function profRefreshStamp(id){
+  const el=document.getElementById(id+"Stamp"); if(!el) return;
+  const d=new Date(), p=n=>String(n).padStart(2,"0");
+  el.textContent=`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} 기준`;
+}
+
 /* 수업 상세 — "과제 관리" 탭: 기존 과제 관리 페이지와 동일하되 classId로 스코프가 좁혀진다
    (classId==="none"이면 수업 미지정 과제만) */
 function renderClassAssignmentsTab(container, classId){
   container.innerHTML=`<p class="hint">과제를 등록하면 아래에 폴더 형태로 표시됩니다. 폴더를 클릭하면 학생 제출함이 열립니다. 스위치를 끄면 학생이 더 이상 제출할 수 없습니다.</p>
-    <button class="btn" id="profNewAssignBtn">${ICONS.plus} 과제 등록</button>
+    <div class="assign-folder-actions">
+      <button class="btn" id="profNewAssignBtn">${ICONS.plus} 과제 등록</button>
+      ${profRefreshBarHtml("profAssignRefresh")}
+    </div>
     <div id="profAssignWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>`;
   container.querySelector("#profNewAssignBtn").onclick=()=>openNewAssignmentModal(classId);
+  profAssignSig="";
+  bindProfRefreshBar(container, "profAssignRefresh", ()=>renderProfAssignList(classId));
   renderProfAssignList(classId);
 }
 async function renderProfAssignList(classId){
   const wrap=document.getElementById("profAssignWrap"); if(!wrap) return;
   const res=await apiFetch("professor-assignments?classId="+encodeURIComponent(classId));
   if(!wrap.isConnected) return;
+  profRefreshStamp("profAssignRefresh");
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const list=res.body.assignments||[];
-  if(!list.length){ wrap.innerHTML=`<p class="hint">등록된 과제가 없습니다.</p>`; return; }
-  wrap.innerHTML=list.map(a=>`<div class="assign-folder" data-id="${a.id}">
+  if(!list.length){ wrap.innerHTML=`<p class="hint">등록된 과제가 없습니다.</p>`; profAssignSig=""; return; }
+  const listHtml=list.map(a=>`<div class="assign-folder" data-id="${a.id}">
     <div class="assign-folder-top">
       <span class="assign-folder-title">${ICONS.book} ${esc(a.title)}</span>
       <div class="assign-folder-controls">
@@ -6369,6 +6425,9 @@ async function renderProfAssignList(classId){
     </div>
     <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.due_at?("제출기한 "+fmtDate(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
   </div>`).join("");
+  if(profAssignSig===listHtml) return;   // 바뀐 게 없으면 그대로 둔다
+  profAssignSig=listHtml;
+  wrap.innerHTML=listHtml;
   /* 2026-08-20 보안 점검 후 수정: 아래 stopPropagation을 예전엔 HTML 속성(onclick="...")으로 직접
      넣었는데, 그렇게 하면 XSS를 원천 차단하는 CSP(script-src에서 인라인 스크립트 금지)를 걸 수
      없어서 addEventListener 방식으로 바꿨다 — 동작은 동일하다. */
@@ -6487,37 +6546,48 @@ function openAssignmentModal(classId, assignment){
 }
 
 /* 과제 폴더 — 제출한 학생 목록 (교수). "과제 관리" 탭 안에서 페이지처럼 전환(팝업 아님) */
-async function rProfAssignmentFolder(id){
+function rProfAssignmentFolder(id){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<div class="assign-folder-actions">
       <button class="btn ghost sm" id="assignBackBtn">${ICONS.close} 과제 목록으로</button>
       <button class="btn ghost sm" id="assignPdfBtn" disabled>${ICONS.download} PDF 일괄 다운로드</button>
+      ${profRefreshBarHtml("assignFolderRefresh")}
     </div>
     <h2 id="assignFolderTitle">${ICONS.book} 불러오는 중…</h2>
     <div id="assignFolderWrap"><p class="hint">불러오는 중…</p></div>`;
   app.appendChild(c);
   c.querySelector("#assignBackBtn").onclick=()=>{ profAssignFolderId=null; render(); };
-
+  assignFolderSig="";
+  bindProfRefreshBar(c, "assignFolderRefresh", ()=>loadProfAssignmentFolder(c, id));
+  loadProfAssignmentFolder(c, id);
+}
+/* 제출함 "내용"만 다시 불러오기 — [새로고침] 버튼과 자동 새로고침이 이 함수를 부른다.
+   화면 껍데기를 만드는 rProfAssignmentFolder를 다시 부르면 카드가 하나 더 붙기 때문에(2026-09-14
+   같은 버그를 이미 겪음) 목록을 채우는 부분만 이렇게 떼어 두었다. */
+async function loadProfAssignmentFolder(c, id){
   const res=await apiFetch("professor-assignment?id="+id);
   if(!c.isConnected) return;
+  profRefreshStamp("assignFolderRefresh");
   const titleEl=document.getElementById("assignFolderTitle");
   const wrap=document.getElementById("assignFolderWrap");
   const pdfBtn=c.querySelector("#assignPdfBtn");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const assignment=res.body.assignment, submissions=res.body.submissions||[];
   if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(assignment.title)} — 제출함`;
-  if(pdfBtn){
+  /* PDF 일괄 다운로드가 돌고 있는 중이면(dataset.busy) 버튼을 건드리지 않는다 —
+     자동 새로고침이 진행 표시를 지우고 버튼을 다시 켜 버리는 것을 막는다 */
+  if(pdfBtn && !pdfBtn.dataset.busy){
     pdfBtn.disabled=!submissions.length;
     pdfBtn.onclick=()=>bulkDownloadAssignmentPdfs(assignment.title, submissions, pdfBtn);
   }
-  if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; return; }
+  if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; assignFolderSig=""; return; }
   /* 2026-09-15: 재제출 차수 — 서버가 학생(·종류)당 한 줄(최신 차수)만 내려주고, 이전 차수는
      s.rounds 목록으로 함께 온다. 예전에는 재제출할 때마다 줄이 늘어 같은 학생의 옛 제출물과
      새 제출물이 섞여 보였다. */
   /* 2026-09-15(2): 줄마다 드롭다운을 놓으니 목록이 가로로 너무 길어져서, 작은 [이전 버전] 버튼
      하나로 합치고 목록은 팝업에서 고르게 했다. 버튼에 필요한 자료는 아래 map을 도는 동안 모아둔다. */
   const historyMap={};
-  wrap.innerHTML=`<div class="submit-assign-list submit-assign-list--compact">${submissions.map(s=>{
+  const listHtml=`<div class="submit-assign-list submit-assign-list--compact">${submissions.map(s=>{
     /* version_count는 버전 테이블 기준(2026-08-20 이 기능 이후 저장분만) — 그 이전에 저장된 첨삭 1건은
        버전 테이블엔 없지만 has_feedback만으로도 "버전 1" 하나로 취급해 보여준다(서버 GET과 동일한 규칙) */
     const effCount = s.version_count || (s.has_feedback?1:0);
@@ -6540,6 +6610,9 @@ async function rProfAssignmentFolder(id){
       <button type="button" class="btn ghost sm submit-history-btn" data-id="${s.id}" title="이전 제출 차수와 지난 첨삭 버전을 골라 볼 수 있습니다">${ICONS.book} 이전 버전</button>`:""}
     </div>`;
   }).join("")}</div>`;
+  if(assignFolderSig===listHtml) return;   // 바뀐 게 없으면 그대로 둔다
+  assignFolderSig=listHtml;
+  wrap.innerHTML=listHtml;
   bindSubmitCheckBtns(wrap);
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); profReviewVersion=null; render(); };
@@ -6672,7 +6745,7 @@ async function submissionToPdfBlob(sub){
 async function bulkDownloadAssignmentPdfs(assignmentTitle, submissionList, btn){
   if(!submissionList||!submissionList.length){ alert("제출된 과제가 없습니다."); return; }
   const origText=btn.textContent;
-  btn.disabled=true;
+  btn.disabled=true; btn.dataset.busy="1";
   try{
     btn.textContent="라이브러리를 불러오는 중…";
     await ensureBulkPdfLibs();
@@ -6706,7 +6779,7 @@ async function bulkDownloadAssignmentPdfs(assignmentTitle, submissionList, btn){
   }catch(e){
     alert("PDF 일괄 다운로드 중 오류가 발생했습니다: "+((e&&e.message)||e));
   }finally{
-    btn.disabled=false; btn.textContent=origText;
+    btn.disabled=false; btn.textContent=origText; delete btn.dataset.busy;
   }
 }
 
@@ -7657,6 +7730,7 @@ const GUIDE_SECTIONS=[
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티)</b>와 제출기한을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
+      <li><b>과제 목록</b>과 <b>제출함</b>은 20초마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li>학생이 제출하면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 제출함에서 <b>[과제 확인]</b>만 눌러 읽었다는 표시를 남기거나, 제출물을 열어 항목별로 첨삭 · 메모를 달 수 있습니다.</li>
       <li>첨삭 화면 맨 아래에 <b>평가(총평)</b> 입력칸이 있고, <b>[피드백 전달]</b>을 누르면 학생에게 알림이 가며 자동으로 제출함으로 돌아옵니다.</li>
       <li>콘티 과제는 제출된 그림을 크게 열어 <b>그 위에 직접 그려</b> 피드백을 줄 수 있습니다(학생 원본은 지워지지 않습니다).</li>
