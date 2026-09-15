@@ -1,4 +1,4 @@
-import { requireAuth, jsonResponse, nowSec, ensureAssignmentSchema } from "./_utils.js";
+import { requireAuth, jsonResponse, nowSec, ensureAssignmentSchema, ensureSubmissionSchema } from "./_utils.js";
 
 const VALID_TYPES = ["plan", "plot", "write", "character", "background", "event", "storyboard"];
 const TYPE_LABEL = { plan: "기획서", plot: "플롯", write: "글쓰기", character: "캐릭터 설정", background: "배경 설정", event: "사건 설정", storyboard: "콘티" };
@@ -13,6 +13,7 @@ export async function onRequestPost({ request, env }) {
   if (!auth) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
 
   await ensureAssignmentSchema(env);
+  await ensureSubmissionSchema(env);
 
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
@@ -61,37 +62,34 @@ export async function onRequestPost({ request, env }) {
   const projectName = (body.projectName || "").slice(0, 100);
   const dataJson = JSON.stringify(body.data);
 
-  /* 2026-09-14: 아직 교수의 첨삭이 하나도 없는 제출물이 남아 있으면, 새 줄을 쌓지 않고 그것을 최신
-     내용으로 덮어쓴다(= 재제출). 학생이 제출 직후 고쳐서 다시 내면 교수 제출함에 같은 과제가 여러 개
-     쌓여 어느 것이 최신인지 알기 어렵던 문제를 없앤다.
-     - 첨삭이 이미 저장됐거나(feedback) 학생에게 전달된(feedback_at) 제출물은 건드리지 않고 새로 쌓아
-       이력을 보존한다.
-     - 덮어쓰면 "교수 확인"도 다시 안 한 상태로 되돌려(checked_at=NULL) 교수 알림에 다시 뜨게 한다. */
-  let prev = null;
+  /* 2026-09-15: 재제출은 "차수"로 분리해서 쌓는다 — 이전 제출물을 덮어쓰지 않는다.
+     예전(2026-09-14~09-15)에는 첨삭 전 재제출이면 같은 줄을 덮어써서 이전에 낸 내용이 사라지고,
+     교수 제출함에서는 같은 학생의 제출물이 여러 줄로 흩어져 어느 것이 최신인지 섞여 보였다.
+     이제 제출할 때마다 submit_round(1차, 2차, …)를 붙여 새 줄로 저장하고, 교수·학생 화면은
+     학생당 최신 차수 하나만 보여주며 이전 차수는 드롭다운으로 따로 열어본다. */
+  let round = null;
   try {
-    prev = await env.DB.prepare(
-      "SELECT id FROM submissions WHERE assignment_id = ? AND student_id = ? AND type = ? " +
-      "AND feedback IS NULL AND feedback_at IS NULL ORDER BY id DESC LIMIT 1"
+    const r = await env.DB.prepare(
+      "SELECT MAX(submit_round) AS mx, COUNT(*) AS n FROM submissions " +
+      "WHERE assignment_id = ? AND student_id = ? AND type = ?"
     ).bind(assignmentId, auth.user.id, type).first();
-  } catch (e) { prev = null; }
+    // 차수가 아직 안 채워진(NULL) 옛 줄이 있어도 번호가 겹치지 않도록 줄 수와 큰 쪽을 쓴다
+    round = Math.max(Number((r && r.mx) || 0), Number((r && r.n) || 0)) + 1;
+  } catch (e) { round = null; }
 
-  if (prev && prev.id) {
+  if (round) {
     try {
-      await env.DB.prepare(
-        "UPDATE submissions SET project_name = ?, data = ?, submitted_at = ?, checked_at = NULL WHERE id = ?"
-      ).bind(projectName, dataJson, now, prev.id).run();
-    } catch (e) {
-      // checked_at 컬럼이 아직 없는 DB에서도 덮어쓰기 자체는 되도록
-      await env.DB.prepare(
-        "UPDATE submissions SET project_name = ?, data = ?, submitted_at = ? WHERE id = ?"
-      ).bind(projectName, dataJson, now, prev.id).run();
-    }
-    return jsonResponse({ ok: true, submissionId: prev.id, submittedAt: now, replaced: true });
+      const result = await env.DB.prepare(
+        "INSERT INTO submissions (assignment_id, student_id, type, project_name, data, submitted_at, submit_round) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).bind(assignmentId, auth.user.id, type, projectName, dataJson, now, round).run();
+      return jsonResponse({ ok: true, submissionId: result.meta.last_row_id, submittedAt: now, round, replaced: false });
+    } catch (e) { /* submit_round 컬럼이 아직 없는 DB — 아래 예전 방식으로 저장 */ }
   }
 
   const result = await env.DB.prepare(
     "INSERT INTO submissions (assignment_id, student_id, type, project_name, data, submitted_at) VALUES (?, ?, ?, ?, ?, ?)"
   ).bind(assignmentId, auth.user.id, type, projectName, dataJson, now).run();
 
-  return jsonResponse({ ok: true, submissionId: result.meta.last_row_id, submittedAt: now, replaced: false });
+  return jsonResponse({ ok: true, submissionId: result.meta.last_row_id, submittedAt: now, round: null, replaced: false });
 }

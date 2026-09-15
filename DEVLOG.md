@@ -2537,3 +2537,48 @@ Chromium(Playwright)으로 실제 획을 긋고 확인: 층별 그리기·마커
 - `style.css`: `#reviewEvalBox .review-eval{margin:16px 0 0}` — 첨삭 목록과의 간격.
   (학생 피드백 화면의 `.review-eval`은 예전처럼 맨 위 그대로)
 
+## 2026-09-15 (2) — 재제출을 "제출 차수"로 분리 저장 (이전 제출과 섞이던 문제)
+
+증상: 학생이 같은 과제에 다시 제출하면 교수 제출함/첨삭 화면에서 이전 제출 내용과 섞여 보였다.
+원인은 두 가지였다. (1) 2026-09-14에 넣은 "첨삭 전 재제출 = 덮어쓰기"가 이전에 낸 내용을 지웠고,
+(2) 첨삭이 이미 있으면 새 줄로 쌓여 같은 학생 제출물이 여러 줄로 흩어져 어느 것이 최신인지
+구분되지 않았다.
+
+방침: **한 과제에 한 학생당 한 줄만 보이되, 여러 번 내면 1차·2차…로 나눠 보관**하고 최신 차수를
+보여준다. 이전 차수는 드롭다운("제출 차수")에서 골라 그대로 열어볼 수 있다(첨삭 포함).
+
+### 1) DB — `submissions.submit_round`
+- `functions/api/_utils.js` `ensureSubmissionSchema()`: `ALTER TABLE submissions ADD COLUMN submit_round INTEGER`
+  + 기존 줄에 제출 순서대로 차수를 채우는 `UPDATE`(submit_round IS NULL 인 줄만 → 여러 번 실행해도 안전)
+  + `idx_submissions_round(assignment_id, student_id, type, submit_round)`.
+- `schema.sql`(새 DB 정의)과 `schema-ensure.sql`(운영 DB용 마이그레이션)에도 같은 내용 추가.
+
+### 2) 제출 — 덮어쓰기 폐지
+- `functions/api/student-submit.js`: 2026-09-14의 덮어쓰기(UPDATE) 분기를 삭제하고, 늘
+  `submit_round = MAX(기존 차수, 줄 수) + 1` 로 새 줄을 INSERT. 응답에 `round` 추가.
+  (컬럼이 없는 DB에서는 예전처럼 차수 없이 INSERT — 화면은 줄 순서로 차수를 매긴다)
+- `app.js` 제출 완료 알림: "N차 제출로 저장되었습니다 / 이전에 낸 내용은 지워지지 않습니다".
+  제출 모달의 "이미 N회 제출함"도 "N차까지 제출함"으로.
+
+### 3) 교수 화면 — 학생당 1줄 + 차수 드롭다운
+- `functions/api/professor-assignment.js` GET: 제출물을 (학생, 종류)로 묶어 **최신 차수 한 줄만**
+  내려주고, 같은 묶음의 전체 차수를 `rounds[{id, round, submitted_at, has_feedback, checked_at}]`로
+  함께 보낸다. `round`, `round_count`도 추가. 컬럼이 없는 DB용 폴백 쿼리 2단.
+- `app.js` 제출함 목록: `2차 제출` 배지 + `.submit-round-select`(고르면 그 차수의 제출물을 연다).
+  기존 첨삭 버전 드롭다운(`.submit-version-select`)은 그대로 — **제출 차수(학생이 낸 횟수)** 와
+  **첨삭 버전(교수가 저장한 횟수)** 은 다른 개념이라 안내 문구에 "첨삭 버전"으로 명시.
+- `functions/api/professor-submission.js` GET: `round`, `rounds` 동봉(공용 함수
+  `readSubmitRounds()`는 `_utils.js`에 둠). 첨삭 화면 제목에 배지, 위쪽에 "제출 차수" 드롭다운.
+
+### 4) 학생 화면
+- `functions/api/student-submission.js` GET에도 `round`, `rounds` 추가.
+  `functions/api/student-assignments.js`의 내 제출 목록에 `submit_round` 포함(폴백 3단).
+- `app.js` [피드백 보기] 목록: 같은 과제는 **최신 차수 한 줄만** 표시(+배지). 상세 화면에는
+  제목 아래 "제출 차수" 드롭다운을 두어 이전 차수의 제출물과 첨삭을 그대로 열어볼 수 있다.
+
+### 5) 알림
+- `functions/api/notifications.js`(교수): 같은 (과제, 학생, 종류)에서 **최신 차수만** 미확인으로 센다
+  (이전 차수까지 세면 제출 건수가 부풀려짐).
+
+### 6) style.css
+- `.assign-type-badge.round-badge`(테두리형 차수 배지), `.submit-round-select`.

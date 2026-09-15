@@ -612,6 +612,10 @@ body.logged-in .login-overlay { display: none; }
 .submit-already { font-size: 12px; color: var(--accent); font-weight: 600; }
 .assign-type-badge { display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent);
   background: var(--accent2); border-radius: 999px; padding: 2px 9px; }
+/* 2026-09-15: 재제출 차수 배지("2차 제출") — 과제 종류 배지와 구분되게 테두리만 있는 모양 */
+.assign-type-badge.round-badge { color: #b3503a; background: transparent; border: 1px solid #e0b3a6; }
+.submit-round-select { font-size: 12px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; max-width: 210px; }
 
 /* 교수 — 과제 폴더 제출함 목록의 각 줄: 제출물 버튼 + (버전이 2개 이상이면) 작은 버전 드롭다운 */
 /* 2026-09-11: flex-wrap 추가 — 좁은 화면에서는 [확인] 버튼과 버전 드롭다운이 아랫줄로 내려가고,

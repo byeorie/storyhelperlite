@@ -69,16 +69,25 @@ export async function onRequestGet({ request, env }) {
   let mine = [];
   try {
     const r = await env.DB.prepare(
-      "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at, checked_at " +
+      "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at, checked_at, submit_round " +
       "FROM submissions WHERE student_id = ? ORDER BY submitted_at DESC"
     ).bind(auth.user.id).all();
     mine = r.results || [];
   } catch (e) {
-    const r = await env.DB.prepare(
-      "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at " +
-      "FROM submissions WHERE student_id = ? ORDER BY submitted_at DESC"
-    ).bind(auth.user.id).all();
-    mine = r.results || [];
+    try {
+      // submit_round 컬럼이 아직 없는 DB
+      const r = await env.DB.prepare(
+        "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at, checked_at " +
+        "FROM submissions WHERE student_id = ? ORDER BY submitted_at DESC"
+      ).bind(auth.user.id).all();
+      mine = r.results || [];
+    } catch (e2) {
+      const r = await env.DB.prepare(
+        "SELECT id, assignment_id, type, submitted_at, (feedback IS NOT NULL) AS has_feedback, feedback_at " +
+        "FROM submissions WHERE student_id = ? ORDER BY submitted_at DESC"
+      ).bind(auth.user.id).all();
+      mine = r.results || [];
+    }
   }
 
   const byAssignment = {};

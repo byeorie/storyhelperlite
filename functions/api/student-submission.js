@@ -1,4 +1,4 @@
-import { requireAuth, jsonResponse, ensureSubmissionSchema } from "./_utils.js";
+import { requireAuth, jsonResponse, ensureSubmissionSchema, readSubmitRounds } from "./_utils.js";
 
 /* GET /api/student-submission?id=123[&version=N] — 내가 제출한 것의 상세(교수 첨삭 포함) — 본인 것만.
    버전별 저장(2026-08-20 추가): version을 안 주면 최신 버전, 주면 그 버전(과거 기록)을 보여준다.
@@ -15,10 +15,15 @@ export async function onRequestGet({ request, env }) {
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
   const wantVersion = Number(url.searchParams.get("version")) || null;
 
-  const row = await env.DB.prepare(
-    "SELECT s.id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, s.evaluation, a.title AS assignment_title " +
-    "FROM submissions s JOIN assignments a ON a.id = s.assignment_id WHERE s.id = ? AND s.student_id = ?"
-  ).bind(id, auth.user.id).first();
+  const DETAIL =
+    "SELECT s.id, s.assignment_id, s.student_id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, s.evaluation, s.submit_round, a.title AS assignment_title " +
+    "FROM submissions s JOIN assignments a ON a.id = s.assignment_id WHERE s.id = ? AND s.student_id = ?";
+  let row;
+  try {
+    row = await env.DB.prepare(DETAIL).bind(id, auth.user.id).first();
+  } catch (e) {
+    row = await env.DB.prepare(DETAIL.replace("s.evaluation, s.submit_round,", "s.evaluation,")).bind(id, auth.user.id).first();
+  }
   if (!row) return jsonResponse({ error: "제출물을 찾을 수 없습니다." }, 404);
 
   /* 2026-09-11: 학생이 이 첨삭을 열어봤음을 기록 — 오른쪽 위 알림 토스트가 사라지는 기준이 된다.
@@ -64,9 +69,13 @@ export async function onRequestGet({ request, env }) {
     viewingVersion = targetVersion;
   }
 
+  /* 2026-09-15: 재제출 차수 — 내가 같은 과제에 여러 번 냈으면 1차·2차…로 나눠 보여준다 */
+  const rd = await readSubmitRounds(env, row);
+
   return jsonResponse({
     submission: {
       id: row.id, type: row.type, projectName: row.project_name, data, feedback, memos,
+      round: rd.round, roundCount: rd.rounds.length, rounds: rd.rounds,
       submittedAt: row.submitted_at, feedbackAt: row.feedback_at, checkedAt: row.checked_at || null,
       evaluation: row.evaluation || "",
       assignmentTitle: row.assignment_title,

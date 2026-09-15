@@ -1,4 +1,4 @@
-import { requireProfessor, jsonResponse, nowSec, ensureSubmissionSchema } from "./_utils.js";
+import { requireProfessor, jsonResponse, nowSec, ensureSubmissionSchema, readSubmitRounds } from "./_utils.js";
 
 /* 첨삭 버전 목록/내용 읽기 — submission_feedback_versions 표가 없거나 조회에 실패해도 예외를 밖으로
    던지지 않고 "버전 없음"으로 돌려준다. 예전에는 이 표가 운영 DB에 없으면 제출물 상세 조회 자체가
@@ -54,22 +54,29 @@ export async function onRequestGet({ request, env }) {
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
   const wantVersion = Number(url.searchParams.get("version")) || null;
 
-  const row = await env.DB.prepare(
-    "SELECT s.id, s.assignment_id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, s.evaluation, " +
+  const DETAIL =
+    "SELECT s.id, s.assignment_id, s.student_id, s.type, s.project_name, s.data, s.feedback, s.submitted_at, s.feedback_at, s.checked_at, s.evaluation, s.submit_round, " +
     "  u.name AS student_name, u.username AS student_username, a.title AS assignment_title, a.prof_id " +
     "FROM submissions s JOIN users u ON u.id = s.student_id JOIN assignments a ON a.id = s.assignment_id " +
-    "WHERE s.id = ?"
-  ).bind(id).first();
+    "WHERE s.id = ?";
+  let row;
+  try {
+    row = await env.DB.prepare(DETAIL).bind(id).first();
+  } catch (e) {
+    row = await env.DB.prepare(DETAIL.replace("s.evaluation, s.submit_round,", "s.evaluation,")).bind(id).first();
+  }
   if (!row || row.prof_id !== auth.user.id) return jsonResponse({ error: "제출물을 찾을 수 없습니다." }, 404);
 
   let data = null;
   try { data = JSON.parse(row.data); } catch (e) {}
 
   const v = await readFeedbackVersions(env, id, wantVersion, row);
+  const r = await readSubmitRounds(env, row);
 
   return jsonResponse({
     submission: {
       id: row.id, type: row.type, projectName: row.project_name, data,
+      round: r.round, roundCount: r.rounds.length, rounds: r.rounds,
       feedback: v.feedback, memos: v.memos,
       submittedAt: row.submitted_at, feedbackAt: row.feedback_at, checkedAt: row.checked_at || null,
       evaluation: row.evaluation || "",

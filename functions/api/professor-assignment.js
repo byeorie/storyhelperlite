@@ -32,22 +32,26 @@ export async function onRequestGet({ request, env }) {
      분리하고, 집계는 실패해도 그냥 0으로 두고 넘어간다. checked_at(과제 확인)도 컬럼이 없는 DB를
      대비해 2단계로 시도한다. */
   let results = [];
+  const BASE =
+    "SELECT s.id, s.student_id, s.type, s.project_name, s.submitted_at, s.feedback_at, s.checked_at, s.submit_round, " +
+    "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username " +
+    "FROM submissions s JOIN users u ON u.id = s.student_id " +
+    "WHERE s.assignment_id = ? ORDER BY s.submitted_at DESC";
   try {
-    const r = await env.DB.prepare(
-      "SELECT s.id, s.type, s.project_name, s.submitted_at, s.feedback_at, s.checked_at, " +
-      "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username " +
-      "FROM submissions s JOIN users u ON u.id = s.student_id " +
-      "WHERE s.assignment_id = ? ORDER BY s.submitted_at DESC"
-    ).bind(id).all();
+    const r = await env.DB.prepare(BASE).bind(id).all();
     results = r.results || [];
   } catch (e) {
-    const r = await env.DB.prepare(
-      "SELECT s.id, s.type, s.project_name, s.submitted_at, s.feedback_at, " +
-      "  (s.feedback IS NOT NULL) AS has_feedback, u.name AS student_name, u.username AS student_username " +
-      "FROM submissions s JOIN users u ON u.id = s.student_id " +
-      "WHERE s.assignment_id = ? ORDER BY s.submitted_at DESC"
-    ).bind(id).all();
-    results = r.results || [];
+    try {
+      // submit_round 컬럼이 아직 없는 DB
+      const r = await env.DB.prepare(BASE.replace("s.checked_at, s.submit_round,", "s.checked_at,")).bind(id).all();
+      results = r.results || [];
+    } catch (e2) {
+      // checked_at 컬럼도 없는 아주 예전 DB
+      const r = await env.DB.prepare(
+        BASE.replace("s.feedback_at, s.checked_at, s.submit_round,", "s.feedback_at,")
+      ).bind(id).all();
+      results = r.results || [];
+    }
   }
 
   const versionCounts = {};
@@ -59,12 +63,43 @@ export async function onRequestGet({ request, env }) {
     (vr.results || []).forEach((x) => { versionCounts[x.sid] = x.n; });
   } catch (e) {}
 
-  const submissions = results.map((r) => ({
-    ...r,
-    checked_at: r.checked_at || null,
-    version_count: versionCounts[r.id] || 0,
-    type_label: TYPE_LABEL[r.type] || r.type,
-  }));
+  /* 2026-09-15: 재제출 차수 묶기 — 같은 (학생, 종류)의 제출물은 한 줄로만 보여주고(최신 차수),
+     이전 차수는 rounds 목록으로 함께 내려보내 교수 화면의 드롭다운에서 골라볼 수 있게 한다.
+     예전에는 재제출할 때마다 제출함에 줄이 하나씩 늘어 같은 학생의 옛 제출물과 새 제출물이
+     섞여 보였다. */
+  const groups = new Map();
+  results.forEach((r) => {
+    const key = r.student_id + "|" + r.type;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  });
+
+  const submissions = [];
+  groups.forEach((rows) => {
+    // 차수가 있으면 차수 순, 없으면 제출 시각(같으면 id) 순
+    rows.sort((a, b) => (a.submit_round || 0) - (b.submit_round || 0)
+      || (a.submitted_at || 0) - (b.submitted_at || 0) || a.id - b.id);
+    const rounds = rows.map((r, i) => ({
+      id: r.id,
+      round: r.submit_round || (i + 1),
+      submitted_at: r.submitted_at,
+      has_feedback: r.has_feedback,
+      checked_at: r.checked_at || null,
+    }));
+    const last = rows[rows.length - 1];
+    submissions.push({
+      ...last,
+      checked_at: last.checked_at || null,
+      round: last.submit_round || rows.length,
+      round_count: rows.length,
+      rounds,
+      version_count: versionCounts[last.id] || 0,
+      type_label: TYPE_LABEL[last.type] || last.type,
+    });
+  });
+  // 최신 제출이 위로
+  submissions.sort((a, b) => (b.submitted_at || 0) - (a.submitted_at || 0));
+
   return jsonResponse({ assignment, submissions });
 }
 

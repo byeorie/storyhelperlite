@@ -138,6 +138,14 @@ ALTER TABLE submissions ADD COLUMN checked_at INTEGER;
 ALTER TABLE submissions ADD COLUMN evaluation TEXT;
 -- 2026-09-11: 학생이 첨삭 알림을 열어본 시각(알림 토스트 표시 기준)
 ALTER TABLE submissions ADD COLUMN feedback_seen_at INTEGER;
+-- 2026-09-15: 재제출 차수 — 같은 (과제, 학생, 종류)로 다시 제출하면 덮어쓰지 않고 1차·2차…로 쌓는다
+ALTER TABLE submissions ADD COLUMN submit_round INTEGER;
+UPDATE submissions SET submit_round = (
+  SELECT COUNT(*) FROM submissions s2
+  WHERE s2.assignment_id = submissions.assignment_id AND s2.student_id = submissions.student_id
+    AND s2.type = submissions.type AND s2.id <= submissions.id
+) WHERE submit_round IS NULL;
+CREATE INDEX IF NOT EXISTS idx_submissions_round ON submissions(assignment_id, student_id, type, submit_round);
 
 -- 코드가 비어있는 수업에 6자리 등록 코드 자동 발급
 UPDATE classes SET code = printf('%06d', (ABS(RANDOM()) % 900000) + 100000) WHERE code IS NULL;

@@ -29,6 +29,10 @@ export async function onRequestGet({ request, env }) {
         "FROM submissions s JOIN assignments a ON a.id = s.assignment_id " +
         "LEFT JOIN classes c ON c.id = a.class_id " +
         "WHERE a.prof_id = ? AND s.checked_at IS NULL AND s.feedback IS NULL " +
+        /* 2026-09-15: 재제출 차수 — 학생이 다시 낸 뒤라면 최신 차수만 알림에 센다
+           (이전 차수까지 세면 같은 학생이 여러 건으로 잡혀 제출 건수가 부풀려진다) */
+        "  AND NOT EXISTS (SELECT 1 FROM submissions s2 WHERE s2.assignment_id = s.assignment_id " +
+        "    AND s2.student_id = s.student_id AND s2.type = s.type AND s2.id > s.id) " +
         "GROUP BY a.id ORDER BY last_at DESC LIMIT 20"
       ).bind(auth.user.id).all();
 

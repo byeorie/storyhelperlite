@@ -39,6 +39,14 @@ export async function ensureSubmissionSchema(env) {
     /* 2026-09-11: 알림 — 학생이 교수님의 첨삭/확인 알림을 열어본 시각(unix초). 이 값이 feedback_at
        (또는 checked_at)보다 오래되면 "아직 안 본 알림"으로 보고 토스트를 다시 띄운다. */
     "ALTER TABLE submissions ADD COLUMN feedback_seen_at INTEGER",
+    /* 2026-09-15: 재제출 차수(submit_round) — 같은 (과제, 학생, 종류)에 다시 제출하면 덮어쓰지 않고
+       1차·2차…로 따로 쌓는다. 예전 제출물은 아래 UPDATE로 제출 순서대로 차수를 채워 넣는다
+       (submit_round가 NULL인 줄에만 적용되므로 여러 번 실행해도 안전하다). */
+    "ALTER TABLE submissions ADD COLUMN submit_round INTEGER",
+    "UPDATE submissions SET submit_round = (SELECT COUNT(*) FROM submissions s2 " +
+      "WHERE s2.assignment_id = submissions.assignment_id AND s2.student_id = submissions.student_id " +
+      "AND s2.type = submissions.type AND s2.id <= submissions.id) WHERE submit_round IS NULL",
+    "CREATE INDEX IF NOT EXISTS idx_submissions_round ON submissions(assignment_id, student_id, type, submit_round)",
   ];
   for (const sql of stmts) {
     try { await env.DB.prepare(sql).run(); } catch (e) {}
@@ -404,4 +412,32 @@ export async function sendEmail(env, { to, subject, text }) {
   } finally {
     try { await socket.close(); } catch (e) {}
   }
+}
+
+/* 2026-09-15: 재제출 차수 목록 — 같은 (과제, 학생, 종류)로 제출된 줄들을 1차·2차…로 돌려준다.
+   submit_round 컬럼이 없는 예전 DB에서는 제출 순서대로 번호를 매겨 같은 모양으로 맞춘다. */
+export async function readSubmitRounds(env, row) {
+  let rows = [];
+  try {
+    const q = "SELECT id, submitted_at, submit_round, (feedback IS NOT NULL) AS has_feedback FROM submissions " +
+      "WHERE assignment_id = ? AND student_id = ? AND type = ? ORDER BY submitted_at ASC, id ASC";
+    const r = await env.DB.prepare(q).bind(row.assignment_id, row.student_id, row.type).all();
+    rows = r.results || [];
+  } catch (e) {
+    try {
+      const r = await env.DB.prepare(
+        "SELECT id, submitted_at, (feedback IS NOT NULL) AS has_feedback FROM submissions " +
+        "WHERE assignment_id = ? AND student_id = ? AND type = ? ORDER BY submitted_at ASC, id ASC"
+      ).bind(row.assignment_id, row.student_id, row.type).all();
+      rows = r.results || [];
+    } catch (e2) { rows = []; }
+  }
+  if (!rows.length) return { round: 1, rounds: [{ id: row.id, round: 1, submittedAt: row.submitted_at, hasFeedback: !!row.feedback }] };
+  rows.sort((a, b) => (a.submit_round || 0) - (b.submit_round || 0)
+    || (a.submitted_at || 0) - (b.submitted_at || 0) || a.id - b.id);
+  const rounds = rows.map((x, i) => ({
+    id: x.id, round: x.submit_round || (i + 1), submittedAt: x.submitted_at, hasFeedback: !!x.has_feedback,
+  }));
+  const mine = rounds.find((x) => x.id === row.id);
+  return { round: mine ? mine.round : rounds.length, rounds };
 }

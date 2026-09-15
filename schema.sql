@@ -38,10 +38,12 @@ CREATE TABLE IF NOT EXISTS submissions (
   submitted_at INTEGER NOT NULL,
   feedback_at INTEGER,
   checked_at INTEGER,          -- 교수가 제출물을 확인한 시각
-  evaluation TEXT              -- 교수 총평(선택 입력) — 첨삭/메모와는 별개
+  evaluation TEXT,             -- 교수 총평(선택 입력) — 첨삭/메모와는 별개
+  submit_round INTEGER         -- 2026-09-15: 재제출 차수(1차, 2차 …) — 같은 과제/학생/종류 안에서의 순번
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);
+CREATE INDEX IF NOT EXISTS idx_submissions_round ON submissions(assignment_id, student_id, type, submit_round);
 
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
