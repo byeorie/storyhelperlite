@@ -604,6 +604,10 @@ body.logged-in .login-overlay { display: none; }
 .submit-assign-item { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
   width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; cursor: pointer; }
 .submit-assign-item:hover { border-color: var(--accent); background: var(--accent2); }
+/* 2026-09-15(3): 교수 제출함은 목록 안에서 따로 스크롤되지 않고 화면 높이만큼 쭉 펼쳐지게 한다
+   (50vh 상한이 남아 있어 제출물이 5~6개만 보이고 목록 안쪽에 스크롤바가 생겼다.
+    학생 [제출] 모달의 목록은 팝업 안이라 예전처럼 50vh 상한을 유지) */
+.submit-assign-list--compact { max-height: none; overflow-y: visible; }
 /* 교수 — 과제 폴더 제출함: 한 줄(가로)로 압축 표시 (좁으면 가로 스크롤) */
 .submit-assign-list--compact .submit-assign-item { flex-direction: row; flex-wrap: nowrap; align-items: center;
   gap: 8px; padding: 8px 12px; overflow-x: auto; white-space: nowrap; }
@@ -614,8 +618,8 @@ body.logged-in .login-overlay { display: none; }
   background: var(--accent2); border-radius: 999px; padding: 2px 9px; }
 /* 2026-09-15: 재제출 차수 배지("2차 제출") — 과제 종류 배지와 구분되게 테두리만 있는 모양 */
 .assign-type-badge.round-badge { color: #b3503a; background: transparent; border: 1px solid #e0b3a6; }
-.submit-round-select { font-size: 12px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 6px;
-  background: #fff; max-width: 210px; }
+/* 2026-09-15(2): 줄마다 있던 버전 드롭다운은 [이전 버전] 버튼 + 팝업으로 대체됐다 */
+.submit-assign-row .submit-history-btn { white-space: nowrap; }
 
 /* 교수 — 과제 폴더 제출함 목록의 각 줄: 제출물 버튼 + (버전이 2개 이상이면) 작은 버전 드롭다운 */
 /* 2026-09-11: flex-wrap 추가 — 좁은 화면에서는 [확인] 버튼과 버전 드롭다운이 아랫줄로 내려가고,

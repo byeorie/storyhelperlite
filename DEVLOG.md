@@ -2582,3 +2582,21 @@ Chromium(Playwright)으로 실제 획을 긋고 확인: 층별 그리기·마커
 
 ### 6) style.css
 - `.assign-type-badge.round-badge`(테두리형 차수 배지), `.submit-round-select`.
+
+## 2026-09-15 (3) — 제출함의 버전 드롭다운 → [이전 버전] 버튼 + 팝업
+
+제출함 목록에서 줄마다 드롭다운(제출 차수 · 첨삭 버전)이 붙으니 가로로 너무 길어져서, 작은
+`[이전 버전]` 버튼 하나로 합치고 목록은 팝업에서 고르게 했다.
+- `app.js` `rProfAssignmentFolder()`: `.submit-round-select` / `.submit-version-select` 제거,
+  `.submit-history-btn` 하나로 대체. 버튼에 필요한 자료(차수 목록·첨삭 버전 수)는 목록을 그리는
+  동안 `historyMap[제출물 id]`에 모아둔다.
+- `app.js` `openSubmitHistoryModal(info)` 신규 — 기존 제출 모달과 같은 틀(`.plot-modal-overlay`)에
+  "제출 차수"(고르면 그 차수의 제출물+그때의 첨삭)와 "첨삭 버전"(최신 차수의 과거 첨삭, 읽기 전용)을
+  두 묶음으로 보여준다.
+- `style.css`: `.submit-round-select` 규칙 삭제, `.submit-history-btn`(줄바꿈 방지)만 남김.
+
+### 제출함 목록 높이 — 화면만큼 펼치기
+`.submit-assign-list`의 `max-height:50vh; overflow-y:auto`가 교수 제출함에도 걸려서 제출물이
+5~6개만 보이고 목록 안쪽에 스크롤바가 생겼다. `.submit-assign-list--compact`(교수 제출함)에만
+`max-height:none; overflow-y:visible`을 줘서 페이지 전체가 스크롤되게 했다.
+(학생 [제출] 모달의 같은 목록은 팝업 안이므로 50vh 상한을 그대로 둔다)

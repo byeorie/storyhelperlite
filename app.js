@@ -6488,6 +6488,9 @@ async function rProfAssignmentFolder(id){
   /* 2026-09-15: 재제출 차수 — 서버가 학생(·종류)당 한 줄(최신 차수)만 내려주고, 이전 차수는
      s.rounds 목록으로 함께 온다. 예전에는 재제출할 때마다 줄이 늘어 같은 학생의 옛 제출물과
      새 제출물이 섞여 보였다. */
+  /* 2026-09-15(2): 줄마다 드롭다운을 놓으니 목록이 가로로 너무 길어져서, 작은 [이전 버전] 버튼
+     하나로 합치고 목록은 팝업에서 고르게 했다. 버튼에 필요한 자료는 아래 map을 도는 동안 모아둔다. */
+  const historyMap={};
   wrap.innerHTML=`<div class="submit-assign-list submit-assign-list--compact">${submissions.map(s=>{
     /* version_count는 버전 테이블 기준(2026-08-20 이 기능 이후 저장분만) — 그 이전에 저장된 첨삭 1건은
        버전 테이블엔 없지만 has_feedback만으로도 "버전 1" 하나로 취급해 보여준다(서버 GET과 동일한 규칙) */
@@ -6496,33 +6499,70 @@ async function rProfAssignmentFolder(id){
     const isChecked = !!s.checked_at;
     const rounds = Array.isArray(s.rounds)?s.rounds:[];
     const roundNo = s.round || rounds.length || 1;
+    const hasHistory = rounds.length>1 || effCount>1;
+    if(hasHistory) historyMap[s.id]={
+      id:s.id, studentName:s.student_name, typeLabel:s.type_label,
+      rounds, roundNo, versionCount:effCount,
+    };
     return `<div class="submit-assign-row">
       <button type="button" class="submit-assign-item" data-id="${s.id}">
         <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
         <span class="assign-type-badge">${esc(s.type_label)}</span>${roundNo>1?`<span class="assign-type-badge round-badge">${roundNo}차 제출</span>`:""}
         <span class="hint">제출 ${fmtDate(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}<span class="submit-check-state" data-id="${s.id}">${isChecked?" · 확인함":""}</span></span>
       </button>
-      <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${s.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>${rounds.length>1?`
-      <select class="submit-round-select" title="이전 제출 차수 보기">
-        ${rounds.slice().reverse().map(rd=>`<option value="${rd.id}"${rd.id===s.id?" selected":""}>${rd.round}차 제출${rd.id===s.id?" (최신)":""} · ${fmtDate(rd.submitted_at)}</option>`).join("")}
-      </select>`:""}${effCount>1?`
-      <select class="submit-version-select" data-id="${s.id}" title="과거 피드백 버전 보기">
-        ${Array.from({length:effCount},(_,i)=>effCount-i).map(v=>`<option value="${v}">버전 ${v}${v===effCount?" (최신)":""}</option>`).join("")}
-      </select>`:""}
+      <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${s.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>${hasHistory?`
+      <button type="button" class="btn ghost sm submit-history-btn" data-id="${s.id}" title="이전 제출 차수와 지난 첨삭 버전을 골라 볼 수 있습니다">${ICONS.book} 이전 버전</button>`:""}
     </div>`;
   }).join("")}</div>`;
   bindSubmitCheckBtns(wrap);
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); profReviewVersion=null; render(); };
   });
-  wrap.querySelectorAll(".submit-version-select").forEach(sel=>{
-    sel.onclick=e=>e.stopPropagation();
-    sel.onchange=()=>{ profReviewId=Number(sel.dataset.id); profReviewVersion=Number(sel.value); render(); };
+  /* [이전 버전] — 제출 차수와 지난 첨삭 버전을 한 팝업에서 고른다 */
+  wrap.querySelectorAll(".submit-history-btn").forEach(btn=>{
+    btn.onclick=(e)=>{ e.stopPropagation(); openSubmitHistoryModal(historyMap[btn.dataset.id]); };
   });
-  /* 제출 차수 드롭다운 — 고른 차수의 제출물(그 차수의 첨삭 포함)을 그대로 연다 */
-  wrap.querySelectorAll(".submit-round-select").forEach(sel=>{
-    sel.onclick=e=>e.stopPropagation();
-    sel.onchange=()=>{ profReviewId=Number(sel.value); profReviewVersion=null; render(); };
+}
+
+/* [이전 버전] 팝업 (교수 제출함) — 2026-09-15
+   한 줄에 드롭다운을 여러 개 놓으면 목록이 가로로 길어지고 좁은 화면에서 줄이 무너져서, 작은 버튼
+   하나로 모으고 여기서 고르게 했다.
+   - "제출 차수": 학생이 다시 낸 횟수(1차·2차…). 고르면 그 차수의 제출물과 그때의 첨삭을 연다.
+   - "첨삭 버전": 교수가 첨삭을 저장한 횟수. 고르면 최신 차수의 그 버전을 읽기 전용으로 연다. */
+function openSubmitHistoryModal(info){
+  if(!info) return;
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title";
+  ttl.textContent=`${info.studentName} · ${info.typeLabel} — 이전 버전`;
+  top.append(ttl, iconBtn(ICONS.close,"닫기",close));
+  box.appendChild(top);
+
+  const body=document.createElement("div");
+  const rounds=Array.isArray(info.rounds)?info.rounds:[];
+  const vCount=info.versionCount||0;
+  body.innerHTML=`${rounds.length>1?`<p class="hint">제출 차수 — 학생이 다시 제출한 기록입니다. 고른 차수의 내용과 그때의 첨삭이 열립니다.</p>
+    <div class="submit-assign-list">${rounds.slice().reverse().map(rd=>`
+      <button type="button" class="submit-assign-item" data-round-id="${rd.id}">
+        <b>${rd.round}차 제출${rd.id===info.id?" (최신)":""}</b>
+        <span class="hint">${fmtDate(rd.submitted_at)} · ${rd.has_feedback?"첨삭 완료":"첨삭 전"}</span>
+      </button>`).join("")}</div>`:""}
+    ${vCount>1?`<p class="hint" style="margin-top:14px">첨삭 버전 — 최신 차수(${info.roundNo}차)에 교수님이 저장한 첨삭 기록입니다. 과거 버전은 읽기 전용입니다.</p>
+    <div class="submit-assign-list">${Array.from({length:vCount},(_,i)=>vCount-i).map(v=>`
+      <button type="button" class="submit-assign-item" data-version="${v}">
+        <b>첨삭 버전 ${v}${v===vCount?" (최신)":""}</b>
+      </button>`).join("")}</div>`:""}`;
+  box.appendChild(body);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  body.querySelectorAll("[data-round-id]").forEach(btn=>{
+    btn.onclick=()=>{ close(); profReviewId=Number(btn.dataset.roundId); profReviewVersion=null; render(); };
+  });
+  body.querySelectorAll("[data-version]").forEach(btn=>{
+    btn.onclick=()=>{ close(); profReviewId=info.id; profReviewVersion=Number(btn.dataset.version); render(); };
   });
 }
 
