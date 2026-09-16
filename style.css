@@ -1313,3 +1313,8 @@ canvas.draw-layer-canvas.is-base{position:relative}
 .submit-assign-row.row-done > .submit-assign-item:hover{background:#e3f0e0;border-color:#8fbf86}
 .submit-assign-row.row-checked > .submit-assign-item{background:#fdf6e3;border-color:#e7d7a8}
 .submit-assign-row.row-checked > .submit-assign-item:hover{background:#faeecd;border-color:#d8c179}
+
+/* 2026-09-16: 아이패드 — 손잡이를 끌 때 페이지 스크롤·길게누르기 메뉴·글자 선택이 끼어들지 않게 */
+.idea-handle,.plot-idea-handle,.plot-sec-move,.scene-handle,.sub-handle,.sb-row-handle,.class-row-handle{
+  touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+body.touch-dragging{-webkit-user-select:none;user-select:none}

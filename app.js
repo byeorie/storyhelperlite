@@ -380,7 +380,58 @@ function save(){
   if(typeof saveToServer==="function") saveToServer();
   scheduleUndoCheckpoint();
 }
-function uid(){ return "p"+Date.now()+Math.floor(Math.random()*1000); }
+/* 2026-09-16: 예전 uid는 같은 순간(1ms 안)에 여러 개를 만들면 0~999 난수만으로 구분돼서 자주 겹쳤다
+   (플롯 불러오기로 아이디어 12개를 한 번에 만들면 약 24% 확률로 중복). 이번 접속에서 만든 id를 기억해
+   절대 겹치지 않게 하고, 난수 자리도 늘렸다. */
+function uid(){
+  const issued=uid._issued||(uid._issued=new Set());   // 파일 앞부분에서도 호출되므로 여기서 준비
+  let id;
+  do{ id="p"+Date.now()+String(Math.floor(Math.random()*1e6)).padStart(6,"0"); }while(issued.has(id));
+  issued.add(id);
+  return id;
+}
+/* 예전 uid 중복으로 이미 저장된 데이터 복구 — 플롯 단계·섹션 블럭(그룹)·칸 블록·지문/대사 id가
+   겹치면 칸 추가·이동 때 엉뚱한 단계/그룹으로 들어가거나 칸이 복제·유실된다. 바꾼 게 있으면 true. */
+function repairDuplicateIds(){
+  let fixed=false;
+  const pd=P.plotDoc, wd=P.writeDoc;
+  if(pd && Array.isArray(pd.sections)){
+    const seen=new Set();
+    pd.sections.forEach(sec=>{ if(seen.has(sec.id)){ sec.id=uid(); fixed=true; } seen.add(sec.id); });
+  }
+  if(!wd) return fixed;
+  const blocks=wd.blocks||[];
+  /* 그룹: 같은 id를 가진 그룹이 여럿이면, 그 id의 칸들을 (단계가 바뀌거나 끊기는 곳마다) 덩어리로 나눠
+     단계가 같은 그룹부터 차례로 나눠 준다 */
+  const byId={};
+  (wd.groups||[]).forEach(g=>{ (byId[g.id]=byId[g.id]||[]).push(g); });
+  Object.keys(byId).forEach(id=>{
+    const list=byId[id]; if(list.length<2) return;
+    fixed=true;
+    const runs=[]; let cur=null;
+    blocks.forEach(b=>{
+      if(b.groupId!==id){ cur=null; return; }
+      if(!cur || cur.sec!==b.sectionId){ cur={sec:b.sectionId, items:[]}; runs.push(cur); }
+      cur.items.push(b);
+    });
+    const taken=new Set();
+    list.forEach((g,i)=>{
+      let ri=runs.findIndex((r,k)=>!taken.has(k) && r.sec===g.sectionId);
+      if(ri<0 && !g.sectionId) ri=runs.findIndex((r,k)=>!taken.has(k));
+      if(i>0) g.id=uid();
+      if(ri>=0){ taken.add(ri); runs[ri].items.forEach(b=>{ b.groupId=g.id; }); if(!g.sectionId) g.sectionId=runs[ri].sec; }
+    });
+  });
+  const seenB=new Set(), seenI=new Set();
+  blocks.forEach(b=>{
+    if(seenB.has(b.id)){ b.id=uid(); fixed=true; } seenB.add(b.id);
+    (b.items||[]).forEach(it=>{
+      if(seenI.has(it.id)){ it.id=uid(); fixed=true; } seenI.add(it.id);
+      (it.branches||[]).forEach(br=>{ if(seenI.has(br.id)){ br.id=uid(); fixed=true; } seenI.add(br.id); });
+    });
+  });
+  return fixed;
+}
 function blankProject(id,name){
   return {id,name,logline:"",genres:[],
     idea:{protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""},
@@ -825,6 +876,81 @@ document.addEventListener("dragover", e=>{
   if(sp && !dndScrollRAF) dndScrollRAF=requestAnimationFrame(dndScrollStep);
 }, true);
 document.addEventListener("drop", dndStopScroll, true);
+
+/* ===== 아이패드(터치·애플펜슬) 블록 이동 (2026-09-16) =====
+   iPad Safari는 HTML 드래그앤드롭이 손잡이에서 사실상 시작되지 않는다(길게 누르기+페이지 스크롤과 충돌).
+   그래서 손가락/펜으로 손잡이를 끌면 포인터 이벤트를 받아 dragstart/dragover/drop/dragend를 직접 만들어
+   보낸다 → 마우스용으로 짜 둔 기존 드래그 처리 코드가 그대로 동작한다. 마우스는 기존 방식 그대로. */
+const TOUCH_DND_HANDLES=".idea-handle,.plot-idea-handle,.plot-sec-move,.scene-handle,.sub-handle,.sb-row-handle,.class-row-handle";
+const TOUCH_DND_SOURCES=".sub-branch,.sub-block,.scene-block,.plot-idea,.plot-section,.idea-block,.sb-row,.class-row";
+let touchDnd=null;
+function touchDndFire(target, type, x, y, related){
+  if(!target) return null;
+  const init={bubbles:true, cancelable:true, clientX:x, clientY:y, relatedTarget:related||null};
+  let ev;
+  try{ ev=new DragEvent(type, Object.assign({dataTransfer:touchDnd.dt}, init)); }
+  catch(_){ ev=new MouseEvent(type, init); }
+  if(ev.dataTransfer!==touchDnd.dt){ try{ Object.defineProperty(ev, "dataTransfer", {value:touchDnd.dt}); }catch(_){} }
+  target.dispatchEvent(ev);
+  return ev;
+}
+function touchDndMakeDT(){
+  try{ return new DataTransfer(); }
+  catch(_){ const data={}; return {effectAllowed:"all", dropEffect:"none", types:[], setData(k,v){data[k]=v;}, getData(k){return data[k]||"";}, clearData(){}, setDragImage(){}}; }
+}
+function touchDndOver(){
+  const t=touchDnd; if(!t || !t.started) return;
+  const under=document.elementFromPoint(t.x, t.y);
+  if(under!==t.under){
+    if(t.under) touchDndFire(t.under, "dragleave", t.x, t.y, under);
+    if(under) touchDndFire(under, "dragenter", t.x, t.y, t.under);
+    t.under=under;
+  }
+  const ev=touchDndFire(under, "dragover", t.x, t.y);
+  t.canDrop=!!(ev && ev.defaultPrevented);
+}
+function touchDndEnd(cancel){
+  const t=touchDnd; if(!t) return;
+  touchDnd=null;
+  clearInterval(t.timer);
+  document.body.classList.remove("touch-dragging");
+  if(!t.started) return;
+  touchDnd=t;   // 이벤트 생성에 dt가 필요
+  if(!cancel){
+    touchDndOver();
+    if(t.canDrop) touchDndFire(t.under, "drop", t.x, t.y);
+  }
+  touchDndFire(t.src, "dragend", t.x, t.y);
+  touchDnd=null;
+  dndStopScroll();
+}
+document.addEventListener("pointerdown", e=>{
+  if(e.pointerType==="mouse" || touchDnd) return;
+  const h=e.target.closest && e.target.closest(TOUCH_DND_HANDLES); if(!h) return;
+  const src=h.closest(TOUCH_DND_SOURCES); if(!src) return;
+  e.preventDefault();
+  touchDnd={id:e.pointerId, src, x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, started:false, under:null, canDrop:false, dt:null, timer:null};
+}, true);
+document.addEventListener("pointermove", e=>{
+  const t=touchDnd; if(!t || e.pointerId!==t.id) return;
+  e.preventDefault();
+  t.x=e.clientX; t.y=e.clientY;
+  if(!t.started){
+    if(Math.hypot(t.x-t.x0, t.y-t.y0)<6) return;
+    t.started=true;
+    t.dt=touchDndMakeDT();
+    document.body.classList.add("touch-dragging");
+    t.src.draggable=true;
+    touchDndFire(t.src, "dragstart", t.x0, t.y0);
+    /* 손가락을 멈춘 채 가장자리에 두면 자동 스크롤로 내용이 움직이므로 주기적으로 위치를 다시 알린다 */
+    t.timer=setInterval(touchDndOver, 120);
+  }
+  touchDndOver();
+}, {capture:true, passive:false});
+document.addEventListener("pointerup", e=>{ if(touchDnd && e.pointerId===touchDnd.id) touchDndEnd(false); }, true);
+document.addEventListener("pointercancel", e=>{ if(touchDnd && e.pointerId===touchDnd.id) touchDndEnd(true); }, true);
+/* 끄는 동안 화면이 같이 스크롤되지 않도록 (touch-action 미지원 대비) */
+document.addEventListener("touchmove", e=>{ if(touchDnd) e.preventDefault(); }, {passive:false});
 document.addEventListener("dragend", dndStopScroll, true);
 
 let ideaFilterTags=[];
@@ -1061,7 +1187,6 @@ function ideaBlockCard(b, allTags, list){
   const handle=document.createElement("span"); handle.className="idea-handle";
   handle.innerHTML=ICONS.grip; handle.title="드래그해서 순서 변경";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
-  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
     dndDropHandled=false;
     e.dataTransfer.effectAllowed="move";
@@ -2255,7 +2380,6 @@ function plotSectionCard(sec, idx, secWrap){
   const moveBtn=iconBtn(ICONS.grip,"드래그해서 섹션 순서 변경",null);
   moveBtn.classList.add("plot-sec-move");
   moveBtn.addEventListener("mousedown", ()=>{ card.draggable=true; });
-  moveBtn.addEventListener("touchstart", ()=>{ card.draggable=true; }, {passive:true});
   card.addEventListener("dragstart", e=>{
     if(!card.draggable) return;
     dndDropHandled=false;
@@ -2500,7 +2624,6 @@ function plotIdeaCard(b, secWrap, secId){
   d.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); openPlotIdeaCtxMenu(e.clientX, e.clientY, b); });
   const handle=document.createElement("span"); handle.className="plot-idea-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 이동";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
-  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
     dndDropHandled=false;
     e.dataTransfer.effectAllowed="move";
@@ -2582,9 +2705,9 @@ function rWrite(){
     app.appendChild(c);
     return;
   }
+  let fixed=repairDuplicateIds();
   /* 구조에 없는(고아) 블록은 첫 섹션으로 회수 */
   const secIds=new Set(pd.sections.map(s=>s.id));
-  let fixed=false;
   (P.writeDoc.blocks||[]).forEach(b=>{ if(!secIds.has(b.sectionId)){ b.sectionId=pd.sections[0].id; fixed=true; } });
   /* 예전에 불러온 블록(제목 없음)은 원본 아이디어 텍스트를 제목으로 1회 스냅샷 → 이후 독립 수정 */
   (P.writeDoc.blocks||[]).forEach(b=>{ if(b.fromIdea && !b.title){ const t=plotIdeaText(b.fromIdea); if(t){ b.title=t; fixed=true; } } });
@@ -2754,7 +2877,11 @@ function loadPlotIntoWrite(){
 /* 특정 플롯 단계(섹션)에 빈 장면 블록 하나 생성 */
 function addSceneBlock(sec){
   const nb={id:uid(), sectionId:sec.id, fromIdea:"", title:"", items:[], groupId:"", backgrounds:[], characters:[]};
-  P.writeDoc.blocks.push(nb); writeFocusTitle=nb.id; save(); render();
+  /* 2026-09-16: 배열 맨 끝이 아니라 이 단계의 마지막 칸 바로 뒤에 넣는다(단계 순서대로 데이터 유지) */
+  const blocks=P.writeDoc.blocks||(P.writeDoc.blocks=[]);
+  let lastIdx=-1; blocks.forEach((b,i)=>{ if(b.sectionId===sec.id) lastIdx=i; });
+  if(lastIdx>=0) blocks.splice(lastIdx+1, 0, nb); else blocks.push(nb);
+  writeFocusTitle=nb.id; save(); render();
 }
 /* 특정 플롯 단계(섹션)의 배치 아이디어만 불러오기 */
 function loadSectionIdeas(sec){
@@ -2937,7 +3064,6 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   const handle=document.createElement("span"); handle.className="scene-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 블록 이동";
   const numEl=document.createElement("span"); numEl.className="scene-num"; numEl.textContent=(num!=null?num:"");
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
-  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{
     if(!d.draggable) return;
     dndDropHandled=false;
@@ -3001,6 +3127,23 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh, main)));
   setupItemDnD(itemsEl, main);
   d.appendChild(itemsEl);
+  /* 2026-09-16: 지문·대사를 다른 칸으로 옮길 때 — 대상 칸의 지문/대사 목록 위가 아니라
+     칸 머리(제목줄)나 빈 칸 위에 놓아도 그 칸으로 들어가게 칸 전체를 드롭존으로 쓴다. */
+  d.addEventListener("dragover", e=>{
+    const dragging=document.querySelector(".sub-block.dragging");
+    if(!dragging) return;
+    e.preventDefault();
+    if(itemsEl.contains(e.target)) return;   // 목록 위는 setupItemDnD가 처리
+    const r=itemsEl.getBoundingClientRect();
+    const top=itemsEl.children.length ? r.top : d.getBoundingClientRect().bottom;
+    if(e.clientY<top){ if(itemsEl.firstChild!==dragging) itemsEl.insertBefore(dragging, itemsEl.firstChild); }
+    else if(itemsEl.lastChild!==dragging) itemsEl.appendChild(dragging);
+  });
+  d.addEventListener("drop", e=>{
+    if(!document.querySelector(".sub-block.dragging") || itemsEl.contains(e.target)) return;
+    e.preventDefault();
+    commitWriteItemOrder(main);
+  });
   renderAppliedMemoBlock(d,"write",bl.id);
 
   /* 본문 블록 아래 점선 추가 버튼 — 본문/대사 추가를 한 행에 5:5로 배치 */
@@ -3277,7 +3420,6 @@ function subBlockEl(bl, it, liveRefresh, main){
   const d=document.createElement("div"); d.className="sub-block "+(it.type==="line"?"sub-line":"sub-text"); d.dataset.id=it.id; d.draggable=false;
   const handle=document.createElement("span"); handle.className="sub-handle"; handle.innerHTML=ICONS.grip; handle.title="드래그해서 이동(다른 블록으로도)";
   handle.addEventListener("mousedown", ()=>{ d.draggable=true; });
-  handle.addEventListener("touchstart", ()=>{ d.draggable=true; }, {passive:true});
   d.addEventListener("dragstart", e=>{ if(!d.draggable) return; dndDropHandled=false; e.dataTransfer.effectAllowed="move"; setTimeout(()=>d.classList.add("dragging"),0); });
   d.addEventListener("dragend", ()=>{
     d.draggable=false; d.classList.remove("dragging");
@@ -3314,7 +3456,6 @@ function subBlockEl(bl, it, liveRefresh, main){
         const cell=document.createElement("div"); cell.className="sub-branch"; cell.dataset.id=br.id; cell.draggable=false;
         const bHandle=document.createElement("span"); bHandle.className="sub-handle branch-handle"; bHandle.innerHTML=ICONS.grip; bHandle.title="드래그해서 순서 이동";
         bHandle.addEventListener("mousedown", ()=>{ cell.draggable=true; });
-        bHandle.addEventListener("touchstart", ()=>{ cell.draggable=true; }, {passive:true});
         cell.addEventListener("dragstart", e=>{ if(!cell.draggable) return; dndDropHandled=false; e.dataTransfer.effectAllowed="move"; setTimeout(()=>cell.classList.add("dragging"),0); });
         cell.addEventListener("dragend", ()=>{
           cell.draggable=false; cell.classList.remove("dragging");
@@ -4036,6 +4177,7 @@ function sbThumbStyle(img, s){
 function rStoryboard(){
   if(feedbackPage && feedbackPage.type==="storyboard"){ rFeedbackPage(); return; }
   if(!P.writeDoc) P.writeDoc={blocks:[], groups:[]};
+  if(P.writeDoc && repairDuplicateIds()) save();
   const pd=P.plotDoc;
   const head=document.createElement("div"); head.className="card";
   head.innerHTML=`<div class="card-h2-row"><h2>${ICONS.image} 콘티제작</h2>${submitBtnHtml()}</div>`
@@ -6435,7 +6577,6 @@ function bindClassRowDnd(wrap){
     const row=h.closest(".class-row"); if(!row) return;
     h.onclick=e=>e.stopPropagation();                       // 손잡이 클릭으로 수업이 열리지 않게
     h.addEventListener("mousedown", ()=>{ row.draggable=true; });
-    h.addEventListener("touchstart", ()=>{ row.draggable=true; }, {passive:true});
   });
   wrap.querySelectorAll(".class-row").forEach(row=>{
     row.addEventListener("dragstart", e=>{
