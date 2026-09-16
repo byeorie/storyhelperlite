@@ -5178,6 +5178,9 @@ function openCharSheetDrawPage(ch, onSaved){
    (첨삭본은 그때그때의 스냅샷이라 층을 따로 보관하지 않는다).
    페이지가 아니라 팝업인 이유: 교수 채점 화면(rProfSubmissionReview)의 상태를 그대로 두고
    돌아와야 하기 때문. */
+/* 2026-09-16: 그리기 방식 두 가지 — "학생 그림 위에 그리기"(기본) / "빈 캔버스에 그리기"(옵션).
+   빈 캔버스는 학생 그림과 같은 크기의 흰 종이이며, 옆에 학생 그림을 작은 참고 이미지로 띄운다.
+   onSave(newKey, {blank}) — blank=true면 빈 캔버스에 그린 피드백이다. */
 function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   const FB_MAX_DIM=1600;
   const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
@@ -5191,7 +5194,7 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
   box.appendChild(wait);
   overlay.appendChild(box); document.body.appendChild(overlay);
 
-  let fbEd=null;
+  let fbEd=null, blank=false;
   const sz=sbSizeOf(sizeKey);
   const probe=new Image();
   probe.onload=()=>build(probe.naturalWidth||sz.w, probe.naturalHeight||sz.h);
@@ -5202,11 +5205,45 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
     wait.remove();
     const cap=Math.min(1, FB_MAX_DIM/Math.max(nw,nh,1));
     const W=Math.max(1,Math.round(nw*cap)), H=Math.max(1,Math.round(nh*cap));
+
+    /* 그리기 방식 선택 */
+    const modeBar=document.createElement("div"); modeBar.className="sb-fb-mode";
+    const mkMode=(label, isBlank)=>{
+      const b=document.createElement("button"); b.type="button"; b.className="btn sm"; b.textContent=label;
+      b.onclick=()=>switchMode(isBlank);
+      modeBar.appendChild(b); return b;
+    };
+    const overBtn=mkMode("학생 그림 위에 그리기", false);
+    const blankBtn=mkMode("빈 캔버스에 그리기", true);
     const hint=document.createElement("p"); hint.className="hint";
-    hint.textContent="학생 그림은 맨 아래 고정 배경이라 지우개로 지워지지 않습니다. 안심하고 그 위에 첨삭하세요.";
-    box.appendChild(hint);
-    fbEd=createDrawEditor({w:W, h:H, baseUrl:sbImgUrl(refKey), compact:true});
-    box.appendChild(fbEd.el);
+    const refWrap=document.createElement("div"); refWrap.className="sb-fb-ref";
+    const refCap=document.createElement("span"); refCap.className="sb-fb-imglabel"; refCap.textContent="참고: 학생 그림(클릭하면 크게)";
+    const refImg=document.createElement("img"); refImg.src=sbImgUrl(refKey); refImg.alt="학생 그림";
+    refImg.onclick=()=>openStoryboardImageViewer((title||"콘티")+" — 학생 그림", refKey, null);
+    refWrap.append(refCap, refImg);
+    const holder=document.createElement("div");
+    box.append(modeBar, hint, refWrap, holder);
+
+    function paintMode(){
+      overBtn.classList.toggle("ghost", blank);
+      blankBtn.classList.toggle("ghost", !blank);
+      refWrap.style.display=blank?"":"none";
+      hint.textContent=blank
+        ? "빈 캔버스(학생 그림과 같은 크기)에 새로 그립니다. 위의 학생 그림을 참고하세요."
+        : "학생 그림은 맨 아래 고정 배경이라 지우개로 지워지지 않습니다. 안심하고 그 위에 첨삭하세요.";
+    }
+    function makeEditor(){
+      if(fbEd) fbEd.destroy();
+      holder.innerHTML="";
+      fbEd=createDrawEditor(blank ? {w:W, h:H, compact:true} : {w:W, h:H, baseUrl:sbImgUrl(refKey), compact:true});
+      holder.appendChild(fbEd.el);
+    }
+    function switchMode(toBlank){
+      if(toBlank===blank) return;
+      if(fbEd && fbEd.hasAnything() && !confirm("방식을 바꾸면 지금까지 그린 내용이 지워집니다. 바꿀까요?")) return;
+      blank=toBlank; paintMode(); makeEditor();
+    }
+    paintMode(); makeEditor();
 
     const actions=document.createElement("div"); actions.className="dlg-modal-actions";
     const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
@@ -5216,12 +5253,13 @@ function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
     saveBtn.textContent="저장 후 종료";
     saveBtn.onclick=()=>{
       if(!fbEd.isReady()){ alert("그림을 아직 불러오는 중입니다. 잠시 뒤에 다시 눌러 주세요."); return; }
+      if(blank && !fbEd.hasAnything() && !confirm("빈 캔버스에 아무것도 그리지 않았습니다. 그대로 저장할까요?")) return;
       saveBtn.disabled=true; saveBtn.textContent="저장 중…";
       compressCanvasToLimit(fbEd.flatten(), sbMaxBytes(sizeKey), async blob=>{
         if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
         const key=await uploadStoryboardBlob(blob);
         if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-        fbEd.destroy(); close(); onSave(key);
+        fbEd.destroy(); close(); onSave(key, {blank});
       });
     };
     actions.append(pngBtn, saveBtn);
@@ -7075,8 +7113,8 @@ async function rProfSubmissionReview(id, version){
       emptyText: isFile ? "제출된 파일이 없습니다." : undefined,
       /* 2026-09-15: 파일 과제는 그림을 눌러도 크게 보기만 — 그리기는 [피드백 그리기] 버튼으로만 */
       drawByButtonOnly: isFile,
-      onFeedback: async (blockId, baseKey, newKey)=>{
-        const r=await submitStoryboardFeedback(id, Array.isArray(sub.data)?sub.data:[], sub.feedback, blockId, baseKey, newKey);
+      onFeedback: async (blockId, baseKey, newKey, blank)=>{
+        const r=await submitStoryboardFeedback(id, Array.isArray(sub.data)?sub.data:[], sub.feedback, blockId, baseKey, newKey, blank);
         /* 그림 한 장을 저장한 것일 뿐, 아직 "전달"은 아니다 — 전달은 아래 [피드백 전달] 버튼에서 (2026-09-11) */
         if(r.ok){ profReviewVersion=null; render(); }
         return r;
@@ -7260,8 +7298,8 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     /* 지금 피드백을 그릴 기준이 되는 그림(첨삭 전이면 학생이 낸 원본, 뒤면 지금까지의 피드백본) */
     const baseKey = fb ? fb.afterKey : b.key;
     const startDraw = opts.editable ? ()=>{
-      openStoryboardFeedbackDrawModal(b.title||"", sbNormalizeSize(b.size), baseKey, async (newKey)=>{
-        const r=await opts.onFeedback(b.id, baseKey, newKey);
+      openStoryboardFeedbackDrawModal(b.title||"", sbNormalizeSize(b.size), baseKey, async (newKey, info)=>{
+        const r=await opts.onFeedback(b.id, baseKey, newKey, !!(info&&info.blank));
         if(!r || !r.ok) alert((r&&r.body&&r.body.error)||"저장에 실패했습니다.");
       });
     } : null;
@@ -7285,7 +7323,7 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
       box.append(cap,img);
       return box;
     };
-    if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전",false), mk(fb.afterKey,"피드백",true)); }
+    if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전",false), mk(fb.afterKey,fb.blank?"피드백(빈 캔버스)":"피드백",true)); }
     else if(fb){ imgsWrap.appendChild(mk(fb.afterKey,"현재",true)); }
     else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티",true)); }
     /* 2026-09-14: 학생 콘티 화면과 같은 배치 — 지문·대사가 왼쪽, 그림이 오른쪽 */
@@ -7335,13 +7373,13 @@ function sbScriptBlock(b, counter){
 /* 첨삭 버전 저장(=새 라운드) — 지금 손댄 블록(blockId)만 {beforeKey,afterKey}를 새로 채우고,
    나머지 블록은 지금까지의 상태를 그대로 이어붙여서(처음 손대는 블록이면 beforeKey=afterKey=원본 key)
    professor-submission에 새 버전으로 저장한다. */
-async function submitStoryboardFeedback(id, dataBlocks, currentFeedback, blockId, baseKey, newKey){
+async function submitStoryboardFeedback(id, dataBlocks, currentFeedback, blockId, baseKey, newKey, blank){
   const fbMap={};
-  ((currentFeedback && currentFeedback.blocks)||[]).forEach(b=>{ fbMap[b.id]={beforeKey:b.beforeKey, afterKey:b.afterKey}; });
-  fbMap[blockId]={beforeKey:baseKey, afterKey:newKey};
+  ((currentFeedback && currentFeedback.blocks)||[]).forEach(b=>{ fbMap[b.id]={beforeKey:b.beforeKey, afterKey:b.afterKey, blank:!!b.blank}; });
+  fbMap[blockId]={beforeKey:baseKey, afterKey:newKey, blank:!!blank};
   const blocks=dataBlocks.filter(b=>!b.clip).map(b=>{
     const e=fbMap[b.id];
-    return e ? {id:b.id, beforeKey:e.beforeKey, afterKey:e.afterKey} : {id:b.id, beforeKey:b.key, afterKey:b.key};
+    return e ? {id:b.id, beforeKey:e.beforeKey, afterKey:e.afterKey, ...(e.blank && e.beforeKey!==e.afterKey ? {blank:true} : {})} : {id:b.id, beforeKey:b.key, afterKey:b.key};
   });
   return apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback:{blocks}, memos:[]})});
 }

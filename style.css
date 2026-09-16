@@ -1038,6 +1038,9 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
 .draw-modal{background:var(--card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.3);
   padding:16px;display:flex;flex-direction:column;gap:12px;max-height:94vh;overflow:auto}
 .draw-modal-wide{width:min(1180px,94vw)}
+.sb-fb-mode{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}
+.sb-fb-ref{display:flex;flex-direction:column;gap:4px;margin:0 0 8px}
+.sb-fb-ref img{max-height:140px;max-width:100%;width:auto;align-self:flex-start;border:1px solid #ddd;border-radius:6px;cursor:zoom-in;background:#fff}
 
 /* --- 페이지 머리 --- */
 .draw-page{padding:14px 16px}
