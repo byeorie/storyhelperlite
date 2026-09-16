@@ -2,6 +2,19 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-09-16 (4) — 우클릭 메뉴에 복사/잘라내기/붙여넣기
+
+**요청**: 마우스 우클릭 메뉴에 복사·잘라내기·붙여넣기 추가.
+
+**수정**
+- `app.js` — `document` 캡처 단계 `contextmenu` 리스너(`clipSnapshot`/`buildClipButtons`/`clipCut`/`clipCopy`/`clipPaste`) 추가.
+  우클릭 순간의 입력칸·선택 범위를 기억해 두고, 각 화면의 자체 우클릭 메뉴가 열리면 맨 위에 3개 항목(+구분선)을 붙인다.
+  자체 메뉴가 없는 곳(일반 입력칸)에서는 이 3개만 뜬다. 입력칸이 아닌 곳은 글자를 선택했을 때만 [복사]가 뜬다.
+  브라우저 기본 메뉴가 뜨는 곳(#app 바깥)은 건드리지 않는다.
+- 글자 변경은 `execCommand("insertText"/"delete")` → input 이벤트(자동저장)·Ctrl+Z 유지. 붙여넣기는
+  `navigator.clipboard.readText()`(첫 사용 시 브라우저 권한 확인), 거부되면 Ctrl+V 안내.
+- `ICONS`에 copy/cut/paste 추가. `style.css` — `.ctx-menu button:disabled`, `.ctx-key`(단축키 표시).
+
 ## 2026-09-16 (3) — 그리기 화면: 스페이스바 = 화면 이동
 
 **요청**: 콘티 그리기·콘티 첨삭(드로잉 켜진 상태)에서 스페이스를 캔버스 화면 이동 단축키로.

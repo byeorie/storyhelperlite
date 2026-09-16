@@ -955,6 +955,8 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
 .ctx-menu button:hover{background:var(--accent2)}
 .ctx-menu button.danger{color:#b3503a}
 .ctx-menu hr{border:none;border-top:1px solid var(--line);margin:4px 2px}
+.ctx-menu button:disabled{opacity:.4;cursor:default;background:transparent}
+.ctx-menu .ctx-key{margin-left:auto;padding-left:14px;font-size:11px;color:#999}
 
 /* ===== 내보내기 탭 ===== */
 .export-btnrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}

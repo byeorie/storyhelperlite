@@ -39,6 +39,9 @@ const ICONS = {
   pencil:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
   bucket:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5L19 13a2 2 0 0 1 0 2.8l-4.2 4.2a2 2 0 0 1-2.8 0L3.5 11.5z"/><path d="M7 6L4.5 3.5"/><path d="M20.5 16.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z"/></svg>',
   refresh:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
+  copy:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  cut:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>',
+  paste:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
   eraser:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a2 2 0 0 1 0-2.8l9.6-9.6a2 2 0 0 1 2.8 0l5.7 5.7a2 2 0 0 1 0 2.8L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>'
 };
 function isAdmin(){ return typeof currentUser!=="undefined" && currentUser && currentUser.username===ADMIN_USERNAME; }
@@ -3177,6 +3180,98 @@ function openLineBlockCtxMenu(x, y, bl){
 function hideCtxMenu(){ const m=document.getElementById("ctxMenu"); if(m){ m.hidden=true; m.innerHTML=""; } ctxMenuTargetBlock=null; }
 document.addEventListener("click", ()=>hideCtxMenu());
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") hideCtxMenu(); });
+/* 2026-09-16: 우클릭 메뉴에 [복사/잘라내기/붙여넣기] 추가 (모든 우클릭 메뉴 공통)
+   - 작업 영역(#app)은 브라우저 기본 메뉴를 막으므로, 우클릭 순간의 입력칸·선택 범위를 기억해 뒀다가
+     각 화면의 자체 메뉴가 열리면 맨 위에 붙이고, 자체 메뉴가 없는 곳(입력칸 등)이면 이 3개만 띄운다.
+   - 글자를 바꿀 때는 execCommand(insertText/delete)를 써서 input 이벤트(자동저장)와 Ctrl+Z가 그대로 동작. */
+const CLIP_EDITABLE_SEL='textarea, input:not([type]), input[type=text], input[type=search], input[type=url], input[type=email], input[type=number], [contenteditable=""], [contenteditable="true"]';
+function clipSnapshot(target){
+  const el=(target && target.closest) ? target.closest(CLIP_EDITABLE_SEL) : null;
+  const snap={el:null, text:"", start:0, end:0, range:null, editable:false};
+  if(el && (el.tagName==="TEXTAREA" || el.tagName==="INPUT")){
+    snap.el=el; snap.editable=!el.readOnly && !el.disabled;
+    try{ snap.start=el.selectionStart||0; snap.end=el.selectionEnd||0; }catch(_){ /* number 칸은 선택 범위 없음 */ }
+    snap.text=el.value.slice(snap.start, snap.end);
+  }else{
+    const sel=window.getSelection();
+    if(sel && sel.rangeCount && !sel.isCollapsed) snap.range=sel.getRangeAt(0).cloneRange();
+    snap.text=sel ? String(sel) : "";
+    if(el){ snap.el=el; snap.editable=true;
+      if(!snap.range || !el.contains(snap.range.commonAncestorContainer)){
+        const r=document.createRange(); r.selectNodeContents(el); r.collapse(false); snap.range=r; snap.text="";
+      }
+    }
+  }
+  return snap;
+}
+function clipRestore(snap){
+  const el=snap.el; if(!el) return false;
+  el.focus();
+  if(el.tagName==="TEXTAREA" || el.tagName==="INPUT"){ try{ el.setSelectionRange(snap.start, snap.end); }catch(_){} }
+  else if(snap.range){ const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(snap.range); }
+  return true;
+}
+function clipInsert(snap, text){
+  if(!clipRestore(snap)) return;
+  let ok=false;
+  try{ ok=document.execCommand(text ? "insertText" : "delete", false, text); }catch(_){}
+  if(!ok && (snap.el.tagName==="TEXTAREA" || snap.el.tagName==="INPUT")){
+    try{ snap.el.setRangeText(text, snap.start, snap.end, "end"); }
+    catch(_){ const v=snap.el.value; snap.el.value=v.slice(0,snap.start)+text+v.slice(snap.end); }
+    snap.el.dispatchEvent(new Event("input", {bubbles:true}));
+  }
+}
+async function clipWrite(text){
+  try{ await navigator.clipboard.writeText(text); return true; }
+  catch(_){
+    const ta=document.createElement("textarea"); ta.value=text; ta.style.cssText="position:fixed;left:-9999px;top:0";
+    document.body.appendChild(ta); ta.select();
+    let ok=false; try{ ok=document.execCommand("copy"); }catch(__){}
+    ta.remove(); return ok;
+  }
+}
+async function clipCopy(snap){ if(snap.text) await clipWrite(snap.text); }
+async function clipCut(snap){ if(!snap.text) return; if(await clipWrite(snap.text)) clipInsert(snap, ""); }
+async function clipPaste(snap){
+  let text=null;
+  try{ text=await navigator.clipboard.readText(); }catch(_){}
+  if(text===null){ alert("브라우저가 클립보드 읽기를 허용하지 않았습니다.\n붙여넣기는 Ctrl+V 를 사용해 주세요."); clipRestore(snap); return; }
+  if(text) clipInsert(snap, text);
+}
+function buildClipButtons(snap){
+  const has=!!snap.text, ed=snap.editable;
+  const defs=[["잘라내기",ICONS.cut,()=>clipCut(snap),ed&&has,"Ctrl+X"],["복사",ICONS.copy,()=>clipCopy(snap),has,"Ctrl+C"],["붙여넣기",ICONS.paste,()=>clipPaste(snap),ed,"Ctrl+V"]];
+  return defs.filter(d=>ed || d[0]==="복사").map(([label,icon,fn,enabled,key])=>{
+    const b=document.createElement("button"); b.className="clip-item";
+    b.innerHTML=icon+" "+label+'<span class="ctx-key">'+key+'</span>';
+    b.disabled=!enabled;
+    b.addEventListener("mousedown", e=>e.preventDefault());  // 입력칸 포커스·선택 유지
+    b.onclick=e=>{ e.stopPropagation(); hideCtxMenu(); fn(); };
+    return b;
+  });
+}
+document.addEventListener("contextmenu", e=>{
+  const snap=clipSnapshot(e.target);
+  hideCtxMenu();
+  const x=e.clientX, y=e.clientY;
+  setTimeout(()=>{
+    if(!e.defaultPrevented) return;                 // 브라우저 기본 메뉴가 뜨는 곳은 그대로 둔다
+    if(!snap.editable && !snap.text) return;        // 입력칸도, 선택한 글자도 없으면 추가하지 않음
+    const m=document.getElementById("ctxMenu"); if(!m) return;
+    const btns=buildClipButtons(snap);
+    if(m.hidden){
+      m.innerHTML=""; btns.forEach(b=>m.appendChild(b)); m.hidden=false;
+      m.style.left=Math.min(x, window.innerWidth-190)+"px";
+      m.style.top=y+"px";
+    }else{
+      const first=m.firstChild;
+      btns.forEach(b=>m.insertBefore(b, first));
+      m.insertBefore(document.createElement("hr"), first);
+    }
+    const r=m.getBoundingClientRect();
+    if(r.bottom>window.innerHeight-4) m.style.top=Math.max(4, window.innerHeight-r.height-8)+"px";
+  },0);
+}, true);
 
 function subBlockEl(bl, it, liveRefresh, main){
   const d=document.createElement("div"); d.className="sub-block "+(it.type==="line"?"sub-line":"sub-text"); d.dataset.id=it.id; d.draggable=false;
