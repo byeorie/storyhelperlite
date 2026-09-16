@@ -671,9 +671,10 @@ function render(){
        이미 떠 있으면 다시 만들지 않는다 — 서버에서 작품을 다시 불러올 때도 render()가 불리는데,
        그때 캔버스를 새로 만들면 그리던 그림이 사라지기 때문(2026-09-14) */
     if(drawPage){
-      if(!app.querySelector(".draw-page")){ app.innerHTML=""; app.classList.add("wide"); drawPage.build(app); }
+      if(!app.querySelector(".draw-page")){ app.innerHTML=""; app.classList.add("wide","draw-open"); drawPage.build(app); }
       return;
     }
+    app.classList.remove("draw-open");
     refreshProjSelect();
     app.innerHTML="";
     profAutoStop();  // 2026-09-15: 화면이 바뀌면 과제 관리 자동 새로고침 타이머를 끈다(그 화면이 다시 켠다)
@@ -4725,15 +4726,41 @@ function createDrawEditor(opts){
     setScale(scale*(e.deltaY<0?1.12:0.89), {x:e.clientX, y:e.clientY});
   }, {passive:false});
 
-  const onKeyDown=e=>{ if(e.code==="Space" && !e.repeat && e.target===document.body){ spaceDown=true; stage.classList.add("panning"); e.preventDefault(); } };
-  const onKeyUp=e=>{ if(e.code==="Space"){ spaceDown=false; if(!handTool) stage.classList.remove("panning"); } };
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
+  /* 스페이스바 = 누르고 있는 동안 화면 이동(2026-09-16 보강).
+     예전에는 포커스가 body일 때만 동작해서, 도구 버튼·색·슬라이더를 한 번 누른 뒤에는 스페이스가
+     그 버튼을 다시 누르는 키로 먹혔다(방식 전환·이동 토글 등이 엉뚱하게 눌림). 이제 그리기 편집기가
+     켜져 있으면 글자 입력칸(텍스트·숫자 입력, textarea, 편집 가능한 영역, 선택 상자)을 빼고는 어디에
+     포커스가 있든 스페이스를 화면 이동으로 가로챈다. 크게 보기 창이 떠 있을 때는 건드리지 않는다. */
+  const spaceTypingTarget=t=>{
+    if(!t || !t.tagName) return false;
+    if(t.isContentEditable || t.tagName==="TEXTAREA" || t.tagName==="SELECT") return true;
+    if(t.tagName==="INPUT") return !/^(range|checkbox|radio|button|submit|color|file)$/i.test(t.type||"");
+    return false;
+  };
+  const spaceOwned=e=>e.code==="Space" && el.isConnected && activeDrawEditor===api
+    && !spaceTypingTarget(e.target) && !document.querySelector(".draw-modal-overlay");
+  const setSpacePan=on=>{ spaceDown=on; stage.classList.toggle("panning", on||handTool); };
+  const onKeyDown=e=>{
+    if(!spaceOwned(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    if(!spaceDown) setSpacePan(true);
+  };
+  const onKeyUp=e=>{
+    if(e.code!=="Space") return;
+    if(spaceDown) setSpacePan(false);
+    /* 버튼은 스페이스를 "뗄 때" 눌리므로 keyup도 막아야 한다 */
+    if(spaceOwned(e)){ e.preventDefault(); e.stopPropagation(); }
+  };
+  const onBlurWin=()=>{ if(spaceDown) setSpacePan(false); };
+  window.addEventListener("keydown", onKeyDown, true);
+  window.addEventListener("keyup", onKeyUp, true);
+  window.addEventListener("blur", onBlurWin);
   const onResize=()=>{ if(!el.isConnected){ cleanup(); return; } drawGuides(); };
   window.addEventListener("resize", onResize);
   function cleanup(){
-    window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("keydown", onKeyDown, true);
+    window.removeEventListener("keyup", onKeyUp, true);
+    window.removeEventListener("blur", onBlurWin);
     window.removeEventListener("resize", onResize);
     if(activeDrawEditor===api) activeDrawEditor=null;
   }
@@ -4889,8 +4916,8 @@ function createDrawEditor(opts){
   const inBtn=toolBtn("+","확대", ()=>setScale(scale*1.25));
   const fitBtn=toolBtn("맞춤","화면에 맞게", ()=>fitToViewport());
   const oneBtn=toolBtn("100%","원래 크기", ()=>setScale(1));
-  const handBtn=toolBtn("✋ 이동","누른 채로 끌면 화면을 밀 수 있습니다(스페이스바를 눌러도 됩니다)", ()=>{
-    handTool=!handTool; handBtn.classList.toggle("on", handTool); stage.classList.toggle("panning", handTool);
+  const handBtn=toolBtn("✋ 이동","누른 채로 끌면 화면을 밀 수 있습니다(스페이스바를 누른 채로 끌어도 됩니다)", ()=>{
+    handTool=!handTool; handBtn.classList.toggle("on", handTool); stage.classList.toggle("panning", handTool||spaceDown);
   });
   /* 가이드선 — 화면에서 구도를 잡을 때만 보이고 저장한 그림에는 들어가지 않는다 */
   const guideWrap=document.createElement("label"); guideWrap.className="draw-guide-wrap";
@@ -5172,99 +5199,124 @@ function openCharSheetDrawPage(ch, onSaved){
   });
 }
 
-/* ---- 교수 첨삭 그리기 (팝업 유지) ----
+/* ---- 교수 첨삭 그리기 (2026-09-16: 팝업 → 전체 페이지) ----
    학생이 낸 그림은 맨 아래 고정 배경으로 깔고, 교수는 그 위 층에 그린다. 그래서 지우개로
    아무리 지워도 학생 원본은 지워지지 않는다. 저장하면 합친 그림 한 장의 key만 돌려준다
    (첨삭본은 그때그때의 스냅샷이라 층을 따로 보관하지 않는다).
-   페이지가 아니라 팝업인 이유: 교수 채점 화면(rProfSubmissionReview)의 상태를 그대로 두고
-   돌아와야 하기 때문. */
-/* 2026-09-16: 그리기 방식 두 가지 — "학생 그림 위에 그리기"(기본) / "빈 캔버스에 그리기"(옵션).
-   빈 캔버스는 학생 그림과 같은 크기의 흰 종이이며, 옆에 학생 그림을 작은 참고 이미지로 띄운다.
-   onSave(newKey, {blank}) — blank=true면 빈 캔버스에 그린 피드백이다. */
-function openStoryboardFeedbackDrawModal(title, sizeKey, refKey, onSave){
+   예전에는 채점 화면(rProfSubmissionReview) 상태를 지키려고 팝업이었지만, 채점 화면은
+   profReviewId/profReviewVersion 전역값으로 다시 그려지므로 페이지로 바꿔도 돌아올 수 있다.
+   나가기 전 스크롤 위치와 작성 중인 "평가" 글은 profReviewReturn에 담아 두었다가 되살린다.
+   그리기 방식 두 가지 — "학생 그림 위에 그리기"(기본) / "빈 캔버스에 그리기"(옵션, 2026-09-16).
+   onSave(newKey, {blank}) → 저장 결과 {ok}를 돌려주면, 성공일 때만 페이지를 닫는다
+   (실패하면 그림을 잃지 않도록 페이지에 머문다). */
+let profReviewReturn=null;
+function restoreProfReviewScroll(){
+  const y=profReviewReturn && profReviewReturn.scrollY;
+  if(!y) return;
+  let n=0;
+  const t=setInterval(()=>{
+    if(document.querySelector("#app .sb-fb-row") || ++n>50){ clearInterval(t); window.scrollTo(0,y); }
+  },100);
+}
+function openStoryboardFeedbackDrawPage(title, sizeKey, refKey, onSave){
   const FB_MAX_DIM=1600;
-  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
-  const box=document.createElement("div"); box.className="draw-modal draw-modal-wide";
-  const top=document.createElement("div"); top.className="plot-picker-top";
-  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="콘티 피드백 그리기 — "+(title||"");
-  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
-  top.append(ttl, iconBtn(ICONS.close, "취소", ()=>{ if(confirm("저장하지 않고 닫을까요?")){ if(fbEd) fbEd.destroy(); close(); } }));
-  box.appendChild(top);
-  const wait=document.createElement("p"); wait.className="hint"; wait.textContent="학생이 낸 그림을 불러오는 중…";
-  box.appendChild(wait);
-  overlay.appendChild(box); document.body.appendChild(overlay);
-
+  const evalEl=document.getElementById("reviewEvalInput");
+  profReviewReturn={scrollY:window.scrollY, reviewId:profReviewId, evalText:evalEl?evalEl.value:null};
   let fbEd=null, blank=false;
-  const sz=sbSizeOf(sizeKey);
-  const probe=new Image();
-  probe.onload=()=>build(probe.naturalWidth||sz.w, probe.naturalHeight||sz.h);
-  probe.onerror=()=>build(sz.w, sz.h);
-  probe.src=sbImgUrl(refKey);
-
-  function build(nw, nh){
-    wait.remove();
-    const cap=Math.min(1, FB_MAX_DIM/Math.max(nw,nh,1));
-    const W=Math.max(1,Math.round(nw*cap)), H=Math.max(1,Math.round(nh*cap));
-
-    /* 그리기 방식 선택 */
-    const modeBar=document.createElement("div"); modeBar.className="sb-fb-mode";
-    const mkMode=(label, isBlank)=>{
-      const b=document.createElement("button"); b.type="button"; b.className="btn sm"; b.textContent=label;
-      b.onclick=()=>switchMode(isBlank);
-      modeBar.appendChild(b); return b;
-    };
-    const overBtn=mkMode("학생 그림 위에 그리기", false);
-    const blankBtn=mkMode("빈 캔버스에 그리기", true);
-    const hint=document.createElement("p"); hint.className="hint";
-    const refWrap=document.createElement("div"); refWrap.className="sb-fb-ref";
-    const refCap=document.createElement("span"); refCap.className="sb-fb-imglabel"; refCap.textContent="참고: 학생 그림(클릭하면 크게)";
-    const refImg=document.createElement("img"); refImg.src=sbImgUrl(refKey); refImg.alt="학생 그림";
-    refImg.onclick=()=>openStoryboardImageViewer((title||"콘티")+" — 학생 그림", refKey, null);
-    refWrap.append(refCap, refImg);
-    const holder=document.createElement("div");
-    box.append(modeBar, hint, refWrap, holder);
-
-    function paintMode(){
-      overBtn.classList.toggle("ghost", blank);
-      blankBtn.classList.toggle("ghost", !blank);
-      refWrap.style.display=blank?"":"none";
-      hint.textContent=blank
-        ? "빈 캔버스(학생 그림과 같은 크기)에 새로 그립니다. 위의 학생 그림을 참고하세요."
-        : "학생 그림은 맨 아래 고정 배경이라 지우개로 지워지지 않습니다. 안심하고 그 위에 첨삭하세요.";
-    }
-    function makeEditor(){
-      if(fbEd) fbEd.destroy();
-      holder.innerHTML="";
-      fbEd=createDrawEditor(blank ? {w:W, h:H, compact:true} : {w:W, h:H, baseUrl:sbImgUrl(refKey), compact:true});
-      holder.appendChild(fbEd.el);
-    }
-    function switchMode(toBlank){
-      if(toBlank===blank) return;
-      if(fbEd && fbEd.hasAnything() && !confirm("방식을 바꾸면 지금까지 그린 내용이 지워집니다. 바꿀까요?")) return;
-      blank=toBlank; paintMode(); makeEditor();
-    }
-    paintMode(); makeEditor();
-
-    const actions=document.createElement("div"); actions.className="dlg-modal-actions";
+  const leave=()=>{
+    if(fbEd){ fbEd.destroy(); fbEd=null; }
+    closeDrawPage();
+    restoreProfReviewScroll();
+  };
+  openDrawPageWith(host=>{
+    const page=document.createElement("div"); page.className="card draw-page";
+    const top=document.createElement("div"); top.className="draw-page-top";
+    const back=document.createElement("button"); back.type="button"; back.className="btn ghost sm";
+    back.textContent="← 나가기";
+    const ttl=document.createElement("h2"); ttl.className="draw-page-title"; ttl.textContent="콘티 피드백 그리기 — "+(title||"");
+    const spacer=document.createElement("span"); spacer.className="draw-bar-gap";
     const pngBtn=document.createElement("button"); pngBtn.type="button"; pngBtn.className="btn ghost sm icon-btn";
     pngBtn.innerHTML=ICONS.download+" PNG 저장";
-    pngBtn.onclick=()=>downloadCanvasPng(fbEd.flatten(), "콘티피드백_"+(title||""));
     const saveBtn=document.createElement("button"); saveBtn.type="button"; saveBtn.className="btn";
-    saveBtn.textContent="저장 후 종료";
+    saveBtn.textContent="저장하고 나가기";
+    top.append(back, ttl, spacer, pngBtn, saveBtn);
+    page.appendChild(top);
+    const wait=document.createElement("p"); wait.className="hint draw-page-hint"; wait.textContent="학생이 낸 그림을 불러오는 중…";
+    page.appendChild(wait);
+    host.appendChild(page);
+
+    back.onclick=()=>{
+      if(fbEd && fbEd.hasAnything() && !confirm("저장하지 않고 나가면 지금 그린 내용이 사라집니다. 나갈까요?")) return;
+      leave();
+    };
+    pngBtn.onclick=()=>{ if(fbEd) downloadCanvasPng(fbEd.flatten(), "콘티피드백_"+(title||"")); };
     saveBtn.onclick=()=>{
-      if(!fbEd.isReady()){ alert("그림을 아직 불러오는 중입니다. 잠시 뒤에 다시 눌러 주세요."); return; }
+      if(!fbEd || !fbEd.isReady()){ alert("그림을 아직 불러오는 중입니다. 잠시 뒤에 다시 눌러 주세요."); return; }
       if(blank && !fbEd.hasAnything() && !confirm("빈 캔버스에 아무것도 그리지 않았습니다. 그대로 저장할까요?")) return;
       saveBtn.disabled=true; saveBtn.textContent="저장 중…";
+      const undoBtn=()=>{ saveBtn.disabled=false; saveBtn.textContent="저장하고 나가기"; };
       compressCanvasToLimit(fbEd.flatten(), sbMaxBytes(sizeKey), async blob=>{
-        if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
+        if(!blob){ alert("저장에 실패했습니다. 다시 시도해 주세요."); undoBtn(); return; }
         const key=await uploadStoryboardBlob(blob);
-        if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); saveBtn.disabled=false; saveBtn.textContent="저장 후 종료"; return; }
-        fbEd.destroy(); close(); onSave(key, {blank});
+        if(!key){ alert("업로드에 실패했습니다. 잠시 후 다시 시도해 주세요."); undoBtn(); return; }
+        const r=await onSave(key, {blank});
+        if(r && r.ok===false){ undoBtn(); return; }
+        leave();
       });
     };
-    actions.append(pngBtn, saveBtn);
-    box.appendChild(actions);
-  }
+
+    const sz=sbSizeOf(sizeKey);
+    const probe=new Image();
+    probe.onload=()=>build(probe.naturalWidth||sz.w, probe.naturalHeight||sz.h);
+    probe.onerror=()=>build(sz.w, sz.h);
+    probe.src=sbImgUrl(refKey);
+
+    function build(nw, nh){
+      if(!page.isConnected) return;
+      wait.remove();
+      const cap=Math.min(1, FB_MAX_DIM/Math.max(nw,nh,1));
+      const W=Math.max(1,Math.round(nw*cap)), H=Math.max(1,Math.round(nh*cap));
+
+      const modeBar=document.createElement("div"); modeBar.className="sb-fb-mode";
+      const mkMode=(label, isBlank)=>{
+        const b=document.createElement("button"); b.type="button"; b.className="btn sm"; b.textContent=label;
+        b.onclick=()=>switchMode(isBlank);
+        modeBar.appendChild(b); return b;
+      };
+      const overBtn=mkMode("학생 그림 위에 그리기", false);
+      const blankBtn=mkMode("빈 캔버스에 그리기", true);
+      const hint=document.createElement("span"); hint.className="hint";
+      modeBar.appendChild(hint);
+      const refWrap=document.createElement("div"); refWrap.className="sb-fb-ref";
+      const refCap=document.createElement("span"); refCap.className="sb-fb-imglabel"; refCap.textContent="참고: 학생 그림(클릭하면 크게)";
+      const refImg=document.createElement("img"); refImg.src=sbImgUrl(refKey); refImg.alt="학생 그림";
+      refImg.onclick=()=>openStoryboardImageViewer((title||"콘티")+" — 학생 그림", refKey, null);
+      refWrap.append(refCap, refImg);
+      const holder=document.createElement("div");
+      page.append(modeBar, refWrap, holder);
+
+      function paintMode(){
+        overBtn.classList.toggle("ghost", blank);
+        blankBtn.classList.toggle("ghost", !blank);
+        refWrap.style.display=blank?"":"none";
+        hint.textContent=blank
+          ? "학생 그림과 같은 크기의 빈 캔버스에 새로 그립니다."
+          : "학생 그림은 맨 아래 고정 배경이라 지우개로 지워지지 않습니다.";
+      }
+      function makeEditor(){
+        if(fbEd) fbEd.destroy();
+        holder.innerHTML="";
+        fbEd=createDrawEditor(blank ? {w:W, h:H} : {w:W, h:H, baseUrl:sbImgUrl(refKey)});
+        holder.appendChild(fbEd.el);
+      }
+      function switchMode(toBlank){
+        if(toBlank===blank) return;
+        if(fbEd && fbEd.hasAnything() && !confirm("방식을 바꾸면 지금까지 그린 내용이 지워집니다. 바꿀까요?")) return;
+        blank=toBlank; paintMode(); makeEditor();
+      }
+      paintMode(); makeEditor();
+    }
+  });
 }
 
 /* 콘티 이미지 크게 보기 (2026-09-11 추가).
@@ -5296,10 +5348,8 @@ function openStoryboardImageViewer(title, key, onDraw){
   overlay.appendChild(box); document.body.appendChild(overlay);
 }
 
-/* 콘티 피드백 그리기 모달.
-   (2026-09-11) 예전에는 캔버스를 항상 SB_SIZES(350x350 등) 고정 크기로 만들어서, 학생이 "직접 그리기"가
-   아니라 "이미지 업로드"로 낸 콘티(세로로 긴 스캔본 등)는 작게 찌그러진 채로 열렸고 그 위에 첨삭을
-   그려야 했다. 이제는 실제 이미지의 가로세로 비율과 해상도를 그대로 쓰고, 화면에 맞게 크게 띄운다. */
+/* 콘티 피드백 그리기 (2026-09-11) — 캔버스는 SB_SIZES 고정 크기가 아니라 실제 이미지의 가로세로
+   비율과 해상도를 그대로 쓴다(업로드한 세로 스캔본이 찌그러지던 문제). */
 
 /* ===== 🛠 관리자 — 회원 관리 · 서버 초기화 =====
    /api/admin (GET: 회원 명단, POST {mode:"data"|"all"}: 초기화) 를 사용한다.
@@ -7093,6 +7143,10 @@ async function rProfSubmissionReview(id, version){
     </div>`;
     evalTa=document.getElementById("reviewEvalInput");
     evalTa.value=sub.evaluation||"";
+    /* 2026-09-16: 피드백 그리기 페이지에 다녀오기 전에 쓰던 평가 글을 되살린다 */
+    if(profReviewReturn && profReviewReturn.reviewId===id && profReviewReturn.evalText!=null){
+      evalTa.value=profReviewReturn.evalText; profReviewReturn.evalText=null;
+    }
     const evalSaveBtn=document.getElementById("reviewEvalSaveBtn");
     const evalState=document.getElementById("reviewEvalState");
     evalSaveBtn.onclick=async ()=>{
@@ -7298,9 +7352,10 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     /* 지금 피드백을 그릴 기준이 되는 그림(첨삭 전이면 학생이 낸 원본, 뒤면 지금까지의 피드백본) */
     const baseKey = fb ? fb.afterKey : b.key;
     const startDraw = opts.editable ? ()=>{
-      openStoryboardFeedbackDrawModal(b.title||"", sbNormalizeSize(b.size), baseKey, async (newKey, info)=>{
+      openStoryboardFeedbackDrawPage(b.title||"", sbNormalizeSize(b.size), baseKey, async (newKey, info)=>{
         const r=await opts.onFeedback(b.id, baseKey, newKey, !!(info&&info.blank));
-        if(!r || !r.ok) alert((r&&r.body&&r.body.error)||"저장에 실패했습니다.");
+        if(!r || !r.ok){ alert((r&&r.body&&r.body.error)||"저장에 실패했습니다."); return {ok:false}; }
+        return r;
       });
     } : null;
     /* (2026-09-11) 이미지를 클릭하면 크게 볼 수 있다. 업로드한 이미지도 여기서 크게 띄운 뒤

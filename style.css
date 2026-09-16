@@ -345,6 +345,9 @@ body.sb-collapsed .plot-modal-overlay.center-content{left:44px}
 
 /* ===== ✍️ 글쓰기 ===== */
 #app.wide{max-width:none}
+/* 2026-09-16: 그리기 페이지에서 확대하면 main(flex 항목)이 캔버스 크기만큼 늘어나 버려서 캔버스 영역에
+   스크롤이 생기지 않았다 → 스페이스·✋ 이동이 아무 반응 없었음. 그리기 페이지일 때는 늘어나지 않게 한다. */
+#app.draw-open{min-width:0}
 .write-layout{display:flex;gap:14px;align-items:flex-start}
 .write-plotlist{flex:0 0 200px;min-width:160px;position:sticky;top:70px;
   background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;
@@ -1031,14 +1034,14 @@ sup.memo-star{font-size:12px;font-weight:700;color:var(--memo-ink,var(--accent))
 .sb-size-free-input{width:96px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit}
 
 /* ===== 그리기 도구 (2026-09-14 개편) =====
-   콘티·캐릭터는 "페이지"(.draw-page)로, 교수 첨삭만 팝업(.draw-modal)으로 뜬다.
+   콘티·캐릭터·교수 첨삭 모두 "페이지"(.draw-page)로 뜬다(교수 첨삭은 2026-09-16부터). .draw-modal은 크게 보기 창용.
    둘 다 안쪽은 같은 .draw-editor(왼쪽 도구 패널 + 오른쪽 캔버스)를 쓴다. */
 .draw-modal-overlay{position:fixed;inset:0;z-index:2100;background:rgba(0,0,0,.5);
   display:flex;align-items:center;justify-content:center;padding:20px}
 .draw-modal{background:var(--card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.3);
   padding:16px;display:flex;flex-direction:column;gap:12px;max-height:94vh;overflow:auto}
 .draw-modal-wide{width:min(1180px,94vw)}
-.sb-fb-mode{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}
+.sb-fb-mode{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px}
 .sb-fb-ref{display:flex;flex-direction:column;gap:4px;margin:0 0 8px}
 .sb-fb-ref img{max-height:140px;max-width:100%;width:auto;align-self:flex-start;border:1px solid #ddd;border-radius:6px;cursor:zoom-in;background:#fff}
 

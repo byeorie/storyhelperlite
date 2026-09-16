@@ -2,6 +2,29 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-09-16 (3) — 그리기 화면: 스페이스바 = 화면 이동
+
+**요청**: 콘티 그리기·콘티 첨삭(드로잉 켜진 상태)에서 스페이스를 캔버스 화면 이동 단축키로.
+
+**원인·수정**
+- `app.js` `createDrawEditor` — 스페이스 이동이 이미 있었지만 **포커스가 body일 때만** 동작했다. 도구 버튼·색·슬라이더를
+  한 번 누르면 스페이스가 그 버튼을 다시 누르는 키로 먹혔다. 이제 편집기가 켜져 있으면(`activeDrawEditor===api`)
+  글자 입력칸(텍스트/숫자 input, textarea, select, contenteditable)과 크게 보기 창이 떠 있을 때를 빼고
+  keydown/keyup을 capture 단계에서 가로채 이동 모드로 쓴다(버튼은 keyup에 눌리므로 keyup도 막음). 창 포커스를 잃으면 해제.
+- `style.css` + `render()` — 그리기 페이지에서 확대하면 `main`(flex 항목, min-width 기본값)이 캔버스 크기만큼 늘어나
+  `.draw-viewport`에 스크롤이 생기지 않아 **스페이스·✋ 이동이 아무 반응이 없었다**. 그리기 페이지일 때 `#app`에
+  `draw-open` 클래스를 붙이고 `min-width:0`을 준다.
+
+## 2026-09-16 (2) — 콘티 피드백 그리기: 팝업 → 전체 페이지
+
+**수정** (`app.js`, `style.css`)
+- `openStoryboardFeedbackDrawModal`(팝업)을 `openStoryboardFeedbackDrawPage`로 교체 — 콘티·캐릭터 그리기와 같은
+  `drawPage` 전체 화면(← 나가기 / PNG 저장 / 저장하고 나가기). 그리기 방식 전환(학생 그림 위 / 빈 캔버스)은 그대로.
+- 나가면 `closeDrawPage()` → `render()`가 `profReviewId`로 채점 화면을 다시 그린다. 나가기 전 스크롤 위치와
+  작성 중이던 "평가" 글은 `profReviewReturn`에 보관했다가 되살린다(`restoreProfReviewScroll`, 평가 입력창 복원).
+- 저장 순서: 업로드 → 첨삭 버전 저장(onFeedback) 성공 후에만 페이지를 닫는다. 실패하면 그림을 잃지 않도록 페이지에 머문다.
+  (그리기 페이지가 떠 있는 동안 onFeedback 안의 render()는 가드로 무시되므로 채점 화면이 한 번만 다시 그려진다.)
+
 ## 2026-09-16 — 콘티 첨삭: "빈 캔버스에 그리기" 옵션 추가
 
 **요청**: 콘티 첨삭 시 학생 그림 위에 그리기(기본) 외에, 빈 페이지를 만들어 그림을 그려 피드백으로 보낼 수 있게.
