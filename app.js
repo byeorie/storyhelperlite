@@ -7382,7 +7382,7 @@ async function rProfSubmissionReview(id, version){
     evalBox.innerHTML=`<div class="review-eval">
       <div class="review-eval-label">${ICONS.check} ${(sub.type==="storyboard"||sub.type==="file")?"전체 평가":"평가"} <span class="hint">(선택 사항 · 학생에게 그대로 보입니다)</span></div>
       <textarea id="reviewEvalInput" class="review-eval-input" rows="3" placeholder="과제 전체에 대한 평가를 자유롭게 적어주세요. 비워두어도 됩니다."></textarea>
-      <div class="review-eval-actions"><button type="button" class="btn ghost sm" id="reviewEvalSaveBtn">평가 저장</button><span class="hint" id="reviewEvalState"></span></div>
+      <p class="hint" style="margin:4px 0 0">아래 [피드백 전달]을 누르면 이 평가도 함께 전달됩니다.</p>
     </div>`;
     evalTa=document.getElementById("reviewEvalInput");
     evalTa.value=sub.evaluation||"";
@@ -7390,14 +7390,7 @@ async function rProfSubmissionReview(id, version){
     if(profReviewReturn && profReviewReturn.reviewId===id && profReviewReturn.evalText!=null){
       evalTa.value=profReviewReturn.evalText; profReviewReturn.evalText=null;
     }
-    const evalSaveBtn=document.getElementById("reviewEvalSaveBtn");
-    const evalState=document.getElementById("reviewEvalState");
-    evalSaveBtn.onclick=async ()=>{
-      evalSaveBtn.disabled=true; evalState.textContent="저장 중…";
-      const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, evaluation:evalTa.value})});
-      evalSaveBtn.disabled=false;
-      evalState.textContent = r.ok ? "저장했습니다." : ((r.body&&r.body.error)||"저장에 실패했습니다.");
-    };
+    /* 2026-09-17: [평가 저장] 버튼 제거 — 평가는 [피드백 전달] 때만 함께 저장·전달된다 */
   }else if(evalBox && (sub.evaluation||"").trim()){
     evalBox.innerHTML=`<div class="review-eval"><div class="review-eval-label">평가</div><div class="review-eval-view">${esc(sub.evaluation)}</div></div>`;
   }
@@ -7451,7 +7444,7 @@ async function rProfSubmissionReview(id, version){
           ? "피드백을 학생에게 전달했습니다."
           : "평가를 저장하고 확인 표시를 했습니다. (아직 그린 피드백이나 메모가 없습니다)");
         /* 2026-09-14: 전달을 마치면 첨삭 화면에 머무르지 않고 그 과제의 제출함으로 자동으로 나간다 */
-        profReviewId=null; profReviewVersion=null; render();
+        profReviewId=null; profReviewVersion=null; render(); window.scrollTo(0,0);
       };
     }
     return;
@@ -7479,7 +7472,7 @@ async function rProfSubmissionReview(id, version){
        화면에 이전 카드+새 카드가 이중으로 쌓인다(2026-08-20 발견). render()를 거쳐야 app이 먼저 비워진 뒤
        profReviewId 기준으로 이 함수가 다시 호출된다. */
     /* 2026-09-14: 전달 후에는 제출함 화면으로 자동 이동(profReviewId=null) */
-    if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewId=null; profReviewVersion=null; render(); }
+    if(r.ok){ alert("피드백을 학생에게 전달했습니다."); profReviewId=null; profReviewVersion=null; render(); window.scrollTo(0,0); }
     else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
   };
 }
