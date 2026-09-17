@@ -4882,10 +4882,32 @@ function createDrawEditor(opts){
   /* 손 도구 / 스페이스바 / 가운데 버튼으로 화면 밀기 */
   let panning=false, panX=0, panY=0, spaceDown=false, handTool=false;
   const pointers=new Map(); let pinchDist=0, pinchScale=1;
+  /* 2026-09-17: 손바닥 무시(팜 리젝션) — 패드에서 펜으로 그릴 때 손바닥·손날이 닿으면 "두 손가락"으로
+     인식돼 확대/이동이 되던 문제. 펜 모드(penOnly)면 손 터치(pointerType "touch")는 그리기·이동·확대에
+     전혀 쓰지 않는다. 저장값: "1"=펜 모드, "0"=사용자가 [손 터치 허용]을 직접 켬, 없음=아직 모름
+     (이때 펜이 처음 닿으면 자동으로 펜 모드가 된다). */
+  let penPref=drawLsGet("storyhelper_drawPenOnly", "");
+  let penOnly = penPref==="1";
+  const ignoreTouch=e=>penOnly && e.pointerType==="touch";
+  function setPenOnly(on, remember){
+    penOnly=!!on;
+    if(remember){ penPref=penOnly?"1":"0"; drawLsSet("storyhelper_drawPenOnly", penPref); }
+    el.classList.toggle("pen-only", penOnly);
+    if(penOnly){ pointers.forEach((v,id)=>{ if(v.touch) pointers.delete(id); }); if(pointers.size<2) pinchDist=0; }
+    if(typeof refreshTouchBtn==="function") refreshTouchBtn();
+  }
 
-  stage.addEventListener("pointerdown", e=>{
+  /* 2026-09-17: 캔버스 바깥 회색 여백에서 시작한 획도 그려지도록, 누르기는 캔버스가 아니라
+     viewport 전체에서 받는다(포인터는 stage가 붙잡으므로 이후 움직임은 캔버스 기준으로 이어진다).
+     viewport에 touch-action:none을 줘서 펜·터치로 여백을 쓸어도 크롬의 뒤로가기 제스처가 걸리지 않는다. */
+  viewport.addEventListener("pointerdown", e=>{
     if(!ready) return;
-    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    /* 스크롤 막대를 누른 경우는 그리기로 치지 않는다 */
+    if(e.target===viewport && (e.offsetX>=viewport.clientWidth || e.offsetY>=viewport.clientHeight)) return;
+    if(e.pointerType!=="mouse" || e.button===0) e.preventDefault();
+    if(e.pointerType==="pen" && !penOnly && penPref===""){ setPenOnly(true, true); }
+    if(ignoreTouch(e)) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY, touch:e.pointerType==="touch"});
     if(pointers.size===2){   /* 두 손가락 → 확대/축소 */
       drawing=false;
       const p=[...pointers.values()];
@@ -4901,6 +4923,7 @@ function createDrawEditor(opts){
     if(!layers[activeId].visible){ alert("지금 고른 층("+layers[activeId].label+")이 숨김 상태입니다. 눈 버튼을 눌러 보이게 한 뒤 그려 주세요."); return; }
     if(filling){
       const fp=pos(e);
+      if(fp.x<0 || fp.y<0 || fp.x>=W || fp.y>=H) return;   /* 여백을 눌렀으면 채우지 않는다 */
       snapshot(activeId);
       floodFill(fp.x, fp.y);
       return;   /* 채우기는 한 번 누르면 끝이라 드래그로 이어 그리지 않는다 */
@@ -4923,8 +4946,9 @@ function createDrawEditor(opts){
       ctx.beginPath(); ctx.arc(p.x,p.y,w/2,0,Math.PI*2); ctx.fill();
     }
   });
-  stage.addEventListener("pointermove", e=>{
-    if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  viewport.addEventListener("pointermove", e=>{
+    if(ignoreTouch(e)) return;
+    if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY, touch:e.pointerType==="touch"});
     if(pointers.size===2 && pinchDist>0){
       const p=[...pointers.values()];
       const d=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
@@ -4949,14 +4973,16 @@ function createDrawEditor(opts){
     lastX=p.x; lastY=p.y;
   });
   function endStroke(e){
+    if(e && ignoreTouch(e)) return;   /* 손바닥이 떨어져도 펜으로 긋던 선은 계속 */
+    if(e && e.pointerType==="mouse" && e.type==="pointerleave" && !drawing && !panning) return;
     if(e) pointers.delete(e.pointerId);
     if(pointers.size<2) pinchDist=0;
     if(drawing){ resetCtx(); markerPts=null; }
     drawing=false; panning=false;
   }
-  stage.addEventListener("pointerup", endStroke);
-  stage.addEventListener("pointerleave", endStroke);
-  stage.addEventListener("pointercancel", endStroke);
+  viewport.addEventListener("pointerup", endStroke);
+  viewport.addEventListener("pointerleave", endStroke);
+  viewport.addEventListener("pointercancel", endStroke);
   viewport.addEventListener("wheel", e=>{
     if(!(e.ctrlKey||e.metaKey)) return;   /* 그냥 굴리면 화면 스크롤, Ctrl+굴리면 확대/축소 */
     e.preventDefault();
@@ -5168,7 +5194,15 @@ function createDrawEditor(opts){
   guideSel.onchange=()=>{ guide=guideSel.value; drawLsSet("storyhelper_drawGuide", guide); drawGuides(); };
   guideWrap.append(guideLab, guideSel);
   const spacer=document.createElement("span"); spacer.className="draw-bar-gap";
-  bar.append(undoBtn, redoBtn, guideWrap, spacer, outBtn, zoomLabel, inBtn, fitBtn, oneBtn, handBtn);
+  const touchBtn=toolBtn("☝ 손 터치 허용","켜면 손가락으로 그리기·두 손가락 확대가 됩니다. 펜을 쓸 때는 꺼 두면 손바닥이 닿아도 화면이 움직이지 않습니다.", ()=>{
+    setPenOnly(!penOnly, true);
+  });
+  function refreshTouchBtn(){
+    touchBtn.classList.toggle("on", !penOnly);
+    touchBtn.textContent = penOnly ? "✍ 펜 전용(손 터치 무시)" : "☝ 손 터치 허용";
+  }
+  setPenOnly(penOnly, false);
+  bar.append(undoBtn, redoBtn, guideWrap, spacer, touchBtn, outBtn, zoomLabel, inBtn, fitBtn, oneBtn, handBtn);
   main.append(bar, viewport);
   const loadMsg=document.createElement("div"); loadMsg.className="draw-loading"; loadMsg.textContent="불러오는 중…";
   viewport.appendChild(loadMsg);

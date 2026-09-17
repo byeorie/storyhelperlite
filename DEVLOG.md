@@ -2946,3 +2946,15 @@ Cloudflare D1 무료 한도는 **하루 쓴 행 10만**인데 사용량이 21k�
 ## 2026-09-17 (3) — 피드백 전달 후 제출함 맨 위로
 
 전달 후 제출함으로 돌아갈 때(9/14부터 동작) 스크롤이 첨삭 화면 아래쪽에 머물러 이동한 줄 모르던 문제 — window.scrollTo(0,0) 추가.
+
+## 2026-09-17 (4) — 그리기: 여백에서 시작한 획 + 크롬 뒤로가기 제스처 차단
+
+- createDrawEditor의 pointerdown/move/up/leave/cancel을 stage → viewport(회색 여백 포함)로 옮김. 누르면 stage가 포인터를 붙잡아 캔버스 밖에서 시작해도 선이 이어진다. 스크롤 막대 클릭은 제외, 채우기는 캔버스 안일 때만.
+- style.css: .draw-viewport에 touch-action:none·overscroll-behavior:contain, 그리기 페이지가 열려 있는 동안 html/body overscroll-behavior:none (펜·터치패드 스와이프 뒤로가기 방지).
+- 모든 그리기(콘티·캐릭터·교수 첨삭)에 공통 적용.
+
+## 2026-09-17 (5) — 그리기: 펜 전용 모드(손바닥 무시)
+
+- 펜이 처음 닿으면 자동으로 펜 전용 모드(localStorage storyhelper_drawPenOnly="1"). 이 모드에서는 pointerType "touch"를 그리기·이동·두 손가락 확대에서 모두 무시하고, 손바닥이 떨어져도 펜 획이 끊기지 않는다.
+- 위 막대에 [✍ 펜 전용 / ☝ 손 터치 허용] 전환 버튼. 사용자가 고른 값은 기기에 기억("0"이면 자동 전환 안 함).
+- 펜 전용일 때 .draw-main(위 막대+캔버스)에 touch-action:none — 옆 도구 패널은 손가락 스크롤 유지.

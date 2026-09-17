@@ -1322,3 +1322,9 @@ body.touch-dragging{-webkit-user-select:none;user-select:none}
 /* 2026-09-17 콘티 첨삭 메모 */
 .sb-fb-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
 .sb-fb-row > .memo-block-list{margin-top:6px}
+
+/* 2026-09-17 그리기 페이지: 여백에서 그려도 크롬 뒤로가기 제스처가 걸리지 않게 */
+.draw-viewport{touch-action:none;overscroll-behavior:contain;-webkit-user-select:none;user-select:none}
+html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
+/* 2026-09-17 펜 전용 모드: 캔버스·위 막대에 손바닥이 닿아도 페이지가 밀리지 않게 (옆 도구 패널은 손가락 스크롤 유지) */
+.draw-editor.pen-only .draw-main{touch-action:none;overscroll-behavior:contain}
