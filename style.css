@@ -1318,3 +1318,7 @@ canvas.draw-layer-canvas.is-base{position:relative}
 .idea-handle,.plot-idea-handle,.plot-sec-move,.scene-handle,.sub-handle,.sb-row-handle,.class-row-handle{
   touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 body.touch-dragging{-webkit-user-select:none;user-select:none}
+
+/* 2026-09-17 콘티 첨삭 메모 */
+.sb-fb-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.sb-fb-row > .memo-block-list{margin-top:6px}

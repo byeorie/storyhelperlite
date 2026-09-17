@@ -6390,6 +6390,7 @@ async function rFeedbackDetail(type, id, version){
     if(verSel) verSel.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(verSel.value)}; render(); };
     renderSbFeedbackBlocks(document.getElementById("feedbackPairs"), Array.isArray(sub.data)?sub.data:[], sub.feedback, {
       editable:false,
+      memos: Array.isArray(sub.memos)?sub.memos:[],
       submittedLabel: sub.type==="file" ? "내가 낸 파일" : "내가 제출한 콘티",
       emptyText: sub.type==="file" ? "제출된 파일이 없습니다." : undefined,
     });
@@ -7316,7 +7317,13 @@ async function rProfSubmissionReview(id, version){
     <div id="reviewEvalBox"></div>
     <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
   app.appendChild(c);
-  c.querySelector("#reviewBackBtn").onclick=()=>{ profReviewId=null; profReviewVersion=null; render(); };
+  c.querySelector("#reviewBackBtn").onclick=()=>{
+    const d=sbReviewMemoDraft;
+    if(d && d.reviewId===id && JSON.stringify(d.memos)!==d.savedJson
+       && !confirm("아직 [피드백 전달]을 누르지 않은 메모가 있습니다. 나가면 사라집니다. 나갈까요?")) return;
+    sbReviewMemoDraft=null;
+    profReviewId=null; profReviewVersion=null; render();
+  };
 
   const res=await apiFetch("professor-submission?id="+id+(version?("&version="+version):""));
   if(!c.isConnected) return;
@@ -7333,7 +7340,7 @@ async function rProfSubmissionReview(id, version){
   const subRoundNo=sub.round||subRounds.length||1;
   if(titleEl) titleEl.innerHTML=`${ICONS.edit} ${esc(sub.studentName)} · ${TYPE_LABEL[sub.type]} — ${esc(sub.assignmentTitle)}${subRoundNo>1?` <span class="assign-type-badge round-badge">${subRoundNo}차 제출</span>`:""}`;
   const hintEl=document.getElementById("reviewHint");
-  if(hintEl && sub.type==="storyboard") hintEl.textContent="그림을 클릭하면 크게 볼 수 있고, [피드백 그리기]로 그 이미지 위에 직접 그릴 수 있습니다. 다 마쳤으면 맨 아래 [피드백 전달]로 평가와 함께 학생에게 돌려주세요.";
+  if(hintEl && sub.type==="storyboard") hintEl.textContent="그림을 클릭하면 크게 볼 수 있고, [피드백 그리기]로 그 이미지 위에 직접 그릴 수 있습니다. [메모 추가]로 칸마다 메모를 남길 수 있습니다(지문·대사를 드래그해 선택한 채 누르면 그 부분에 각주로 표시). 과제 전체에 대한 말은 맨 아래 [전체 평가]에 적고, [피드백 전달]로 학생에게 돌려주세요.";
   if(hintEl && sub.type==="file") hintEl.textContent="학생이 낸 파일입니다. jpg · png는 클릭하면 크게 볼 수 있고, [피드백 그리기]를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인하세요. 글로 남길 말은 아래 [평가]에 적고, 맨 아래 [피드백 전달]로 학생에게 돌려주세요.";
   /* 2026-09-08: 첨삭을 하지 않고 읽어보기만 해도 "과제 확인" 표시를 남길 수 있다 */
   const checkBar=document.getElementById("reviewCheckBar");
@@ -7373,7 +7380,7 @@ async function rProfSubmissionReview(id, version){
   let evalTa=null;
   if(evalBox && isLatest){
     evalBox.innerHTML=`<div class="review-eval">
-      <div class="review-eval-label">${ICONS.check} 평가 <span class="hint">(선택 사항 · 학생에게 그대로 보입니다)</span></div>
+      <div class="review-eval-label">${ICONS.check} ${(sub.type==="storyboard"||sub.type==="file")?"전체 평가":"평가"} <span class="hint">(선택 사항 · 학생에게 그대로 보입니다)</span></div>
       <textarea id="reviewEvalInput" class="review-eval-input" rows="3" placeholder="과제 전체에 대한 평가를 자유롭게 적어주세요. 비워두어도 됩니다."></textarea>
       <div class="review-eval-actions"><button type="button" class="btn ghost sm" id="reviewEvalSaveBtn">평가 저장</button><span class="hint" id="reviewEvalState"></span></div>
     </div>`;
@@ -7397,14 +7404,25 @@ async function rProfSubmissionReview(id, version){
 
   if(sub.type==="storyboard" || sub.type==="file"){
     const isFile = sub.type==="file";
-    renderSbFeedbackBlocks(pairsEl, Array.isArray(sub.data)?sub.data:[], sub.feedback, {
+    const sbData=Array.isArray(sub.data)?sub.data:[];
+    /* 2026-09-17: 콘티 첨삭에도 메모 — 칸(블록 id)마다 메모를 단다. 그림을 그리러 다녀와도
+       사라지지 않도록 sbReviewMemoDraft에 들고 있다가, 그림 저장·[피드백 전달] 때 함께 저장한다. */
+    const savedMemos=Array.isArray(sub.memos)?sub.memos:[];
+    let sbMemos;
+    if(isLatest && sbReviewMemoDraft && sbReviewMemoDraft.reviewId===id) sbMemos=sbReviewMemoDraft.memos;
+    else sbMemos=savedMemos.slice();
+    if(isLatest) sbReviewMemoDraft={reviewId:id, memos:sbMemos, savedJson:JSON.stringify(savedMemos)};
+    renderSbFeedbackBlocks(pairsEl, sbData, sub.feedback, {
       editable:isLatest,
+      memos:sbMemos,
+      memoEditable:isLatest,
       submittedLabel: isFile ? "학생이 낸 파일" : undefined,
       emptyText: isFile ? "제출된 파일이 없습니다." : undefined,
       /* 2026-09-15: 파일 과제는 그림을 눌러도 크게 보기만 — 그리기는 [피드백 그리기] 버튼으로만 */
       drawByButtonOnly: isFile,
       onFeedback: async (blockId, baseKey, newKey, blank)=>{
-        const r=await submitStoryboardFeedback(id, Array.isArray(sub.data)?sub.data:[], sub.feedback, blockId, baseKey, newKey, blank);
+        const r=await submitStoryboardFeedback(id, sbData, sub.feedback, blockId, baseKey, newKey, blank, sbMemos);
+        if(r.ok && sbReviewMemoDraft && sbReviewMemoDraft.reviewId===id) sbReviewMemoDraft.savedJson=JSON.stringify(sbMemos);
         /* 그림 한 장을 저장한 것일 뿐, 아직 "전달"은 아니다 — 전달은 아래 [피드백 전달] 버튼에서 (2026-09-11) */
         if(r.ok){ profReviewVersion=null; render(); }
         return r;
@@ -7417,15 +7435,21 @@ async function rProfSubmissionReview(id, version){
       saveBtn.style.display=isLatest?"":"none";
       saveBtn.innerHTML=ICONS.upload+" 피드백 전달";
       saveBtn.onclick=async ()=>{
-        const payload={id, deliver:true};
+        const memoChanged=JSON.stringify(sbMemos)!==JSON.stringify(savedMemos);
+        /* 메모가 바뀌었으면 지금 그림 상태 그대로 새 버전을 하나 만들어 메모와 함께 저장한다
+           (메모는 첨삭 버전마다 보관되기 때문). 메모가 그대로면 예전처럼 "전달" 표시만 한다. */
+        const payload = memoChanged
+          ? {id, feedback: sub.feedback || sbPassthroughFeedback(sbData), memos:sbMemos}
+          : {id, deliver:true};
         if(evalTa) payload.evaluation=evalTa.value;
         saveBtn.disabled=true;
         const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify(payload)});
         saveBtn.disabled=false;
         if(!r.ok){ alert((r.body&&r.body.error)||"전달에 실패했습니다."); return; }
-        alert(r.body && r.body.delivered
+        sbReviewMemoDraft=null;
+        alert((memoChanged || (r.body && r.body.delivered))
           ? "피드백을 학생에게 전달했습니다."
-          : "평가를 저장하고 확인 표시를 했습니다. (아직 그린 피드백이 없습니다)");
+          : "평가를 저장하고 확인 표시를 했습니다. (아직 그린 피드백이나 메모가 없습니다)");
         /* 2026-09-14: 전달을 마치면 첨삭 화면에 머무르지 않고 그 과제의 제출함으로 자동으로 나간다 */
         profReviewId=null; profReviewVersion=null; render();
       };
@@ -7547,8 +7571,16 @@ function buildReviewPairs(type, data, feedback){
    각 버전 스스로 자기 전후 비교 쌍을 담고 있다(과거 버전을 봐도 그 때의 전후를 그대로 보여줄 수 있음).
    한 라운드에서 손대지 않은 블록은 beforeKey===afterKey로 이어서 저장된다(요구사항: 다음 라운드에서
    "기존 수정버전"이 새 원본이 되도록). */
+let sbReviewMemoDraft=null;
+/* 그림을 하나도 안 그린 상태의 feedback(모든 칸 이전=이후=원본) — 메모만 먼저 전달할 때 쓴다 */
+function sbPassthroughFeedback(dataBlocks){
+  return {blocks:(dataBlocks||[]).filter(b=>!b.clip).map(b=>({id:b.id, beforeKey:b.key, afterKey:b.key}))};
+}
 function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
   opts=opts||{};
+  const memos=opts.memos||null;
+  /* 메모를 더하거나 지운 뒤 다시 그릴 때 화면이 위로 튀지 않게 스크롤 위치를 지킨다 */
+  const rerender=()=>{ const y=window.scrollY; renderSbFeedbackBlocks(container, dataBlocks, feedback, opts); window.scrollTo(0,y); };
   container.innerHTML="";
   if(!dataBlocks.length){ container.innerHTML=`<p class="hint">${opts.emptyText||"제출된 콘티가 없습니다."}</p>`; return; }
   const fbMap={};
@@ -7619,15 +7651,59 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
     else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티",true)); }
     /* 2026-09-14: 학생 콘티 화면과 같은 배치 — 지문·대사가 왼쪽, 그림이 오른쪽 */
     const bodyWrap=document.createElement("div"); bodyWrap.className="sb-fb-body";
-    const scriptEl=sbScriptBlock(b, counter);
+    const mm = memos ? computePairMemoNumbering(memos, b.id) : null;
+    const scriptEl=sbScriptBlock(b, counter, mm);
     if(scriptEl) bodyWrap.appendChild(scriptEl);
     bodyWrap.appendChild(imgsWrap);
     row.appendChild(bodyWrap);
-    if(opts.editable){
-      const fbBtn=document.createElement("button"); fbBtn.type="button"; fbBtn.className="btn ghost sm icon-btn";
-      fbBtn.innerHTML=ICONS.chat+" 피드백 그리기";
-      fbBtn.onclick=startDraw;
-      row.appendChild(fbBtn);
+    let memoBtn=null;
+    if(memos && opts.memoEditable){
+      const targetEl=scriptEl ? scriptEl.querySelector(".review-before-text") : null;
+      let pendingRange=null;
+      const addMemo=(range)=>{
+        const text=prompt(range?"선택한 부분에 대한 메모를 입력하세요:":"이 칸에 대한 메모를 입력하세요:", "");
+        if(text===null || !text.trim()) return;
+        memos.push({id:uidMemo(), pairId:b.id, start:range?range.start:null, end:range?range.end:null, text:text.trim()});
+        rerender();
+      };
+      memoBtn=document.createElement("button"); memoBtn.type="button"; memoBtn.className="btn ghost sm icon-btn";
+      memoBtn.innerHTML=ICONS.chat+" 메모 추가";
+      memoBtn.title="지문·대사를 드래그해 선택한 채 누르면 그 부분에 각주로 달립니다";
+      /* 버튼을 누르는 순간 선택이 풀리지 않도록 mousedown에서 선택 범위를 먼저 잡아 둔다 */
+      memoBtn.addEventListener("mousedown", e=>{ e.preventDefault(); pendingRange = targetEl ? captureMemoSelection(targetEl) : null; });
+      memoBtn.onclick=()=>{ const rg=pendingRange; pendingRange=null; addMemo(rg); };
+      row.addEventListener("contextmenu", e=>{
+        if(e.target.closest("img")) return;
+        e.preventDefault();
+        const rg = targetEl ? captureMemoSelection(targetEl) : null;
+        const m=document.getElementById("ctxMenu"); if(!m){ addMemo(rg); return; }
+        m.innerHTML="";
+        const bt=document.createElement("button");
+        bt.innerHTML=ICONS.chat+" "+(rg?"메모":"메모 추가");
+        bt.onclick=()=>{ hideCtxMenu(); addMemo(rg); };
+        m.appendChild(bt);
+        m.hidden=false;
+        m.style.left=Math.min(e.clientX, window.innerWidth-190)+"px";
+        m.style.top=Math.min(e.clientY, window.innerHeight-60)+"px";
+      });
+    }
+    if(opts.editable || memoBtn){
+      const btns=document.createElement("div"); btns.className="sb-fb-btns";
+      if(opts.editable){
+        const fbBtn=document.createElement("button"); fbBtn.type="button"; fbBtn.className="btn ghost sm icon-btn";
+        fbBtn.innerHTML=ICONS.edit+" 피드백 그리기";
+        fbBtn.onclick=startDraw;
+        btns.appendChild(fbBtn);
+      }
+      if(memoBtn) btns.appendChild(memoBtn);
+      row.appendChild(btns);
+    }
+    if(mm && mm.mine.length){
+      const canEd=!!opts.memoEditable;
+      renderMemoCardsInto(row, mm.mine, mm.numMap, {
+        canDelete:canEd, canEdit:canEd,
+        onDelete:(m)=>{ const i=memos.indexOf(m); if(i>-1) memos.splice(i,1); rerender(); },
+      }, mm.colorMap);
     }
     container.appendChild(row);
   });
@@ -7635,12 +7711,33 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
 /* (2026-09-14) 콘티 칸에 딸린 글쓰기 지문·대사 — 제출 데이터의 items를 학생 글쓰기 화면과 같은
    모양(대사는 "이름: 대사" 한 줄, 지문은 한 칸)으로 그린다. items가 없는 예전 제출물은 null을
    돌려주어 그림만 보이게 한다. */
-function sbScriptBlock(b, counter){
+function sbScriptBlock(b, counter, mm){
   const items=(Array.isArray(b.items)?b.items:[]).filter(it=>(it.text||"").trim());
   if(!items.length) return null;
   const box=document.createElement("div"); box.className="sb-fb-script";
   const cap=document.createElement("span"); cap.className="sb-fb-imglabel"; cap.textContent="글쓰기 지문·대사";
   const body=document.createElement("div"); body.className="review-before-text";
+  if(mm){
+    /* 2026-09-17: 메모 표시용 — 글쓰기 첨삭과 같은 방식("이름: 대사" 줄을 개행으로 이은 원문 기준 글자 위치)으로
+       그린 뒤, 대사 번호는 글자 수에 잡히지 않는 표시(data-memo-synthetic)로 앞에 끼워 넣는다. */
+    const segItems=items.map(it=>it.type==="line"
+      ? {type:"line", char:(it.char||"(미지정)"), text:(it.text||"").trim()}
+      : {type:"text", char:"", text:(it.text||"").trim()});
+    const rawText=segItems.map(it=>it.type==="line"?`${it.char}: ${it.text}`:it.text).join("\n");
+    renderStyledBeforeText(body, "write", rawText, mm.mine, mm.numMap, mm.colorMap, segItems);
+    const lineRows=body.querySelectorAll(":scope > .rv-line");
+    let li=0;
+    items.forEach(it=>{
+      if(it.type!=="line") return;
+      const n=it.no || (counter ? ++counter.dlg : 0);
+      if(counter && it.no) counter.dlg=it.no;
+      const rowEl=lineRows[li++]; if(!rowEl) return;
+      const no=document.createElement("span"); no.className="dlg-no"; no.dataset.memoSynthetic="1"; no.textContent=n?(n+"."):"";
+      rowEl.insertBefore(no, rowEl.firstChild);
+    });
+    box.append(cap, body);
+    return box;
+  }
   items.forEach(it=>{
     const line=document.createElement("div");
     if(it.type==="line"){
@@ -7664,7 +7761,7 @@ function sbScriptBlock(b, counter){
 /* 첨삭 버전 저장(=새 라운드) — 지금 손댄 블록(blockId)만 {beforeKey,afterKey}를 새로 채우고,
    나머지 블록은 지금까지의 상태를 그대로 이어붙여서(처음 손대는 블록이면 beforeKey=afterKey=원본 key)
    professor-submission에 새 버전으로 저장한다. */
-async function submitStoryboardFeedback(id, dataBlocks, currentFeedback, blockId, baseKey, newKey, blank){
+async function submitStoryboardFeedback(id, dataBlocks, currentFeedback, blockId, baseKey, newKey, blank, memos){
   const fbMap={};
   ((currentFeedback && currentFeedback.blocks)||[]).forEach(b=>{ fbMap[b.id]={beforeKey:b.beforeKey, afterKey:b.afterKey, blank:!!b.blank}; });
   fbMap[blockId]={beforeKey:baseKey, afterKey:newKey, blank:!!blank};
@@ -7672,7 +7769,7 @@ async function submitStoryboardFeedback(id, dataBlocks, currentFeedback, blockId
     const e=fbMap[b.id];
     return e ? {id:b.id, beforeKey:e.beforeKey, afterKey:e.afterKey, ...(e.blank && e.beforeKey!==e.afterKey ? {blank:true} : {})} : {id:b.id, beforeKey:b.key, afterKey:b.key};
   });
-  return apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback:{blocks}, memos:[]})});
+  return apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, feedback:{blocks}, memos:Array.isArray(memos)?memos:[]})});
 }
 
 /* ===== 첨삭 화면 — 메모(첨삭과는 별도로 학생 원본 텍스트에 다는 메모) =====
