@@ -4600,6 +4600,9 @@ function drawLsGet(k,d){ try{ const v=localStorage.getItem(k); return v===null?d
 function drawLsSet(k,v){ try{ localStorage.setItem(k,String(v)); }catch(_){ } }
 function loadDrawWidth(){ const n=Number(drawLsGet("storyhelper_drawWidth",4)); return (n>=1 && n<=40) ? n : 4; }
 function saveDrawWidth(n){ drawLsSet("storyhelper_drawWidth", n); }
+/* 지우개는 붓과 굵기를 따로 기억한다(기본 12) */
+function loadDrawEraserWidth(){ const n=Number(drawLsGet("storyhelper_drawEraserWidth",12)); return (n>=1 && n<=40) ? n : 12; }
+function saveDrawEraserWidth(n){ drawLsSet("storyhelper_drawEraserWidth", n); }
 function loadDrawRecentColors(){
   try{ const a=JSON.parse(drawLsGet("storyhelper_drawRecent","[]")); return Array.isArray(a)?a.slice(0,8):[]; }
   catch(_){ return []; }
@@ -4663,6 +4666,7 @@ function createDrawEditor(opts){
   /* ---- 상태 ---- */
   let curColor=drawLsGet("storyhelper_drawColor", DRAW_PALETTE[0]);
   let curWidth=loadDrawWidth();
+  let curEraserWidth=loadDrawEraserWidth();
   let brush=drawLsGet("storyhelper_drawBrush","pen");
   let guide=drawLsGet("storyhelper_drawGuide","none");
   let usePressure=drawLsGet("storyhelper_drawPressure","1")==="1";
@@ -4787,7 +4791,11 @@ function createDrawEditor(opts){
     if(!usePressure || e.pointerType==="mouse" || !(e.pressure>0)) return 1;
     return 0.3+1.4*e.pressure;   /* 0.3배 ~ 1.7배 (보통 힘 0.5에서 1배) */
   }
-  function strokeWidth(e){ return Math.max(0.5, curWidth*wScale*pressureOf(e)*(brush==="marker"?1.8:1)*(erasing?1.5:1)); }
+  function strokeWidth(e){
+    /* 지우개일 때는 지우개 전용 굵기를 쓴다(붓 종류·마커 보정은 적용하지 않는다) */
+    if(erasing) return Math.max(0.5, curEraserWidth*wScale*pressureOf(e));
+    return Math.max(0.5, curWidth*wScale*pressureOf(e)*(brush==="marker"?1.8:1));
+  }
   function ctxOf(){ return layers[activeId].ctx; }
   function beginCtx(){
     const ctx=ctxOf();
@@ -5098,6 +5106,7 @@ function createDrawEditor(opts){
     fillBtn.classList.toggle("on", filling);
     fillRow.hidden=!filling;
     stage.classList.toggle("filling", filling);
+    syncWidthUI();
   }
   brushSec.appendChild(brushRow);
 
@@ -5121,9 +5130,21 @@ function createDrawEditor(opts){
   brushSec.appendChild(fillRow);
 
   const widthWrap=document.createElement("div"); widthWrap.className="draw-width-wrap";
-  const widthLab=document.createElement("span"); widthLab.className="draw-mini-label"; widthLab.textContent="굵기 "+curWidth;
-  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="40"; widthInput.value=String(curWidth);
-  widthInput.oninput=()=>{ curWidth=Number(widthInput.value); saveDrawWidth(curWidth); widthLab.textContent="굵기 "+curWidth; };
+  const widthLab=document.createElement("span"); widthLab.className="draw-mini-label";
+  const widthInput=document.createElement("input"); widthInput.type="range"; widthInput.min="1"; widthInput.max="40";
+  /* 지우개를 켜면 이 슬라이더가 지우개 굵기를 조절한다. 붓 굵기는 그대로 남아 있고, 둘 다 따로 기억된다. */
+  function syncWidthUI(){
+    const v = erasing ? curEraserWidth : curWidth;
+    widthInput.value=String(v);
+    widthLab.textContent=(erasing ? "지우개 굵기 " : "굵기 ")+v;
+  }
+  widthInput.oninput=()=>{
+    const v=Number(widthInput.value);
+    if(erasing){ curEraserWidth=v; saveDrawEraserWidth(v); }
+    else { curWidth=v; saveDrawWidth(v); }
+    widthLab.textContent=(erasing ? "지우개 굵기 " : "굵기 ")+v;
+  };
+  syncWidthUI();
   widthWrap.append(widthLab, widthInput);
   brushSec.insertBefore(widthWrap, toolRow);   /* 붓 → 굵기 → 지우개/채우기 순으로 보이게 */
 
