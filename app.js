@@ -7198,6 +7198,7 @@ function rProfAssignmentFolder(id){
       ${profRefreshBarHtml("assignFolderRefresh")}
     </div>
     <h2 id="assignFolderTitle">${ICONS.book} 불러오는 중…</h2>
+    <div id="assignMaxBar"></div>
     <div id="assignFolderWrap"><p class="hint">불러오는 중…</p></div>`;
   app.appendChild(c);
   c.querySelector("#assignBackBtn").onclick=()=>{ profAssignFolderId=null; render(); };
@@ -7217,7 +7218,35 @@ async function loadProfAssignmentFolder(c, id){
   const pdfBtn=c.querySelector("#assignPdfBtn");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const assignment=res.body.assignment, submissions=res.body.submissions||[];
-  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(assignment.title)} — 제출함${assignment.max_score!=null?` <span class="assign-type-badge">배점 ${assignment.max_score}점</span>`:""}`;
+  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(assignment.title)} — 제출함`;
+  /* 2026-09-22: 배점(만점)을 제출함에서 바로 고칠 수 있게 한다 — 과제 설정 모달을 열지 않아도 된다.
+     여기서 바꾼 값은 과제 폴더 자체의 값(assignments.max_score)이라 과제 목록에도 함께 반영된다.
+     입력하는 중에는 자동 새로고침이 칸을 다시 그리지 않도록 건너뛴다. */
+  const maxBar=document.getElementById("assignMaxBar");
+  const maxInpOld=maxBar && maxBar.querySelector("#assignMaxInput");
+  if(maxBar && !(maxInpOld && document.activeElement===maxInpOld)){
+    maxBar.innerHTML=`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap">
+      <span class="score-box">배점(만점)
+        <input type="number" class="submit-score-input" id="assignMaxInput" min="0" step="0.5" placeholder="없음"
+          value="${assignment.max_score!=null?assignment.max_score:""}" title="이 과제가 몇 점짜리인지 정해둡니다. 비워두면 배점 없음입니다.">
+        <span class="hint">점</span></span>
+      <span>비워두면 배점 없음입니다. 정해두면 아래 학생마다 있는 점수 칸에 기준(/ N점)으로 보입니다.</span></p>`;
+    const maxInp=maxBar.querySelector("#assignMaxInput");
+    maxInp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); maxInp.blur(); } };
+    maxInp.onchange=async ()=>{
+      const raw=String(maxInp.value).trim();
+      const ms = raw==="" ? null : Number(raw);
+      if(ms!==null && !(Number.isFinite(ms) && ms>=0)){ alert("배점은 0 이상의 숫자로 입력해주세요."); maxInp.focus(); return; }
+      maxInp.disabled=true;
+      const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:assignment.id, maxScore:ms})});
+      maxInp.disabled=false;
+      if(!r.ok){ alert((r.body&&r.body.error)||"배점을 저장하지 못했습니다."); return; }
+      maxInp.classList.add("saved"); setTimeout(()=>maxInp.classList.remove("saved"), 1200);
+      /* 학생별 점수 칸의 "/ N점" 표시를 새 배점으로 다시 그린다 */
+      assignFolderSig=""; profAssignSig="";
+      loadProfAssignmentFolder(c, id);
+    };
+  }
   /* PDF 일괄 다운로드가 돌고 있는 중이면(dataset.busy) 버튼을 건드리지 않는다 —
      자동 새로고침이 진행 표시를 지우고 버튼을 다시 켜 버리는 것을 막는다 */
   if(pdfBtn && !pdfBtn.dataset.busy){
