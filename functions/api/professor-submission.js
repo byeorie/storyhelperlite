@@ -70,6 +70,16 @@ export async function onRequestGet({ request, env }) {
   let data = null;
   try { data = JSON.parse(row.data); } catch (e) {}
 
+  /* 2026-09-22: 점수(제출물)와 배점(과제 폴더) — 컬럼이 없는 DB에서도 상세 조회가 막히지 않도록 따로 읽는다 */
+  let score = null, maxScore = null;
+  try {
+    const sr = await env.DB.prepare(
+      "SELECT s.score AS score, a.max_score AS max_score FROM submissions s " +
+      "JOIN assignments a ON a.id = s.assignment_id WHERE s.id = ?"
+    ).bind(id).first();
+    if (sr) { score = (sr.score === undefined ? null : sr.score); maxScore = (sr.max_score === undefined ? null : sr.max_score); }
+  } catch (e) {}
+
   const v = await readFeedbackVersions(env, id, wantVersion, row);
   const r = await readSubmitRounds(env, row);
 
@@ -80,6 +90,7 @@ export async function onRequestGet({ request, env }) {
       feedback: v.feedback, memos: v.memos,
       submittedAt: row.submitted_at, feedbackAt: row.feedback_at, checkedAt: row.checked_at || null,
       evaluation: row.evaluation || "",
+      score, maxScore,
       studentName: row.student_name, studentUsername: row.student_username, assignmentTitle: row.assignment_title,
       versions: v.versions, viewingVersion: v.viewingVersion, latestVersion: v.latestVersion,
     },
@@ -104,10 +115,13 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
   const id = Number(body && body.id);
   const hasEvaluation = typeof body.evaluation === "string";
+  /* 2026-09-22: 점수 — 제출함 목록과 첨삭 화면 어느 쪽에서 고쳐도 같은 값(submissions.score)에 저장된다.
+     점수만 보내는 요청({id, score})도 허용한다. */
+  const hasScore = Object.prototype.hasOwnProperty.call(body, "score");
   /* 2026-09-11: "피드백 전달"만 누른 경우(콘티처럼 그림을 그릴 때마다 이미 저장된 타입).
      새 버전을 만들지 않고, 지금까지 저장된 첨삭을 "학생에게 보냄"으로 표시(=feedback_at 갱신)만 한다. */
   const wantDeliver = body.deliver === true;
-  if (!id || (typeof body.feedback === "undefined" && !hasEvaluation && !wantDeliver)) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+  if (!id || (typeof body.feedback === "undefined" && !hasEvaluation && !wantDeliver && !hasScore)) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
   const memos = Array.isArray(body.memos) ? body.memos : [];
 
   const owner = await env.DB.prepare(
@@ -116,6 +130,20 @@ export async function onRequestPost({ request, env }) {
   if (!owner || owner.prof_id !== auth.user.id) return jsonResponse({ error: "제출물을 찾을 수 없습니다." }, 404);
 
   const now = nowSec();
+
+  /* 점수 저장 — 컬럼이 아직 없는 DB에서도 첨삭 저장까지 막지 않도록 따로 감싼다 */
+  let savedScore = null;
+  if (hasScore) {
+    const raw = body.score;
+    const sc = (raw === null || raw === "" || typeof raw === "undefined") ? null : Number(raw);
+    if (sc !== null && (!Number.isFinite(sc) || sc < 0)) return jsonResponse({ error: "점수가 올바르지 않습니다." }, 400);
+    savedScore = sc;
+    try {
+      await env.DB.prepare("UPDATE submissions SET score = ? WHERE id = ?").bind(sc, id).run();
+    } catch (e) {
+      return jsonResponse({ error: "점수를 저장하지 못했습니다." }, 500);
+    }
+  }
 
   /* 총평 저장 — 컬럼이 아직 없는 DB에서도 첨삭 저장까지 막지 않도록 따로 감싼다 */
   if (hasEvaluation) {
@@ -141,7 +169,7 @@ export async function onRequestPost({ request, env }) {
         await env.DB.prepare("UPDATE submissions SET checked_at = COALESCE(checked_at, ?) WHERE id = ?").bind(now, id).run();
       }
     } catch (e) {}
-    return jsonResponse({ ok: true, evaluationOnly: !wantDeliver, delivered, checkedAt: now, feedbackAt: delivered ? now : null });
+    return jsonResponse({ ok: true, evaluationOnly: !wantDeliver, delivered, checkedAt: now, feedbackAt: delivered ? now : null, score: savedScore });
   }
 
   const feedbackJson = JSON.stringify(body.feedback);
@@ -186,5 +214,5 @@ export async function onRequestPost({ request, env }) {
     ).bind(feedbackJson, now, id).run();
   }
 
-  return jsonResponse({ ok: true, feedbackAt: now, checkedAt: now, version: nextVersion });
+  return jsonResponse({ ok: true, feedbackAt: now, checkedAt: now, version: nextVersion, score: savedScore });
 }

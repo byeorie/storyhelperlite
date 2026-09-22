@@ -1328,3 +1328,11 @@ body.touch-dragging{-webkit-user-select:none;user-select:none}
 html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 /* 2026-09-17 펜 전용 모드: 캔버스·위 막대에 손바닥이 닿아도 페이지가 밀리지 않게 (옆 도구 패널은 손가락 스크롤 유지) */
 .draw-editor.pen-only .draw-main{touch-action:none;overscroll-behavior:contain}
+
+/* ===== 2026-09-22: 과제 점수 입력칸 (교수 제출함 목록 · 첨삭 화면 공용) ===== */
+.score-box{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#666;white-space:nowrap}
+.score-box .hint{font-size:12px}
+.submit-score-input{width:62px;padding:3px 6px;font-size:13px;text-align:right;
+  border:1px solid var(--line);border-radius:6px;background:#fff}
+.submit-score-input:focus{outline:none;border-color:var(--accent)}
+.submit-score-input.saved{border-color:#2e7d32;background:#f1f8f2}

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   due_at INTEGER,             -- 제출기한(unix seconds), NULL이면 기한 없음
   open INTEGER NOT NULL DEFAULT 1, -- 제출 마감 스위치: 1=제출 가능, 0=마감
   type TEXT,                 -- 과제 종류(plan/plot/write/...), NULL이면 미지정=모든 종류 제출 가능
+  max_score REAL,            -- 2026-09-22: 배점(이 과제가 몇 점짜리인지) — NULL이면 배점 없음
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_assignments_prof ON assignments(prof_id);
@@ -39,7 +40,8 @@ CREATE TABLE IF NOT EXISTS submissions (
   feedback_at INTEGER,
   checked_at INTEGER,          -- 교수가 제출물을 확인한 시각
   evaluation TEXT,             -- 교수 총평(선택 입력) — 첨삭/메모와는 별개
-  submit_round INTEGER         -- 2026-09-15: 재제출 차수(1차, 2차 …) — 같은 과제/학생/종류 안에서의 순번
+  submit_round INTEGER,        -- 2026-09-15: 재제출 차수(1차, 2차 …) — 같은 과제/학생/종류 안에서의 순번
+  score REAL                   -- 2026-09-22: 교수가 매긴 점수(제출함 목록·첨삭 화면 공용) — NULL이면 미채점
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);

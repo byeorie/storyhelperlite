@@ -18,7 +18,7 @@ export async function onRequestGet({ request, env }) {
   let assignment;
   try {
     assignment = await env.DB.prepare(
-      "SELECT id, title, due_at, open, type, created_at FROM assignments WHERE id = ? AND prof_id = ?"
+      "SELECT id, title, due_at, open, type, max_score, created_at FROM assignments WHERE id = ? AND prof_id = ?"
     ).bind(id, auth.user.id).first();
   } catch (e) {
     assignment = await env.DB.prepare(
@@ -53,6 +53,14 @@ export async function onRequestGet({ request, env }) {
       results = r.results || [];
     }
   }
+
+  /* 2026-09-22: 점수 — 본 목록 쿼리에 섞으면 score 컬럼이 없는 DB에서 제출함 전체가 안 열릴 수 있어
+     (2026-09-08 GET 500 교훈) 따로 읽고, 실패하면 그냥 "점수 없음"으로 둔다. */
+  const scoreMap = {};
+  try {
+    const sr = await env.DB.prepare("SELECT id, score FROM submissions WHERE assignment_id = ?").bind(id).all();
+    (sr.results || []).forEach((x) => { scoreMap[x.id] = x.score; });
+  } catch (e) {}
 
   const versionCounts = {};
   try {
@@ -94,6 +102,7 @@ export async function onRequestGet({ request, env }) {
       round_count: rows.length,
       rounds,
       version_count: versionCounts[last.id] || 0,
+      score: (scoreMap[last.id] === undefined || scoreMap[last.id] === null) ? null : scoreMap[last.id],
       type_label: TYPE_LABEL[last.type] || last.type,
     });
   });
@@ -146,7 +155,7 @@ export async function onRequestPost({ request, env }) {
   if (!id) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
 
   const current = await env.DB.prepare(
-    "SELECT id, title, due_at, open, class_id, type FROM assignments WHERE id = ? AND prof_id = ?"
+    "SELECT id, title, due_at, open, class_id, type, max_score FROM assignments WHERE id = ? AND prof_id = ?"
   ).bind(id, auth.user.id).first();
   if (!current) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
 
@@ -181,6 +190,14 @@ export async function onRequestPost({ request, env }) {
     sets.push("class_id = ?"); binds.push(classId);
   }
 
+  /* 2026-09-22: 배점 — 빈 값/null이면 "배점 없음"으로 되돌린다 */
+  if (Object.prototype.hasOwnProperty.call(body, "maxScore")) {
+    const ms = (body.maxScore === null || body.maxScore === "" || typeof body.maxScore === "undefined")
+      ? null : Number(body.maxScore);
+    if (ms !== null && (!Number.isFinite(ms) || ms < 0)) return jsonResponse({ error: "배점이 올바르지 않습니다." }, 400);
+    sets.push("max_score = ?"); binds.push(ms);
+  }
+
   /* 2026-09-12: 과제 종류 — 빈 값/null이면 "종류 미지정"(모든 종류 제출 가능)으로 되돌린다 */
   if (Object.prototype.hasOwnProperty.call(body, "type")) {
     const t = (body.type === null || body.type === "" || body.type === "none") ? null : String(body.type);
@@ -196,7 +213,7 @@ export async function onRequestPost({ request, env }) {
   ).bind(...binds).run();
 
   const updated = await env.DB.prepare(
-    "SELECT id, title, due_at, open, class_id, type FROM assignments WHERE id = ? AND prof_id = ?"
+    "SELECT id, title, due_at, open, class_id, type, max_score FROM assignments WHERE id = ? AND prof_id = ?"
   ).bind(id, auth.user.id).first();
 
   return jsonResponse({ ok: true, assignment: updated, open: updated ? updated.open : null });

@@ -5777,6 +5777,39 @@ async function doAdminReset(mode){
    "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
    professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
 const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정", storyboard:"콘티", file:"파일 제출"};
+
+/* ===== 2026-09-22: 과제 점수 =====
+   교수가 제출물에 매기는 점수. 제출함 목록(loadProfAssignmentFolder)과 첨삭 화면(rProfSubmissionReview)
+   두 곳에서 입력할 수 있지만, 둘 다 같은 값(submissions.score)을 고치므로 서로 연동된다.
+   (과제 폴더의 "배점"(assignments.max_score)은 이 과제가 몇 점짜리인지 적어두는 값으로 점수와 별개다) */
+function scoreInputHtml(id, score, maxScore){
+  const v=(score==null||score==="")?"":score;
+  return `<span class="score-box">점수
+    <input type="number" class="submit-score-input" data-id="${id}" value="${v}" min="0" step="0.5" placeholder="-"
+      title="이 제출물의 점수입니다. 제출함과 첨삭 화면 어느 쪽에서 고쳐도 같은 점수가 저장됩니다.">
+    <span class="hint">${maxScore!=null?`/ ${maxScore}점`:"점"}</span></span>`;
+}
+/* 점수 입력칸 공통 동작 — 칸을 벗어나면(값이 바뀌었을 때) 바로 서버에 저장한다 */
+function bindScoreInputs(root){
+  if(!root) return;
+  root.querySelectorAll(".submit-score-input").forEach(inp=>{
+    inp.onclick=e=>e.stopPropagation();   /* 목록 줄 전체가 "열기" 버튼이므로 클릭이 새어나가지 않게 */
+    inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } };
+    inp.onchange=async ()=>{
+      const id=Number(inp.dataset.id);
+      const raw=String(inp.value).trim();
+      const score = raw==="" ? null : Number(raw);
+      if(score!==null && !(Number.isFinite(score) && score>=0)){ alert("점수는 0 이상의 숫자로 입력해주세요."); inp.focus(); return; }
+      inp.disabled=true;
+      const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify({id, score})});
+      inp.disabled=false;
+      if(!r.ok){ alert((r.body&&r.body.error)||"점수를 저장하지 못했습니다."); return; }
+      inp.classList.add("saved"); setTimeout(()=>inp.classList.remove("saved"), 1200);
+      /* 제출함 목록이 다음 새로고침 때 새 점수로 다시 그려지도록 서명을 비운다 */
+      assignFolderSig="";
+    };
+  });
+}
 /* "과제 관리" 탭 안의 현재 화면 상태(팝업 대신 같은 탭 안에서 페이지처럼 전환) */
 /* ===== 제출 / 첨삭 알림 토스트 (2026-09-11 추가) =====
    상단바 아래 오른쪽 구석에 [과목명-과제명 제출 n개] 형태의 팝업을 띄운다.
@@ -6977,7 +7010,7 @@ async function renderProfAssignList(classId){
         <button type="button" class="assign-folder-del" data-id="${a.id}" title="과제 삭제">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.due_at?("제출기한 "+fmtDue(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
+    <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.max_score!=null?("배점 "+a.max_score+"점 · "):""}${a.due_at?("제출기한 "+fmtDue(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
   </div>`).join("");
   if(profAssignSig===listHtml) return;   // 바뀐 게 없으면 그대로 둔다
   profAssignSig=listHtml;
@@ -7069,6 +7102,9 @@ function openAssignmentModal(classId, assignment){
      <label>과제 종류</label>
      <select id="newAssignType"><option value="none"${(editing&&assignment.type)?"":" selected"}>지정 안 함(어느 탭에서든 제출 가능)</option>${typeOpts}</select>
      <p class="hint" style="margin:4px 0 0" id="newAssignTypeHint">종류를 지정하면 학생이 그 탭에서 제출할 때만 이 과제가 목록에 보입니다.</p>
+     <label>배점 (선택 · 비워두면 배점 없음)</label>
+     <input type="number" id="newAssignMax" min="0" step="0.5" placeholder="예: 20" value="${(editing&&assignment.max_score!=null)?assignment.max_score:""}">
+     <p class="hint" style="margin:4px 0 0">이 과제가 몇 점짜리인지 적어두는 값입니다. 과제 목록과 제출함에 표시되고, 점수를 매길 때 기준(/ N점)으로 보입니다.</p>
      <label>제출기한 (선택 · 비워두면 기한 없음)</label>
      <div class="due-row">
        <input type="date" id="newAssignDue" value="${editing?unixToDateInput(assignment.due_at):""}">
@@ -7128,19 +7164,24 @@ function openAssignmentModal(classId, assignment){
     /* 시간을 지정하지 않으면 그날 23:59:59 — 예전(날짜만 고르던 때)과 같은 뜻 */
     const dueTimeStr = useTime ? `${dueH}:${dueM}:00` : "23:59:59";
     const dueAt=dueStr ? Math.floor(new Date(`${dueStr}T${dueTimeStr}`).getTime()/1000) : null;
+    /* 2026-09-22: 배점 — 비워두면 null(배점 없음) */
+    const maxStr=(box.querySelector("#newAssignMax").value||"").trim();
+    const maxScoreVal = maxStr==="" ? null : Number(maxStr);
+    if(maxScoreVal!==null && !(Number.isFinite(maxScoreVal) && maxScoreVal>=0)){ alert("배점은 0 이상의 숫자로 입력해주세요."); return; }
     btn.disabled=true;
     let r;
     if(editing){
       const selEl=box.querySelector("#newAssignClass");
       const payload={id:assignment.id, title, dueAt, open:box.querySelector("#newAssignOpen").checked?1:0,
-        type: box.querySelector("#newAssignType").value==="none" ? null : box.querySelector("#newAssignType").value};
+        type: box.querySelector("#newAssignType").value==="none" ? null : box.querySelector("#newAssignType").value,
+        maxScore: maxScoreVal};
       // 수업 목록이 아직 안 채워졌으면(네트워크 지연) 수업은 건드리지 않는다
       if(selEl && selEl.options.length>1) payload.classId = selEl.value==="none" ? null : Number(selEl.value);
       r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify(payload)});
     }else{
       const typeVal=box.querySelector("#newAssignType").value;
       r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt,
-        classId: classId==="none"?null:classId, type: typeVal==="none"?null:typeVal})});
+        classId: classId==="none"?null:classId, type: typeVal==="none"?null:typeVal, maxScore: maxScoreVal})});
     }
     btn.disabled=false;
     if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(classId); }
@@ -7176,7 +7217,7 @@ async function loadProfAssignmentFolder(c, id){
   const pdfBtn=c.querySelector("#assignPdfBtn");
   if(!res.ok || !res.body){ if(titleEl) titleEl.textContent="불러오지 못했습니다"; return; }
   const assignment=res.body.assignment, submissions=res.body.submissions||[];
-  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(assignment.title)} — 제출함`;
+  if(titleEl) titleEl.innerHTML=`${ICONS.book} ${esc(assignment.title)} — 제출함${assignment.max_score!=null?` <span class="assign-type-badge">배점 ${assignment.max_score}점</span>`:""}`;
   /* PDF 일괄 다운로드가 돌고 있는 중이면(dataset.busy) 버튼을 건드리지 않는다 —
      자동 새로고침이 진행 표시를 지우고 버튼을 다시 켜 버리는 것을 막는다 */
   if(pdfBtn && !pdfBtn.dataset.busy){
@@ -7212,14 +7253,19 @@ async function loadProfAssignmentFolder(c, id){
         <span class="assign-type-badge">${esc(s.type_label)}</span>${roundNo>1?`<span class="assign-type-badge round-badge">${roundNo}차 제출</span>`:""}
         <span class="hint">제출 ${fmtDateTime(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}<span class="submit-check-state" data-id="${s.id}">${isChecked?" · 확인함":""}</span></span>
       </button>
+      ${scoreInputHtml(s.id, s.score, assignment.max_score!=null?assignment.max_score:null)}
       <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${s.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>${hasHistory?`
       <button type="button" class="btn ghost sm submit-history-btn" data-id="${s.id}" title="이전 제출 차수와 지난 첨삭 버전을 골라 볼 수 있습니다">${ICONS.book} 이전 버전</button>`:""}
     </div>`;
   }).join("")}</div>`;
+  /* 점수를 입력하는 중(칸에 커서가 있음)에는 자동 새로고침이 화면을 다시 그려 입력을 지우지 않게 한다 */
+  const activeEl=document.activeElement;
+  if(activeEl && activeEl.classList && activeEl.classList.contains("submit-score-input") && wrap.contains(activeEl)) return;
   if(assignFolderSig===listHtml) return;   // 바뀐 게 없으면 그대로 둔다
   assignFolderSig=listHtml;
   wrap.innerHTML=listHtml;
   bindSubmitCheckBtns(wrap);
+  bindScoreInputs(wrap);
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
     btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); profReviewVersion=null; render(); };
   });
@@ -7445,10 +7491,15 @@ async function rProfSubmissionReview(id, version){
           </select>
           <span>학생이 다시 제출한 내용은 이렇게 차수로 나뉘어 저장됩니다(이전 차수는 그대로 보존).</span></p>`
       : "";
-    checkBar.innerHTML=roundBar+`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+    /* 2026-09-22: 점수 — 제출함 목록의 점수 칸과 같은 값을 고친다(어느 쪽에서 바꿔도 서로 반영된다) */
+    const scoreBar=isLatest?`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+      ${scoreInputHtml(sub.id, sub.score, sub.maxScore!=null?sub.maxScore:null)}
+      <span>${sub.maxScore!=null?`이 과제의 배점은 ${sub.maxScore}점입니다. `:""}점수는 입력칸을 벗어나면 바로 저장되고, 제출함 목록에도 같이 반영됩니다.</span></p>`:"";
+    checkBar.innerHTML=roundBar+scoreBar+`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
       <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${sub.id}" data-checked="${isChecked?1:0}">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>
       <span class="submit-check-state" data-id="${sub.id}">${isChecked?`확인 ${esc(fmtDate(sub.checkedAt))}`:"아직 확인 표시를 하지 않았습니다."}</span></p>`;
     bindSubmitCheckBtns(checkBar);
+    bindScoreInputs(checkBar);
     const roundSel=document.getElementById("reviewRoundSelect");
     if(roundSel) roundSel.onchange=()=>{ profReviewId=Number(roundSel.value); profReviewVersion=null; render(); };
   }

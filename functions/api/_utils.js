@@ -46,6 +46,9 @@ export async function ensureSubmissionSchema(env) {
     "UPDATE submissions SET submit_round = (SELECT COUNT(*) FROM submissions s2 " +
       "WHERE s2.assignment_id = submissions.assignment_id AND s2.student_id = submissions.student_id " +
       "AND s2.type = submissions.type AND s2.id <= submissions.id) WHERE submit_round IS NULL",
+    /* 2026-09-22: 점수 — 교수가 제출물에 매기는 점수. 제출함 목록과 첨삭 화면 두 곳에서 같은 값을 고친다.
+       (과제 폴더의 배점 assignments.max_score와는 별개 — 그쪽은 "이 과제는 몇 점짜리인가"를 적어두는 값) */
+    "ALTER TABLE submissions ADD COLUMN score REAL",
     "CREATE INDEX IF NOT EXISTS idx_submissions_round ON submissions(assignment_id, student_id, type, submit_round)",
   ];
   for (const sql of stmts) {
@@ -61,6 +64,8 @@ let assignmentSchemaEnsured = false;
 export async function ensureAssignmentSchema(env) {
   if (assignmentSchemaEnsured) return;
   try { await env.DB.prepare("ALTER TABLE assignments ADD COLUMN type TEXT").run(); } catch (e) {}
+  /* 2026-09-22: 배점 — 이 과제 폴더가 몇 점짜리 과제인지(NULL이면 배점 없음) */
+  try { await env.DB.prepare("ALTER TABLE assignments ADD COLUMN max_score REAL").run(); } catch (e) {}
   assignmentSchemaEnsured = true;
 }
 

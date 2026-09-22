@@ -153,3 +153,8 @@ UPDATE classes SET code = printf('%06d', (ABS(RANDOM()) % 900000) + 100000) WHER
 -- 위 컬럼들이 생긴 뒤에야 만들 수 있는 인덱스
 CREATE INDEX IF NOT EXISTS idx_assignments_class ON assignments(class_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_code ON classes(code);
+
+-- ===== 2026-09-22: 과제 점수 / 배점 =====
+-- (서버 코드의 ensureAssignmentSchema / ensureSubmissionSchema가 자동으로 실행하므로 보통은 따로 실행할 필요가 없다)
+ALTER TABLE assignments ADD COLUMN max_score REAL;   -- 배점: 이 과제가 몇 점짜리인지
+ALTER TABLE submissions ADD COLUMN score REAL;       -- 점수: 교수가 제출물에 매긴 점수

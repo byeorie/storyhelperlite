@@ -30,7 +30,7 @@ export async function onRequestGet({ request, env }) {
   let results = [];
   try {
     const r = await env.DB.prepare(
-      "SELECT a.id, a.title, a.due_at, a.open, a.created_at, a.class_id, a.type, " + countCol + tail
+      "SELECT a.id, a.title, a.due_at, a.open, a.created_at, a.class_id, a.type, a.max_score, " + countCol + tail
     ).bind(...binds).all();
     results = r.results || [];
   } catch (e) {
@@ -57,6 +57,9 @@ export async function onRequestPost({ request, env }) {
   const title = ((body && body.title) || "").trim();
   const type = (body && body.type && VALID_TYPES.includes(body.type)) ? body.type : null;
   const dueAt = (body && Number.isFinite(body.dueAt)) ? body.dueAt : null;
+  /* 2026-09-22: 배점(몇 점짜리 과제인지) — 비워두면 NULL = 배점 없음 */
+  const maxScore = (body && body.maxScore !== null && body.maxScore !== "" && Number.isFinite(Number(body.maxScore)))
+    ? Number(body.maxScore) : null;
   if (!title) return jsonResponse({ error: "과제명을 입력해주세요." }, 400);
 
   let classId = null;
@@ -68,9 +71,17 @@ export async function onRequestPost({ request, env }) {
   }
 
   const created = nowSec();
-  const result = await env.DB.prepare(
-    "INSERT INTO assignments (prof_id, title, due_at, open, class_id, type, created_at) VALUES (?, ?, ?, 1, ?, ?, ?)"
-  ).bind(auth.user.id, title, dueAt, classId, type, created).run();
+  /* max_score는 나중에 추가된 컬럼 — 없는 DB에서도 과제 등록 자체는 되어야 하므로 2단계로 시도한다 */
+  let result;
+  try {
+    result = await env.DB.prepare(
+      "INSERT INTO assignments (prof_id, title, due_at, open, class_id, type, max_score, created_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?)"
+    ).bind(auth.user.id, title, dueAt, classId, type, maxScore, created).run();
+  } catch (e) {
+    result = await env.DB.prepare(
+      "INSERT INTO assignments (prof_id, title, due_at, open, class_id, type, created_at) VALUES (?, ?, ?, 1, ?, ?, ?)"
+    ).bind(auth.user.id, title, dueAt, classId, type, created).run();
+  }
 
-  return jsonResponse({ ok: true, assignment: { id: result.meta.last_row_id, title, due_at: dueAt, open: 1, class_id: classId, type, created_at: created, submission_count: 0 } });
+  return jsonResponse({ ok: true, assignment: { id: result.meta.last_row_id, title, due_at: dueAt, open: 1, class_id: classId, type, max_score: maxScore, created_at: created, submission_count: 0 } });
 }
