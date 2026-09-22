@@ -1,4 +1,5 @@
 import { requireAuth, jsonResponse } from "./_utils.js";
+import { getFileMaxMb, mbLabel } from "./app-settings.js";
 
 /* ===== 파일 제출 과제의 첨부파일 저장 (Cloudflare R2) — 2026-09-15 =====
    "파일 제출" 과제는 학생이 jpg/png/clip 파일을 올려서 낸다.
@@ -11,7 +12,8 @@ import { requireAuth, jsonResponse } from "./_utils.js";
                                                  UUID라 비공개 링크처럼 동작한다(콘티 이미지와 같은 방식).
    - DELETE                                    : 본인이 올린 파일(키 접두사가 자신의 user_id)만 삭제 */
 
-const MAX_BYTES = 1024 * 1024;          // 파일 하나당 1MB (클라이언트에서도 같은 값으로 미리 막는다)
+/* 파일 하나당 최대 용량은 관리자(byeorie)가 [관리자] 탭에서 정한다(server_meta.file_max_mb,
+   기본 1.5MB). 클라이언트(app.js FILE_MAX_BYTES)에서도 같은 값으로 미리 막는다. */
 const ALLOWED_EXT = ["clip"];           // 여기로 올릴 수 있는 확장자(이미지는 storyboard-image로 간다)
 
 function extOf(name) {
@@ -33,9 +35,13 @@ export async function onRequestPost({ request, env }) {
   const ext = extOf(name);
   if (!ALLOWED_EXT.includes(ext)) return jsonResponse({ error: "clip 파일만 올릴 수 있습니다." }, 400);
 
+  const maxMb = await getFileMaxMb(env);
+  const maxBytes = Math.round(maxMb * 1024 * 1024);
   const buf = await request.arrayBuffer();
   if (!buf || buf.byteLength === 0) return jsonResponse({ error: "빈 파일입니다." }, 400);
-  if (buf.byteLength > MAX_BYTES) return jsonResponse({ error: "파일 하나당 1MB까지만 올릴 수 있습니다." }, 400);
+  if (buf.byteLength > maxBytes) {
+    return jsonResponse({ error: `파일 하나당 ${mbLabel(maxMb)}까지만 올릴 수 있습니다.` }, 400);
+  }
 
   const key = `${auth.user.id}/file/${crypto.randomUUID()}.${ext}`;
   await env.STORYBOARD_BUCKET.put(key, buf, {

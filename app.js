@@ -5671,6 +5671,16 @@ function rAdmin(){
     <p class="hint">가입한 회원 명단입니다. 교수 계정에는 학생이 그룹 가입 시 입력할 6자리 코드가 함께 표시됩니다.</p>
     <div id="adminUsersWrap"><p class="hint">불러오는 중…</p></div>
   </div>
+  <div class="card"><h2>${ICONS.file} 파일 제출 용량 제한</h2>
+    <p class="hint">"파일 제출" 과제에서 학생이 올릴 수 있는 <b>파일 하나당 최대 용량</b>입니다(0.5MB ~ 10MB).
+      바꾸면 모든 계정에 바로 적용되며, 서버에서도 같은 값으로 막습니다. 값을 키우면 서버 저장 용량이 더 빨리 찹니다.</p>
+    <div class="assign-folder-actions">
+      <input type="number" id="adminFileMaxMb" min="0.5" max="10" step="0.5" style="width:110px" value="${FILE_MAX_MB}">
+      <span class="hint">MB</span>
+      <button class="btn" id="adminFileMaxSaveBtn">저장</button>
+      <span class="hint" id="adminFileMaxMsg"></span>
+    </div>
+  </div>
   <div class="card"><h2>${ICONS.trash} 서버 초기화</h2>
     <p class="hint">아래 버튼은 되돌릴 수 없습니다. 눌러도 바로 실행되지 않고, 두 번의 확인을 거쳐야 실행됩니다.</p>
     <div class="admin-reset-row">
@@ -5688,8 +5698,22 @@ function rAdmin(){
   </div>`;
   app.appendChild(c);
   renderAdminUsers();
+  c.querySelector("#adminFileMaxSaveBtn").onclick=()=>doAdminSaveFileMax(c);
   c.querySelector("#adminResetDataBtn").onclick=()=>doAdminReset("data");
   c.querySelector("#adminResetAllBtn").onclick=()=>doAdminReset("all");
+}
+/* 파일 제출 용량 제한 저장 — 서버(server_meta)에 넣고, 이 화면의 FILE_MAX_MB도 바로 갱신한다 */
+async function doAdminSaveFileMax(c){
+  const input=c.querySelector("#adminFileMaxMb"), msg=c.querySelector("#adminFileMaxMsg");
+  const mb=Number(input.value);
+  if(!(mb>=0.5 && mb<=10)){ msg.textContent="0.5 ~ 10 사이의 숫자를 넣어주세요."; return; }
+  msg.textContent="저장 중…";
+  const res=await apiFetch("app-settings", { method:"POST", body: JSON.stringify({fileMaxMb:mb}) });
+  if(res.ok && res.body && Number(res.body.fileMaxMb)>0){
+    FILE_MAX_MB=Number(res.body.fileMaxMb); FILE_MAX_BYTES=Math.round(FILE_MAX_MB*1024*1024);
+    input.value=FILE_MAX_MB;
+    msg.textContent=`저장되었습니다 (파일 하나당 ${FILE_MAX_MB}MB).`;
+  }else msg.textContent=(res.body && res.body.error) || "저장에 실패했습니다.";
 }
 async function renderAdminUsers(){
   const wrap=document.getElementById("adminUsersWrap"); if(!wrap) return;
@@ -6153,8 +6177,21 @@ async function buildSubmissionData(type){
    - jpg · png : /api/storyboard-image 에 올린다 → 교수 첨삭 화면에서 크게 보기와 "그림 위 피드백
      그리기"(콘티와 똑같은 기능)를 그대로 쓸 수 있다.
    - clip      : 브라우저가 열 수 없으므로 /api/assignment-file 에 올리고 내려받기만 제공한다.
-   파일 하나당 1MB, 한 번에 10개까지(서버에서도 같은 값으로 막는다). */
-const FILE_MAX_BYTES=1024*1024, FILE_MAX_COUNT=10;
+   파일 하나당 용량 제한은 관리자(byeorie) 계정의 [관리자] 탭에서 바꿀 수 있다(기본 1.5MB, 0.5~10MB).
+   서버(server_meta 표)에 저장된 값을 로그인 직후 loadAppSettings()로 받아 FILE_MAX_MB에 넣고,
+   서버(assignment-file.js · storyboard-image.js)에서도 같은 값으로 다시 막는다. 한 번에 10개까지. */
+const FILE_MAX_COUNT=10;
+const FILE_MAX_MB_DEFAULT=1.5;
+let FILE_MAX_MB=FILE_MAX_MB_DEFAULT;                         /* 관리자 설정값 — 서버에서 받아 갱신 */
+let FILE_MAX_BYTES=Math.round(FILE_MAX_MB_DEFAULT*1024*1024);
+/* 로그인 직후(auth.js의 setLoggedInUI)에서 한 번 부른다. 실패하면 기본값(1.5MB)을 그대로 쓴다. */
+async function loadAppSettings(){
+  try{
+    const res=await apiFetch("app-settings");
+    const mb=res && res.ok && res.body && Number(res.body.fileMaxMb);
+    if(mb>0){ FILE_MAX_MB=mb; FILE_MAX_BYTES=Math.round(mb*1024*1024); }
+  }catch(e){}
+}
 const FILE_IMAGE_EXT=["jpg","jpeg","png"], FILE_ETC_EXT=["clip"];
 let pendingFiles=[];   /* 고른 파일들 — [제출]을 눌러 과제를 고르는 순간 업로드된다 */
 
@@ -6193,7 +6230,7 @@ function addPendingFiles(files){
   files.forEach(f=>{
     const ext=fileExtOf(f.name);
     if(!FILE_IMAGE_EXT.includes(ext) && !FILE_ETC_EXT.includes(ext)){ errs.push(`${f.name} — jpg · png · clip 파일만 낼 수 있습니다.`); return; }
-    if(f.size>FILE_MAX_BYTES){ errs.push(`${f.name} — ${fileSizeText(f.size)} (파일 하나당 1MB까지)`); return; }
+    if(f.size>FILE_MAX_BYTES){ errs.push(`${f.name} — ${fileSizeText(f.size)} (파일 하나당 ${FILE_MAX_MB}MB까지)`); return; }
     if(pendingFiles.length>=FILE_MAX_COUNT){ errs.push(`${f.name} — 한 번에 ${FILE_MAX_COUNT}개까지만 낼 수 있습니다.`); return; }
     if(pendingFiles.some(x=>x.file.name===f.name && x.file.size===f.size)) return;   /* 같은 파일 두 번 담기 방지 */
     pendingFiles.push({id:uid(), file:f, ext, kind:FILE_IMAGE_EXT.includes(ext)?"image":"clip"});
@@ -6234,7 +6271,7 @@ function rFileAssign(){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<div class="card-h2-row"><h2>${ICONS.file} 파일 과제</h2>${submitBtnHtml()}</div>
     <p class="hint">다른 탭의 작업물과 상관없이 <b>파일만 내는 과제</b>입니다. 교수님이 "파일 제출" 종류로 낸 과제에만 제출됩니다.
-      <b>jpg · png · clip</b> 파일을 파일 하나당 <b>1MB 이하</b>로, 한 번에 <b>${FILE_MAX_COUNT}개</b>까지 낼 수 있습니다.
+      <b>jpg · png · clip</b> 파일을 파일 하나당 <b>${FILE_MAX_MB}MB 이하</b>로, 한 번에 <b>${FILE_MAX_COUNT}개</b>까지 낼 수 있습니다.
       jpg · png는 교수님 화면에 바로 보이고 그 위에 첨삭을 받을 수 있으며, clip 파일은 내려받기만 됩니다.</p>
     ${canSubmit?`<div class="assign-folder-actions">
       <button class="btn ghost" id="filePickBtn">${ICONS.plus} 파일 고르기</button>
@@ -7053,7 +7090,7 @@ function openAssignmentModal(classId, assignment){
   const syncTypeHint=()=>{
     if(!typeSel || !typeHint) return;
     typeHint.innerHTML = typeSel.value==="file"
-      ? `학생은 왼쪽 <b>[파일 과제]</b> 탭에서 <b>jpg · png · clip</b> 파일을 올려 냅니다(파일 하나당 1MB, 한 번에 ${FILE_MAX_COUNT}개까지).
+      ? `학생은 왼쪽 <b>[파일 과제]</b> 탭에서 <b>jpg · png · clip</b> 파일을 올려 냅니다(파일 하나당 ${FILE_MAX_MB}MB, 한 번에 ${FILE_MAX_COUNT}개까지).
          작품 내용(다른 탭)과는 연결되지 않으며, 제출함에서 jpg · png는 바로 보이고 clip은 내려받게 됩니다.`
       : "종류를 지정하면 학생이 그 탭에서 제출할 때만 이 과제가 목록에 보입니다.";
   };
@@ -8532,7 +8569,7 @@ const GUIDE_SECTIONS=[
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
-      <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 1MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
+      <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 용량 제한은 관리자 설정값 · 기본 1.5MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
       <li>학생이 제출하면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 제출함에서 <b>[과제 확인]</b>만 눌러 읽었다는 표시를 남기거나, 제출물을 열어 항목별로 첨삭 · 메모를 달 수 있습니다.</li>
       <li>첨삭 화면 맨 아래에 <b>평가(총평)</b> 입력칸이 있고, <b>[피드백 전달]</b>을 누르면 학생에게 알림이 가며 자동으로 제출함으로 돌아옵니다.</li>
       <li>콘티 과제는 제출된 그림을 크게 열어 <b>그 위에 직접 그려</b> 피드백을 줄 수 있습니다(학생 원본은 지워지지 않습니다).</li>

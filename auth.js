@@ -68,6 +68,8 @@ async function apiFetch(path, options) {
 /* ===== 로그인 상태 UI ===== */
 function setLoggedInUI() {
   document.body.classList.add("logged-in");
+  // 2026-09-22: 관리자가 정한 파일 제출 용량 제한을 서버에서 받아온다(app.js의 FILE_MAX_MB).
+  if (typeof loadAppSettings === "function") loadAppSettings();
   const btn = document.getElementById("userMenuBtn");
   if (btn) {
     btn.hidden = false;
