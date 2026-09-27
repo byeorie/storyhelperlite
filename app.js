@@ -7280,7 +7280,7 @@ async function loadProfAssignmentFolder(c, id){
       <button type="button" class="submit-assign-item" data-id="${s.id}">
         <b>${esc(s.student_name)}</b> <span class="hint">(${esc(s.student_username)})</span>
         <span class="assign-type-badge">${esc(s.type_label)}</span>${roundNo>1?`<span class="assign-type-badge round-badge">${roundNo}차 제출</span>`:""}
-        <span class="hint">제출 ${fmtDateTime(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}<span class="submit-check-state" data-id="${s.id}">${isChecked?" · 확인함":""}</span></span>
+        <span class="hint">제출 ${fmtDateTime(s.submitted_at)}</span>
       </button>
       ${scoreInputHtml(s.id, s.score, assignment.max_score!=null?assignment.max_score:null)}
       <div class="submit-row-btns">
