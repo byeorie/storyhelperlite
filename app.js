@@ -7283,8 +7283,10 @@ async function loadProfAssignmentFolder(c, id){
         <span class="hint">제출 ${fmtDateTime(s.submitted_at)}${s.has_feedback?" · 첨삭 완료":" · 첨삭 전"}<span class="submit-check-state" data-id="${s.id}">${isChecked?" · 확인함":""}</span></span>
       </button>
       ${scoreInputHtml(s.id, s.score, assignment.max_score!=null?assignment.max_score:null)}
-      <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${s.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>${hasHistory?`
-      <button type="button" class="btn ghost sm submit-history-btn" data-id="${s.id}" title="이전 제출 차수와 지난 첨삭 버전을 골라 볼 수 있습니다">${ICONS.book} 이전 버전</button>`:""}
+      <div class="submit-row-btns">
+        <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${s.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>${hasHistory?`
+        <button type="button" class="btn ghost sm submit-history-btn" data-id="${s.id}" title="이전 제출 차수와 지난 첨삭 버전을 골라 볼 수 있습니다">${ICONS.book} 이전 버전</button>`:""}
+      </div>
     </div>`;
   }).join("")}</div>`;
   /* 점수를 입력하는 중(칸에 커서가 있음)에는 자동 새로고침이 화면을 다시 그려 입력을 지우지 않게 한다 */
