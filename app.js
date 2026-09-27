@@ -7482,8 +7482,10 @@ async function rProfSubmissionReview(id, version){
     <div id="reviewVersionBanner"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
     <div id="reviewEvalBox"></div>
-    <div id="reviewScoreCheckBar" style="margin-top:14px"></div>
-    <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px">
+      <div id="reviewScoreCheckBar" style="display:contents"></div>
+      <button class="btn sm" id="reviewSaveBtn" style="margin-left:auto">${ICONS.upload} 피드백 전달</button>
+    </div>`;
   app.appendChild(c);
   c.querySelector("#reviewBackBtn").onclick=()=>{
     const d=sbReviewMemoDraft;
@@ -7522,15 +7524,12 @@ async function rProfSubmissionReview(id, version){
           <span>학생이 다시 제출한 내용은 이렇게 차수로 나뉘어 저장됩니다(이전 차수는 그대로 보존).</span></p>`
       : "";
     /* 2026-09-22: 점수 — 제출함 목록의 점수 칸과 같은 값을 고친다(어느 쪽에서 바꿔도 서로 반영된다) */
-    const scoreBar=isLatest?`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-      ${scoreInputHtml(sub.id, sub.score, sub.maxScore!=null?sub.maxScore:null)}
-      <span>${sub.maxScore!=null?`이 과제의 배점은 ${sub.maxScore}점입니다. `:""}점수는 입력칸을 벗어나면 바로 저장되고, 제출함 목록에도 같이 반영됩니다.</span></p>`:"";
+    /* 2026-09-27: 점수 · 과제 확인 · 피드백 전달을 한 줄에 — 설명 문구는 마우스를 올리면 보이게 */
+    const scoreBar=isLatest?`<span title="${sub.maxScore!=null?`이 과제의 배점은 ${sub.maxScore}점입니다. `:""}점수는 입력칸을 벗어나면 바로 저장되고, 제출함 목록에도 같이 반영됩니다.">${scoreInputHtml(sub.id, sub.score, sub.maxScore!=null?sub.maxScore:null)}</span>`:"";
     checkBar.innerHTML=roundBar;
     /* 2026-09-27: 점수 입력 · 과제 확인은 페이지 맨 위가 아니라 맨 아래 [피드백 전달] 버튼 바로 위에 둔다 */
     const scoreCheckBar=document.getElementById("reviewScoreCheckBar")||checkBar;
-    scoreCheckBar.innerHTML=scoreBar+`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0">
-      <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${sub.id}" data-checked="${isChecked?1:0}">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>
-      <span class="submit-check-state" data-id="${sub.id}">${isChecked?`확인 ${esc(fmtDate(sub.checkedAt))}`:"아직 확인 표시를 하지 않았습니다."}</span></p>`;
+    scoreCheckBar.innerHTML=scoreBar+`<button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${sub.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다${isChecked?` (확인 ${esc(fmtDate(sub.checkedAt))})`:""}">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>`;
     bindSubmitCheckBtns(scoreCheckBar);
     bindScoreInputs(scoreCheckBar);
     const roundSel=document.getElementById("reviewRoundSelect");
