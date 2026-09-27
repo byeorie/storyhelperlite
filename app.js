@@ -7298,7 +7298,7 @@ async function loadProfAssignmentFolder(c, id){
   bindSubmitCheckBtns(wrap);
   bindScoreInputs(wrap);
   wrap.querySelectorAll(".submit-assign-item").forEach(btn=>{
-    btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); profReviewVersion=null; render(); };
+    btn.onclick=()=>{ profReviewId=Number(btn.dataset.id); profReviewVersion=null; render(); window.scrollTo(0,0); };
   });
   /* [이전 버전] — 제출 차수와 지난 첨삭 버전을 한 팝업에서 고른다 */
   wrap.querySelectorAll(".submit-history-btn").forEach(btn=>{
@@ -7341,16 +7341,16 @@ function openSubmitHistoryModal(info){
   overlay.appendChild(box); document.body.appendChild(overlay);
 
   body.querySelectorAll("[data-round-id]").forEach(btn=>{
-    btn.onclick=()=>{ close(); profReviewId=Number(btn.dataset.roundId); profReviewVersion=null; render(); };
+    btn.onclick=()=>{ close(); profReviewId=Number(btn.dataset.roundId); profReviewVersion=null; render(); window.scrollTo(0,0); };
   });
   body.querySelectorAll("[data-version]").forEach(btn=>{
-    btn.onclick=()=>{ close(); profReviewId=info.id; profReviewVersion=Number(btn.dataset.version); render(); };
+    btn.onclick=()=>{ close(); profReviewId=info.id; profReviewVersion=Number(btn.dataset.version); render(); window.scrollTo(0,0); };
   });
 }
 
 /* "과제 확인" 버튼(.submit-check-btn) 공통 동작 — 누를 때마다 확인함/해제를 토글하고 서버에 바로 저장한다.
    (2026-09-08 추가 · 첨삭을 하지 않아도 "이 과제는 확인했다"는 표시를 남기기 위한 기능) */
-function bindSubmitCheckBtns(root){
+function bindSubmitCheckBtns(root, onChecked){
   if(!root) return;
   root.querySelectorAll(".submit-check-btn").forEach(btn=>{
     btn.onclick=async (e)=>{
@@ -7371,6 +7371,8 @@ function bindSubmitCheckBtns(root){
       root.querySelectorAll(`.submit-check-state[data-id="${id}"]`).forEach(el=>{ el.textContent=next?" · 확인함":""; });
       /* 2026-09-11: 확인하자마자 오른쪽 위 알림도 바로 줄어들게(20초 폴링을 기다리지 않도록) */
       notifySignature=""; fetchNotifications();
+      /* 2026-09-27: 첨삭 화면에서는 확인 표시를 켜면 [피드백 전달]처럼 제출함으로 바로 나간다 */
+      if(next && onChecked) onChecked(id);
     };
   });
 }
@@ -7494,7 +7496,7 @@ async function rProfSubmissionReview(id, version){
     if(d && d.reviewId===id && JSON.stringify(d.memos)!==d.savedJson
        && !confirm("아직 [피드백 전달]을 누르지 않은 메모가 있습니다. 나가면 사라집니다. 나갈까요?")) return;
     sbReviewMemoDraft=null;
-    profReviewId=null; profReviewVersion=null; render();
+    profReviewId=null; profReviewVersion=null; render(); window.scrollTo(0,0);
   };
 
   const res=await apiFetch("professor-submission?id="+id+(version?("&version="+version):""));
@@ -7532,10 +7534,11 @@ async function rProfSubmissionReview(id, version){
     /* 2026-09-27: 점수 입력 · 과제 확인은 페이지 맨 위가 아니라 맨 아래 [피드백 전달] 버튼 바로 위에 둔다 */
     const scoreCheckBar=document.getElementById("reviewScoreCheckBar")||checkBar;
     scoreCheckBar.innerHTML=scoreBar+`<button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${sub.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다${isChecked?` (확인 ${esc(fmtDate(sub.checkedAt))})`:""}">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>`;
-    bindSubmitCheckBtns(scoreCheckBar);
+    /* 나가는 길은 [제출함으로] 버튼과 같다 — 아직 전달하지 않은 메모가 있으면 먼저 물어본다 */
+    bindSubmitCheckBtns(scoreCheckBar, ()=>{ const b=document.getElementById("reviewBackBtn"); if(b) b.click(); });
     bindScoreInputs(scoreCheckBar);
     const roundSel=document.getElementById("reviewRoundSelect");
-    if(roundSel) roundSel.onchange=()=>{ profReviewId=Number(roundSel.value); profReviewVersion=null; render(); };
+    if(roundSel) roundSel.onchange=()=>{ profReviewId=Number(roundSel.value); profReviewVersion=null; render(); window.scrollTo(0,0); };
   }
   if(bannerEl){
     if(!isLatest){
