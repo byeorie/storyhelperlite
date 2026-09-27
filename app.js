@@ -7482,6 +7482,7 @@ async function rProfSubmissionReview(id, version){
     <div id="reviewVersionBanner"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
     <div id="reviewEvalBox"></div>
+    <div id="reviewScoreCheckBar" style="margin-top:14px"></div>
     <button class="btn" id="reviewSaveBtn" style="margin-top:14px;width:100%">${ICONS.upload} 피드백 전달</button>`;
   app.appendChild(c);
   c.querySelector("#reviewBackBtn").onclick=()=>{
@@ -7524,11 +7525,14 @@ async function rProfSubmissionReview(id, version){
     const scoreBar=isLatest?`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
       ${scoreInputHtml(sub.id, sub.score, sub.maxScore!=null?sub.maxScore:null)}
       <span>${sub.maxScore!=null?`이 과제의 배점은 ${sub.maxScore}점입니다. `:""}점수는 입력칸을 벗어나면 바로 저장되고, 제출함 목록에도 같이 반영됩니다.</span></p>`:"";
-    checkBar.innerHTML=roundBar+scoreBar+`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+    checkBar.innerHTML=roundBar;
+    /* 2026-09-27: 점수 입력 · 과제 확인은 페이지 맨 위가 아니라 맨 아래 [피드백 전달] 버튼 바로 위에 둔다 */
+    const scoreCheckBar=document.getElementById("reviewScoreCheckBar")||checkBar;
+    scoreCheckBar.innerHTML=scoreBar+`<p class="hint" style="display:flex;align-items:center;gap:8px;margin:0">
       <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${sub.id}" data-checked="${isChecked?1:0}">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>
       <span class="submit-check-state" data-id="${sub.id}">${isChecked?`확인 ${esc(fmtDate(sub.checkedAt))}`:"아직 확인 표시를 하지 않았습니다."}</span></p>`;
-    bindSubmitCheckBtns(checkBar);
-    bindScoreInputs(checkBar);
+    bindSubmitCheckBtns(scoreCheckBar);
+    bindScoreInputs(scoreCheckBar);
     const roundSel=document.getElementById("reviewRoundSelect");
     if(roundSel) roundSel.onchange=()=>{ profReviewId=Number(roundSel.value); profReviewVersion=null; render(); };
   }
