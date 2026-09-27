@@ -7285,7 +7285,7 @@ async function loadProfAssignmentFolder(c, id){
       ${scoreInputHtml(s.id, s.score, assignment.max_score!=null?assignment.max_score:null)}
       <div class="submit-row-btns">
         <button type="button" class="btn ghost sm submit-check-btn${isChecked?" checked":""}" data-id="${s.id}" data-checked="${isChecked?1:0}" title="첨삭과 별개로, 이 제출물을 확인했다는 표시입니다">${isChecked?ICONS.check+" 확인함":"과제 확인"}</button>${hasHistory?`
-        <button type="button" class="btn ghost sm submit-history-btn" data-id="${s.id}" title="이전 제출 차수와 지난 첨삭 버전을 골라 볼 수 있습니다">${ICONS.book} 이전 버전</button>`:""}
+        <button type="button" class="btn ghost sm submit-history-btn" data-id="${s.id}" title="이전 제출 차수와 지난 첨삭 버전을 골라 볼 수 있습니다">이전 버전</button>`:""}
       </div>
     </div>`;
   }).join("")}</div>`;

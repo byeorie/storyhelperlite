@@ -7,6 +7,7 @@
 **수정**
 - `app.js` `loadProfAssignmentFolder` — 두 버튼을 `.submit-row-btns`로 묶음.
 - `style.css` `.submit-row-btns` — 세로(flex column) 배치, 두 버튼 폭 맞춤.
+- [이전 버전] 버튼의 책 아이콘 제거 — 아이콘 때문에 [과제 확인]보다 넓어져 그 줄만 점수칸 위치가 어긋났음.
 
 **참고**: 같은 날 "수업 관리 불러오기가 느려졌다"는 제보 — 오늘 커밋은 첨삭 화면 UI만 바꿨고
 `/api/professor-classes`(수업 목록)는 2026-09-14 이후 변경 없음. 배포 직후 새 인스턴스에서 스키마 점검 쿼리가
