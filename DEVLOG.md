@@ -3015,3 +3015,7 @@ Cloudflare D1 무료 한도는 **하루 쓴 행 10만**인데 사용량이 21k�
 - 수업 상세 > 과제 관리 상단에 [PDF 일괄 내보내기](제출물 있는 모든 과제)와 [이미지 내보내기](콘티·파일 과제 중 체크박스로 선택) 추가.
 - zip 안에 과제마다 폴더(과목명_분반_과제명), 그 안에 학생별 파일(과목명_분반_과제명_학생이름). zip 이름은 과목명_분반_PDF/이미지.zip.
 - bulkFillZip(공용)·bulkExportClass·openClassImageExportModal·bulkImageFiles 신설. 과제 폴더(제출함) 안의 개별 내보내기 버튼은 그대로.
+
+## 2026-10-05 (4) — 플롯 제출에서 섹션 설명 제외
+
+- buildSubmissionData("plot")가 섹션 desc를 보내지 않음. plotReviewItems도 "섹션 설명" 항목을 만들지 않아 예전 제출물에서도 첨삭 화면·PDF에 안 보인다.

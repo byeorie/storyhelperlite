@@ -6206,7 +6206,8 @@ async function buildSubmissionData(type){
        ideaTexts는 예전 버전 호환용으로 함께 남긴다. */
     const sections=(P.plotDoc.sections||[]).map(s=>{
       const ideas=(s.ideaIds||[]).map(id=>({id, text:plotIdeaText(id)})).filter(it=>it.text&&it.text.trim());
-      return {id:s.id, name:s.name, desc:s.desc, ideas, ideaTexts:ideas.map(it=>it.text)};
+      /* 2026-10-05: 섹션 설명(desc)은 구조 안내문일 뿐 학생 과제 블럭이 아니라서 제출에서 뺀다 */
+      return {id:s.id, name:s.name, ideas, ideaTexts:ideas.map(it=>it.text)};
     });
     return {structure:P.plotDoc.structure||"", sections};
   }
@@ -7895,7 +7896,7 @@ function plotReviewItems(data){
   sections.forEach((s,i)=>{
     const secId=String(s.id||("s"+i));
     const group={id:secId, name:s.name||`섹션 ${i+1}`};
-    out.push({id:secId, label:"섹션 설명", group, kind:"plotSection", before:s.desc||""});
+    /* 2026-10-05: 섹션 설명은 과제 블럭이 아니므로 첨삭·PDF 항목에서 뺀다(예전 제출물에 desc가 있어도 숨김) */
     const ideas=(Array.isArray(s.ideas)&&s.ideas.length)
       ? s.ideas.map((it,j)=>({pid:secId+"::"+((it&&it.id)||("i"+j)), text:(it&&it.text)||""}))
       : (s.ideaTexts||[]).map((t,j)=>({pid:secId+"::i"+j, text:t||""}));
