@@ -748,6 +748,7 @@ function render(){
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
     app.querySelectorAll("textarea").forEach(ta=>{ if(ta.offsetParent!==null) autoGrowTextarea(ta); });
+    navSync();
   }catch(e){
     console.error("렌더링 오류:", e);
     app.innerHTML='<div class="card"><h2>문제가 발생했습니다</h2>'
@@ -6007,6 +6008,50 @@ let reviewSplitIds=new Set();// 첨삭 화면에서 "이전 버전 / 첨삭"으�
 /* 학생 계정의 [첨삭 보기] — 팝업 대신 그 탭(기획서/플롯/글쓰기) 안에서 페이지로 전환.
    null이면 평소 탭 화면, {type, mode:'list'}면 그 타입의 제출 목록, {type, mode:'detail', id}면 상세 */
 let feedbackPage=null;
+
+/* ===== 브라우저 뒤로/앞으로 가기 (2026-10-05) =====
+   예전에는 앱 안에서 화면을 바꿔도 브라우저 기록이 쌓이지 않아, 뒤로가기를 누르면 스토리 가이드를
+   통째로 떠나 이전 사이트로 가 버렸다. 이제 render()가 끝날 때마다 "지금 어떤 화면인지"(탭·열린 상세
+   페이지 등)를 기록과 비교해 달라졌으면 pushState로 한 칸 쌓고, popstate(뒤로/앞으로)에서 그 값을
+   되돌려 다시 그린다. 같은 화면을 다시 그리는 경우(자동 새로고침 등)는 기록이 늘지 않는다.
+   그리기 페이지가 열려 있을 때는 그림을 잃지 않도록 뒤로가기를 막고 제자리에 둔다. */
+let navRestoring=false;
+function navSnapshot(){
+  try{
+    return {activeTab, learnDetailFor, charDetailFor, charViewMode, sideViewMode,
+      profClassId, profClassTab, profAssignFolderId, profReviewId, profReviewVersion,
+      feedbackPage: feedbackPage ? {type:feedbackPage.type, mode:feedbackPage.mode, id:feedbackPage.id||null} : null};
+  }catch(e){ return null; }
+}
+function navSync(){
+  if(navRestoring) return;
+  const snap=navSnapshot(); if(!snap) return;
+  const cur=history.state && history.state.shNav;
+  const json=JSON.stringify(snap);
+  try{
+    if(!cur) history.replaceState({shNav:snap}, "");
+    else if(JSON.stringify(cur)!==json) history.pushState({shNav:snap}, "");
+  }catch(e){}
+}
+window.addEventListener("popstate", e=>{
+  const st=e.state && e.state.shNav;
+  if(!st) return;
+  if(drawPage){
+    /* 그리는 중에는 화면을 바꾸지 않는다 — 방금 빠져나온 기록을 다시 쌓아 제자리 유지 */
+    try{ history.pushState({shNav:navSnapshot()}, ""); }catch(err){}
+    alert("그리기 화면에서는 뒤로가기 대신 위쪽의 [저장하고 나가기] 또는 [← 나가기] 버튼을 눌러 주세요.");
+    return;
+  }
+  activeTab=st.activeTab; learnDetailFor=st.learnDetailFor; charDetailFor=st.charDetailFor;
+  charViewMode=st.charViewMode; sideViewMode=st.sideViewMode;
+  profClassId=st.profClassId; profClassTab=st.profClassTab; profAssignFolderId=st.profAssignFolderId;
+  profReviewId=st.profReviewId; profReviewVersion=st.profReviewVersion; feedbackPage=st.feedbackPage;
+  try{ localStorage.setItem(TAB_KEY, activeTab); }catch(err){}
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===activeTab));
+  navRestoring=true;
+  try{ render(); } finally { navRestoring=false; }
+  window.scrollTo(0,0);
+});
 
 /* 두 텍스트를 단어 단위로 비교해, 이전 텍스트(before)에서 지금(after)과 달라진 부분만
    <span class="diff-bg">로 감싼 HTML을 만든다 (LCS 기반의 간단한 단어 단위 diff) */
