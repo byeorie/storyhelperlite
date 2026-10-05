@@ -7194,7 +7194,8 @@ function rProfAssignmentFolder(id){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<div class="assign-folder-actions">
       <button class="btn ghost sm" id="assignBackBtn">${ICONS.close} 과제 목록으로</button>
-      <button class="btn ghost sm" id="assignPdfBtn" disabled>${ICONS.download} PDF 일괄 다운로드</button>
+      <button class="btn ghost sm" id="assignPdfBtn" disabled>${ICONS.download} PDF 내보내기</button>
+      <button class="btn ghost sm" id="assignImgBtn" style="display:none" disabled>${ICONS.download} 이미지 내보내기</button>
       ${profRefreshBarHtml("assignFolderRefresh")}
     </div>
     <h2 id="assignFolderTitle">${ICONS.book} 불러오는 중…</h2>
@@ -7251,7 +7252,17 @@ async function loadProfAssignmentFolder(c, id){
      자동 새로고침이 진행 표시를 지우고 버튼을 다시 켜 버리는 것을 막는다 */
   if(pdfBtn && !pdfBtn.dataset.busy){
     pdfBtn.disabled=!submissions.length;
-    pdfBtn.onclick=()=>bulkDownloadAssignmentPdfs(assignment.title, submissions, pdfBtn);
+    pdfBtn.onclick=()=>bulkDownloadAssignmentPdfs(assignment, submissions, pdfBtn);
+  }
+  /* 2026-10-05: 이미지 내보내기 — 콘티·파일 과제에서만 보인다 */
+  const imgBtn=c.querySelector("#assignImgBtn");
+  if(imgBtn && !imgBtn.dataset.busy){
+    const imgTypes=s=>s.type==="storyboard"||s.type==="file";
+    const showImg = assignment.type ? imgTypes(assignment) : submissions.some(imgTypes);
+    imgBtn.style.display=showImg?"":"none";
+    const imgSubs=submissions.filter(imgTypes);
+    imgBtn.disabled=!imgSubs.length;
+    imgBtn.onclick=()=>bulkDownloadAssignmentImages(assignment, imgSubs, imgBtn);
   }
   if(!submissions.length){ wrap.innerHTML=`<p class="hint">아직 제출한 학생이 없습니다.</p>`; assignFolderSig=""; return; }
   /* 2026-09-15: 재제출 차수 — 서버가 학생(·종류)당 한 줄(최신 차수)만 내려주고, 이전 차수는
@@ -7394,81 +7405,171 @@ async function ensureBulkPdfLibs(){
   if(!window.html2canvas) await loadScriptOnce("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
   if(!window.JSZip) await loadScriptOnce("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js");
 }
-/* 제출물 한 건(원본+첨삭)을 인쇄용 HTML로 그려서 html2canvas로 캡처 → jsPDF에 여러 페이지로 나눠 담아 Blob 반환 */
-async function submissionToPdfBlob(sub){
-  const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  const wrap=document.createElement("div");
-  wrap.style.cssText="position:fixed;left:-99999px;top:0;width:760px;padding:32px;background:#fff;color:#222;"
-    +"font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:14px;line-height:1.6;box-sizing:border-box";
-  wrap.innerHTML=`<h2 style="margin:0 0 4px;font-size:20px">${esc(sub.studentName)} (${esc(sub.studentUsername)})</h2>
-    <p style="margin:0 0 18px;color:#666">${esc(sub.assignmentTitle)} · ${esc(TYPE_LABEL[sub.type]||sub.type)} · 제출 ${esc(fmtDate(sub.submittedAt))}</p>
-    ${(sub.evaluation||"").trim() ? `<div style="margin:0 0 18px;padding:10px 12px;background:#fdf6e3;border-left:3px solid #c9a227;white-space:pre-wrap"><b>평가:</b> ${esc(sub.evaluation)}</div>` : ""}
-    ${pairs.length ? pairs.map(p=>`<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #ddd">
-        <div style="font-weight:700;margin-bottom:6px">${esc((p.group?p.group.name+" · ":"")+(p.subgroup?p.subgroup.name+" · ":"")+p.label)}</div>
-        <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
-        ${(p.after && p.after!==p.before) ? `<div style="margin-top:8px;padding:8px 10px;background:#f3f7f4;border-left:3px solid #5a8f6b;white-space:pre-wrap"><b>첨삭:</b> ${esc(p.after)}</div>` : ""}
-      </div>`).join("") : '<p style="color:#999">제출된 내용이 없습니다.</p>'}`;
-  document.body.appendChild(wrap);
-  await new Promise(r=>setTimeout(r,30)); // 레이아웃 반영 대기
-  let canvas;
+/* ===== 일괄 내보내기 공통 (2026-10-05) =====
+   파일명 규칙: [과목명_분반_과제명_학생이름] — 수업 미지정 과제면 과목명·분반은 빠진다. */
+function bulkSafeName(s){ return String(s||"").replace(/[\\/:*?"<>|\r\n\t]/g,"_").replace(/\s+/g," ").trim(); }
+function bulkBaseName(assignment, studentName){
+  let sec=String(assignment.class_section||"").trim();
+  if(sec && !/분반$/.test(sec)) sec+="분반";
+  return [assignment.class_name, sec, assignment.title, studentName].map(bulkSafeName).filter(Boolean).join("_");
+}
+function bulkUniqueName(used, base, ext){
+  let name=base+ext, n=2;
+  while(used.has(name)){ name=`${base}(${n})${ext}`; n++; }
+  used.add(name); return name;
+}
+function bulkSaveBlob(blob, fileName){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=fileName; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 60000);
+}
+/* 제출물 목록을 하나씩 열어 makeFiles(sub, base)가 돌려준 [{name, blob}]을 zip에 담아 내려받는다 */
+async function bulkExportZip(assignment, submissionList, btn, label, makeFiles){
+  if(!submissionList||!submissionList.length){ alert("제출된 과제가 없습니다."); return; }
+  const origHtml=btn.innerHTML;
+  btn.disabled=true; btn.dataset.busy="1";
   try{
-    canvas=await window.html2canvas(wrap, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
-  } finally {
-    document.body.removeChild(wrap);
+    btn.textContent="준비 중…";
+    await ensureBulkPdfLibs();
+    const zip=new window.JSZip();
+    const used=new Set();
+    let ok=0, fail=0;
+    for(let i=0;i<submissionList.length;i++){
+      btn.textContent=`${label} 만드는 중… (${i+1}/${submissionList.length})`;
+      try{
+        const res=await apiFetch("professor-submission?id="+submissionList[i].id);
+        if(!res.ok || !res.body){ fail++; continue; }
+        const sub=res.body.submission;
+        const files=await makeFiles(sub, bulkBaseName(assignment, sub.studentName||"학생"));
+        files.forEach(f=>{ const dot=f.name.lastIndexOf("."); zip.file(bulkUniqueName(used, f.name.slice(0,dot), f.name.slice(dot)), f.blob); });
+        if(files.length) ok++;
+      }catch(e){ fail++; }
+    }
+    if(!ok){ alert(label+" 내보내기에 실패했습니다(내보낼 내용이 없거나 오류)."); return; }
+    btn.textContent="압축 중…";
+    const zipBlob=await zip.generateAsync({type:"blob"});
+    bulkSaveBlob(zipBlob, bulkBaseName(assignment, "")+`_${label}.zip`);
+    if(fail) alert(`${ok}명 내보내기 완료, ${fail}건은 실패해 제외했습니다.`);
+  }catch(e){
+    alert(label+" 내보내기 중 오류가 발생했습니다: "+((e&&e.message)||e));
+  }finally{
+    btn.disabled=false; btn.innerHTML=origHtml; delete btn.dataset.busy;
   }
+}
+
+/* ===== 이미지 내보내기 (콘티·파일 과제) — 학생 원본 + (있으면) 최신 첨삭 피드백 그림. clip 파일도 그대로 담는다 ===== */
+function bulkExtOf(type){ return /png/.test(type)?".png":/webp/.test(type)?".webp":/gif/.test(type)?".gif":".jpg"; }
+async function bulkFetchBlob(url){
+  const r=await fetch(url);
+  if(!r.ok) throw new Error("이미지를 받지 못했습니다.");
+  return r.blob();
+}
+function bulkDownloadAssignmentImages(assignment, submissionList, btn){
+  return bulkExportZip(assignment, submissionList, btn, "이미지", async (sub, base)=>{
+    const blocks=(Array.isArray(sub.data)?sub.data:[]).filter(b=>b && b.key);
+    const fbMap={};
+    ((sub.feedback && sub.feedback.blocks)||[]).forEach(f=>{ fbMap[f.id]=f; });
+    const many=blocks.length>1;
+    const out=[];
+    for(let i=0;i<blocks.length;i++){
+      const b=blocks[i];
+      const nm = many ? `${base}_${String(i+1).padStart(2,"0")}` : base;
+      try{
+        if(b.clip){
+          out.push({name:nm+".clip", blob:await bulkFetchBlob(fileDownloadUrl(b.key, b.fileName||b.title))});
+          continue;
+        }
+        const ob=await bulkFetchBlob(sbImgUrl(b.key));
+        out.push({name:nm+bulkExtOf(ob.type), blob:ob});
+        const fb=fbMap[b.id];
+        if(fb && fb.afterKey && fb.afterKey!==b.key){
+          const fbb=await bulkFetchBlob(sbImgUrl(fb.afterKey));
+          out.push({name:nm+"_피드백"+bulkExtOf(fbb.type), blob:fbb});
+        }
+      }catch(e){}
+    }
+    return out;
+  });
+}
+
+/* ===== PDF 내보내기 (모든 과제 종류) — 학생 원본 + 첨삭(피드백)·메모·평가 =====
+   제출물 한 건을 화면 밖에 인쇄용 HTML로 그린 뒤, 덩어리(머리말/칸)마다 따로 html2canvas로 찍어
+   A4에 차례로 쌓는다. 통째로 한 장을 찍으면 그림이 많은 콘티는 캔버스 크기 한도를 넘어 깨진다. */
+function bulkPdfSectionsHtml(sub){
+  const memos=Array.isArray(sub.memos)?sub.memos:[];
+  const memoHtml=pid=>{
+    const mine=memos.filter(m=>m.pairId===pid && (m.text||"").trim());
+    return mine.length ? `<div style="margin-top:6px;padding:6px 10px;background:#fff8e1;border-left:3px solid #e0a800">${mine.map(m=>`<div style="white-space:pre-wrap">· 메모: ${esc(m.text)}</div>`).join("")}</div>` : "";
+  };
+  const secs=[];
+  secs.push(`<h2 style="margin:0 0 4px;font-size:20px">${esc(sub.studentName)} (${esc(sub.studentUsername||"")})</h2>
+    <p style="margin:0 0 10px;color:#666">${esc(sub.assignmentTitle)} · ${esc(TYPE_LABEL[sub.type]||sub.type)} · 제출 ${esc(fmtDate(sub.submittedAt))}</p>
+    ${(sub.evaluation||"").trim() ? `<div style="margin:0 0 6px;padding:10px 12px;background:#fdf6e3;border-left:3px solid #c9a227;white-space:pre-wrap"><b>평가:</b> ${esc(sub.evaluation)}</div>` : ""}`);
+  if(sub.type==="storyboard" || sub.type==="file"){
+    const blocks=Array.isArray(sub.data)?sub.data:[];
+    const fbMap={}; ((sub.feedback && sub.feedback.blocks)||[]).forEach(f=>{ fbMap[f.id]=f; });
+    const imgBox=(key,label)=>!key ? `<div style="flex:1;color:#999">(그림 없음)</div>` : `<div style="flex:1;min-width:0"><div style="font-size:12px;color:#666;margin-bottom:4px">${label}</div>
+      <img src="${sbImgUrl(key)}" style="max-width:100%;max-height:900px;border:1px solid #ccc;display:block"></div>`;
+    if(!blocks.length) secs.push('<p style="color:#999">제출된 내용이 없습니다.</p>');
+    blocks.forEach((b,i)=>{
+      const title=`${b.no||i+1}. ${esc(b.fileName||b.title||"(제목 없음)")}`;
+      if(b.clip){ secs.push(`<div style="font-weight:700">${title}</div><div style="color:#666">clip 파일 — PDF에는 담을 수 없습니다(이미지 내보내기에서 내려받기).</div>`); return; }
+      const items=(Array.isArray(b.items)?b.items:[]).filter(it=>(it.text||"").trim());
+      const script=items.length ? `<div style="margin:4px 0 8px;white-space:pre-wrap">${items.map(it=>it.type==="line"?`<b>${esc(it.char||"(미지정)")}:</b> ${esc(it.text.trim())}`:esc(it.text.trim())).join("<br>")}</div>` : "";
+      const fb=fbMap[b.id];
+      const hasFb=fb && fb.afterKey && fb.afterKey!==b.key;
+      secs.push(`<div style="font-weight:700;margin-bottom:4px">${title}</div>${script}
+        <div style="display:flex;gap:12px;align-items:flex-start">${imgBox(b.key,"학생 원본")}${hasFb?imgBox(fb.afterKey,fb.blank?"피드백(빈 캔버스)":"피드백"):""}</div>${memoHtml(b.id)}`);
+    });
+  }else{
+    const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
+    if(!pairs.length) secs.push('<p style="color:#999">제출된 내용이 없습니다.</p>');
+    pairs.forEach(p=>secs.push(`<div style="font-weight:700;margin-bottom:6px">${esc((p.group?p.group.name+" · ":"")+(p.subgroup?p.subgroup.name+" · ":"")+p.label)}</div>
+      <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
+      ${(p.after && p.after!==p.before) ? `<div style="margin-top:8px;padding:8px 10px;background:#f3f7f4;border-left:3px solid #5a8f6b;white-space:pre-wrap"><b>첨삭:</b> ${esc(p.after)}</div>` : ""}${memoHtml(p.id)}`));
+  }
+  return secs;
+}
+async function submissionToPdfBlob(sub){
+  const wrap=document.createElement("div");
+  wrap.style.cssText="position:fixed;left:-99999px;top:0;width:760px;background:#fff;color:#222;"
+    +"font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:14px;line-height:1.6;box-sizing:border-box";
+  wrap.innerHTML=bulkPdfSectionsHtml(sub).map(h=>`<div style="padding:14px 32px;border-bottom:1px solid #ddd;background:#fff">${h}</div>`).join("");
+  document.body.appendChild(wrap);
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:"pt", format:"a4"});
   const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
-  const imgW=pageW, imgH=canvas.height*(imgW/canvas.width);
-  const imgData=canvas.toDataURL("image/jpeg", 0.92);
-  let heightLeft=imgH, position=0, first=true;
-  while(heightLeft>0){
-    if(!first) doc.addPage();
-    doc.addImage(imgData, "JPEG", 0, position, imgW, imgH);
-    heightLeft-=pageH; position-=pageH; first=false;
+  let y=0;
+  try{
+    await Promise.all([...wrap.querySelectorAll("img")].map(im=>im.complete?null:new Promise(r=>{ im.onload=im.onerror=r; })));
+    await new Promise(r=>setTimeout(r,30));
+    for(const sec of wrap.children){
+      const canvas=await window.html2canvas(sec, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+      const h=canvas.height*(pageW/canvas.width);
+      if(h<=pageH){
+        if(y>0 && y+h>pageH){ doc.addPage(); y=0; }
+        doc.addImage(canvas.toDataURL("image/jpeg",0.9), "JPEG", 0, y, pageW, h); y+=h;
+      }else{
+        /* 한 칸이 한 쪽보다 길면 쪽 높이만큼 잘라 이어 붙인다 */
+        if(y>0){ doc.addPage(); y=0; }
+        const sliceH=Math.floor(canvas.width*pageH/pageW);
+        for(let sy=0; sy<canvas.height; sy+=sliceH){
+          const part=document.createElement("canvas");
+          part.width=canvas.width; part.height=Math.min(sliceH, canvas.height-sy);
+          part.getContext("2d").drawImage(canvas, 0, sy, canvas.width, part.height, 0, 0, canvas.width, part.height);
+          if(sy>0) doc.addPage();
+          const ph=part.height*(pageW/canvas.width);
+          doc.addImage(part.toDataURL("image/jpeg",0.9), "JPEG", 0, 0, pageW, ph); y=ph;
+        }
+      }
+    }
+  } finally {
+    document.body.removeChild(wrap);
   }
   return doc.output("blob");
 }
-/* 과제 폴더의 제출물 전체를 학생별 PDF로 만들어 zip 하나로 내려받는다 */
-async function bulkDownloadAssignmentPdfs(assignmentTitle, submissionList, btn){
-  if(!submissionList||!submissionList.length){ alert("제출된 과제가 없습니다."); return; }
-  const origText=btn.textContent;
-  btn.disabled=true; btn.dataset.busy="1";
-  try{
-    btn.textContent="라이브러리를 불러오는 중…";
-    await ensureBulkPdfLibs();
-    const zip=new window.JSZip();
-    const usedNames=new Set();
-    let ok=0, fail=0;
-    for(let i=0;i<submissionList.length;i++){
-      const s=submissionList[i];
-      btn.textContent=`PDF 생성 중… (${i+1}/${submissionList.length})`;
-      try{
-        const res=await apiFetch("professor-submission?id="+s.id);
-        if(!res.ok || !res.body){ fail++; continue; }
-        const sub=res.body.submission;
-        const blob=await submissionToPdfBlob(sub);
-        const base=`${sub.studentName||"학생"}_${TYPE_LABEL[sub.type]||sub.type}`.replace(/[\\/:*?"<>|]/g,"_");
-        let finalName=base+".pdf", n=2;
-        while(usedNames.has(finalName)){ finalName=`${base}_${n}.pdf`; n++; }
-        usedNames.add(finalName);
-        zip.file(finalName, blob);
-        ok++;
-      }catch(e){ fail++; }
-    }
-    if(!ok){ alert("PDF 생성에 실패했습니다."); return; }
-    btn.textContent="압축 중…";
-    const zipBlob=await zip.generateAsync({type:"blob"});
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(zipBlob);
-    a.download=`${assignmentTitle||"과제"}_제출물.zip`.replace(/[\\/:*?"<>|]/g,"_");
-    a.click();
-    if(fail) alert(`${ok}건 다운로드 완료, ${fail}건은 실패해 제외했습니다.`);
-  }catch(e){
-    alert("PDF 일괄 다운로드 중 오류가 발생했습니다: "+((e&&e.message)||e));
-  }finally{
-    btn.disabled=false; btn.textContent=origText; delete btn.dataset.busy;
-  }
+function bulkDownloadAssignmentPdfs(assignment, submissionList, btn){
+  return bulkExportZip(assignment, submissionList, btn, "PDF", async (sub, base)=>[{name:base+".pdf", blob:await submissionToPdfBlob(sub)}]);
 }
 
 /* 제출물 상세 — 첨삭 화면 (교수, 페이지). 기본은 원본 블록만 한 줄로 보여주고,
@@ -7819,9 +7920,11 @@ function renderSbFeedbackBlocks(container, dataBlocks, feedback, opts){
       box.append(cap,img);
       return box;
     };
-    if(fb && fb.beforeKey!==fb.afterKey){ imgsWrap.append(mk(fb.beforeKey,"이전",false), mk(fb.afterKey,fb.blank?"피드백(빈 캔버스)":"피드백",true)); }
-    else if(fb){ imgsWrap.appendChild(mk(fb.afterKey,"현재",true)); }
-    else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"제출한 콘티",true)); }
+    /* 2026-10-05: 첨삭을 여러 번 해도 왼쪽은 항상 학생 원본(b.key), 오른쪽은 이 첨삭 버전의 피드백.
+       예전에는 직전 첨삭본이 "이전"으로 올라와 학생 원본이 화면에서 사라졌다.
+       첨삭 버전마다 afterKey가 따로 저장되므로 옛 버전은 [이전 버전]에서 그대로 볼 수 있다. */
+    if(fb && fb.afterKey && fb.afterKey!==b.key){ imgsWrap.append(mk(b.key,opts.submittedLabel||"학생 원본",false), mk(fb.afterKey,fb.blank?"피드백(빈 캔버스)":"피드백",true)); }
+    else{ imgsWrap.appendChild(mk(b.key,opts.submittedLabel||"학생 원본",true)); }
     /* 2026-09-14: 학생 콘티 화면과 같은 배치 — 지문·대사가 왼쪽, 그림이 오른쪽 */
     const bodyWrap=document.createElement("div"); bodyWrap.className="sb-fb-body";
     const mm = memos ? computePairMemoNumbering(memos, b.id) : null;

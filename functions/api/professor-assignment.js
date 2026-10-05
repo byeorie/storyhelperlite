@@ -26,6 +26,13 @@ export async function onRequestGet({ request, env }) {
     ).bind(id, auth.user.id).first();
   }
   if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
+  /* 2026-10-05: 일괄 다운로드 파일명(과목명_분반_과제명_학생이름)에 쓸 수업 정보 — 실패해도 목록은 그대로 */
+  try {
+    const cl = await env.DB.prepare(
+      "SELECT cl.name, cl.section FROM assignments a JOIN classes cl ON cl.id = a.class_id WHERE a.id = ?"
+    ).bind(id).first();
+    if (cl) { assignment.class_name = cl.name || ""; assignment.class_section = cl.section || ""; }
+  } catch (e) {}
 
   /* 2026-09-08: 예전에는 제출 목록 한 쿼리 안에서 submission_feedback_versions를 서브쿼리로 세었기 때문에,
      그 표가 운영 DB에 없으면 "제출함" 화면 전체가 열리지 않았다(500). 이제 본 목록과 버전 수 집계를
