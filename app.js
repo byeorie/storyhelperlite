@@ -7027,10 +7027,15 @@ function renderClassAssignmentsTab(container, classId){
   container.innerHTML=`<p class="hint">과제를 등록하면 아래에 폴더 형태로 표시됩니다. 폴더를 클릭하면 학생 제출함이 열립니다. 스위치를 끄면 학생이 더 이상 제출할 수 없습니다.</p>
     <div class="assign-folder-actions">
       <button class="btn" id="profNewAssignBtn">${ICONS.plus} 과제 등록</button>
+      <button class="btn ghost sm" id="profClassPdfBtn">${ICONS.download} PDF 일괄 내보내기</button>
+      <button class="btn ghost sm" id="profClassImgBtn">${ICONS.download} 이미지 내보내기</button>
       ${profRefreshBarHtml("profAssignRefresh")}
     </div>
     <div id="profAssignWrap" class="prof-assign-grid"><p class="hint">불러오는 중…</p></div>`;
   container.querySelector("#profNewAssignBtn").onclick=()=>openNewAssignmentModal(classId);
+  const cPdf=container.querySelector("#profClassPdfBtn"), cImg=container.querySelector("#profClassImgBtn");
+  cPdf.onclick=()=>{ if(!cPdf.dataset.busy) bulkExportClass(classId, "pdf", cPdf); };
+  cImg.onclick=()=>{ if(!cImg.dataset.busy) openClassImageExportModal(classId, cImg); };
   profAssignSig="";
   bindProfRefreshBar(container, "profAssignRefresh", ()=>renderProfAssignList(classId));
   renderProfAssignList(classId);
@@ -7468,7 +7473,23 @@ function bulkSaveBlob(blob, fileName){
   a.href=URL.createObjectURL(blob); a.download=fileName; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 60000);
 }
-/* 제출물 목록을 하나씩 열어 makeFiles(sub, base)가 돌려준 [{name, blob}]을 zip에 담아 내려받는다 */
+/* 제출물 목록을 하나씩 열어 makeFiles(sub, base)가 돌려준 [{name, blob}]을 zip(또는 zip 안 폴더)에 담는다 */
+async function bulkFillZip(target, assignment, submissionList, makeFiles, onStep){
+  const used=new Set();
+  let ok=0, fail=0;
+  for(let i=0;i<submissionList.length;i++){
+    if(onStep) onStep(i);
+    try{
+      const res=await apiFetch("professor-submission?id="+submissionList[i].id);
+      if(!res.ok || !res.body){ fail++; continue; }
+      const sub=res.body.submission;
+      const files=await makeFiles(sub, bulkBaseName(assignment, sub.studentName||"학생"));
+      files.forEach(f=>{ const dot=f.name.lastIndexOf("."); target.file(bulkUniqueName(used, f.name.slice(0,dot), f.name.slice(dot)), f.blob); });
+      if(files.length) ok++;
+    }catch(e){ fail++; }
+  }
+  return {ok, fail};
+}
 async function bulkExportZip(assignment, submissionList, btn, label, makeFiles){
   if(!submissionList||!submissionList.length){ alert("제출된 과제가 없습니다."); return; }
   const origHtml=btn.innerHTML;
@@ -7477,29 +7498,86 @@ async function bulkExportZip(assignment, submissionList, btn, label, makeFiles){
     btn.textContent="준비 중…";
     await ensureBulkPdfLibs();
     const zip=new window.JSZip();
-    const used=new Set();
-    let ok=0, fail=0;
-    for(let i=0;i<submissionList.length;i++){
-      btn.textContent=`${label} 만드는 중… (${i+1}/${submissionList.length})`;
-      try{
-        const res=await apiFetch("professor-submission?id="+submissionList[i].id);
-        if(!res.ok || !res.body){ fail++; continue; }
-        const sub=res.body.submission;
-        const files=await makeFiles(sub, bulkBaseName(assignment, sub.studentName||"학생"));
-        files.forEach(f=>{ const dot=f.name.lastIndexOf("."); zip.file(bulkUniqueName(used, f.name.slice(0,dot), f.name.slice(dot)), f.blob); });
-        if(files.length) ok++;
-      }catch(e){ fail++; }
-    }
+    const {ok, fail}=await bulkFillZip(zip, assignment, submissionList, makeFiles,
+      i=>{ btn.textContent=`${label} 만드는 중… (${i+1}/${submissionList.length})`; });
     if(!ok){ alert(label+" 내보내기에 실패했습니다(내보낼 내용이 없거나 오류)."); return; }
     btn.textContent="압축 중…";
-    const zipBlob=await zip.generateAsync({type:"blob"});
-    bulkSaveBlob(zipBlob, bulkBaseName(assignment, "")+`_${label}.zip`);
+    bulkSaveBlob(await zip.generateAsync({type:"blob"}), bulkBaseName(assignment, "")+`_${label}.zip`);
     if(fail) alert(`${ok}명 내보내기 완료, ${fail}건은 실패해 제외했습니다.`);
   }catch(e){
     alert(label+" 내보내기 중 오류가 발생했습니다: "+((e&&e.message)||e));
   }finally{
     btn.disabled=false; btn.innerHTML=origHtml; delete btn.dataset.busy;
   }
+}
+/* 2026-10-05 (3): 수업(과목) 단위 일괄 내보내기 — 과제마다 zip 안에 폴더(과목명_분반_과제명)를 만들어 담는다.
+   assignmentIds를 주면 그 과제만, 안 주면 제출물이 있는 과제 전부. */
+async function bulkExportClass(classId, kind, btn, assignmentIds){
+  const label = kind==="image" ? "이미지" : "PDF";
+  const makeFiles = kind==="image" ? bulkImageFiles : async (sub, base)=>[{name:base+".pdf", blob:await submissionToPdfBlob(sub)}];
+  const origHtml=btn.innerHTML;
+  btn.disabled=true; btn.dataset.busy="1";
+  try{
+    btn.textContent="준비 중…";
+    const lr=await apiFetch("professor-assignments?classId="+encodeURIComponent(classId));
+    let list=((lr.ok&&lr.body&&lr.body.assignments)||[]).filter(a=>a.submission_count>0);
+    if(assignmentIds) list=list.filter(a=>assignmentIds.includes(a.id));
+    if(!list.length){ alert("내보낼 제출물이 없습니다."); return; }
+    await ensureBulkPdfLibs();
+    const zip=new window.JSZip();
+    const folders=new Set();
+    let okAll=0, failAll=0, info=null;
+    for(let k=0;k<list.length;k++){
+      const ar=await apiFetch("professor-assignment?id="+list[k].id);
+      if(!ar.ok || !ar.body){ failAll++; continue; }
+      const assignment=ar.body.assignment;
+      let subs=ar.body.submissions||[];
+      if(kind==="image") subs=subs.filter(s=>s.type==="storyboard"||s.type==="file");
+      if(!subs.length) continue;
+      if(!info) info=assignment;
+      const folderName=bulkUniqueName(folders, bulkBaseName(assignment, ""), "");
+      const {ok, fail}=await bulkFillZip(zip.folder(folderName), assignment, subs, makeFiles,
+        i=>{ btn.textContent=`${label} 만드는 중… 과제 ${k+1}/${list.length} · ${i+1}/${subs.length}명`; });
+      okAll+=ok; failAll+=fail;
+    }
+    if(!okAll){ alert(label+" 내보내기에 실패했습니다(내보낼 내용이 없거나 오류)."); return; }
+    btn.textContent="압축 중…";
+    const zipBase=bulkBaseName({class_name:info.class_name, class_section:info.class_section, title:""}, "")||"과제";
+    bulkSaveBlob(await zip.generateAsync({type:"blob"}), `${zipBase}_${label}.zip`);
+    if(failAll) alert(`${okAll}건 내보내기 완료, ${failAll}건은 실패해 제외했습니다.`);
+  }catch(e){
+    alert(label+" 내보내기 중 오류가 발생했습니다: "+((e&&e.message)||e));
+  }finally{
+    btn.disabled=false; btn.innerHTML=origHtml; delete btn.dataset.busy;
+  }
+}
+/* 이미지 내보내기 — 콘티·파일 과제 중 고른 것만 */
+async function openClassImageExportModal(classId, btn){
+  const lr=await apiFetch("professor-assignments?classId="+encodeURIComponent(classId));
+  const list=((lr.ok&&lr.body&&lr.body.assignments)||[]).filter(a=>a.type==="storyboard"||a.type==="file");
+  if(!list.length){ alert("이 수업에는 콘티·파일 과제가 없습니다."); return; }
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  const box=document.createElement("div"); box.className="plot-modal";
+  box.innerHTML=`<div class="plot-picker-top"><span class="plot-picker-title">이미지 내보내기 — 과제 선택</span></div>
+    <p class="hint">콘티·파일 과제만 표시됩니다. 고른 과제가 각각 폴더로 묶여 zip 하나로 내려받아집니다.</p>
+    <div style="display:flex;flex-direction:column;gap:6px;margin:10px 0;max-height:50vh;overflow:auto">
+      ${list.map(a=>`<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" value="${a.id}" ${a.submission_count>0?"checked":"disabled"}>
+        ${esc(a.title)} <span class="hint">(${esc(TYPE_LABEL[a.type]||a.type)} · 제출 ${a.submission_count}건)</span></label>`).join("")}
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button type="button" class="btn ghost" data-act="cancel">취소</button>
+      <button type="button" class="btn" data-act="ok">${ICONS.download} 내려받기</button>
+    </div>`;
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  overlay.addEventListener("click", e=>{ if(e.target===overlay) close(); });
+  box.querySelector('[data-act="cancel"]').onclick=close;
+  box.querySelector('[data-act="ok"]').onclick=()=>{
+    const ids=[...box.querySelectorAll("input:checked")].map(i=>Number(i.value));
+    if(!ids.length){ alert("내보낼 과제를 하나 이상 골라 주세요."); return; }
+    close();
+    bulkExportClass(classId, "image", btn, ids);
+  };
 }
 
 /* ===== 이미지 내보내기 (콘티·파일 과제) — 학생 원본 + (있으면) 최신 첨삭 피드백 그림. clip 파일도 그대로 담는다 ===== */
@@ -7510,7 +7588,10 @@ async function bulkFetchBlob(url){
   return r.blob();
 }
 function bulkDownloadAssignmentImages(assignment, submissionList, btn){
-  return bulkExportZip(assignment, submissionList, btn, "이미지", async (sub, base)=>{
+  return bulkExportZip(assignment, submissionList, btn, "이미지", bulkImageFiles);
+}
+async function bulkImageFiles(sub, base){
+  {
     const blocks=(Array.isArray(sub.data)?sub.data:[]).filter(b=>b && b.key);
     const fbMap={};
     ((sub.feedback && sub.feedback.blocks)||[]).forEach(f=>{ fbMap[f.id]=f; });
@@ -7534,7 +7615,7 @@ function bulkDownloadAssignmentImages(assignment, submissionList, btn){
       }catch(e){}
     }
     return out;
-  });
+  }
 }
 
 /* ===== PDF 내보내기 (모든 과제 종류) — 학생 원본 + 첨삭(피드백)·메모·평가 =====
