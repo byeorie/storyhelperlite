@@ -765,7 +765,8 @@ function render(){
     // 2026-08-20: 캐릭터 탭은 상세 편집 화면(charDetailFor 있음)일 때만 넓게 표시됐는데,
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
-    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character");
+    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
+      ||(activeTab==="practice" && practiceFor==="buildup" && !feedbackPage));  // 빌드업 실습: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
@@ -892,50 +893,95 @@ const PRACTICE_BUILDUP_EXERCISES=[
    concept:`가장 흔한 실수는 터지는 장면부터 쓰는 것입니다. 이 연습은 결말을 미리 주기 때문에 <b>그 앞에 무엇을 깔아둘지</b>만 고민하면 됩니다.<br>
      비트마다 긴장도(1~10)를 매기면 아래에 곡선이 그려집니다. 좋은 빌드업은 <b>낮게 시작해 계단처럼 오르고</b>, 한 번에 확 뛰지 않습니다.
      결말 바로 앞에서 한 번 풀어주는 <b>가짜 안심</b>("별일 아니었네")은 공포와 코미디 모두에서 쓰는 고전적인 기술입니다.`,
-   example:`<b>결말</b>: 옷장 문을 열었더니 아무것도 없다. 그런데 바로 뒤에서 숨소리가 들린다.<br>
-     1 (긴장 2) 자취방에 돌아온 주인공, 늘 하던 대로 외투를 옷장에 건다. — 평범한 일상<br>
-     2 (긴장 4) 다음 날 아침, 옷장 문이 한 뼘쯤 열려 있다. 분명 닫았던 것 같은데.<br>
-     3 (긴장 6) 밤, 옷장 안에서 옷걸이끼리 부딪히는 소리. 창문은 닫혀 있다.<br>
-     4 (긴장 8) 휴대폰 손전등을 켜고 옷장 앞에 선다. 손잡이를 잡는다.<br>
-     5 (긴장 5) 확 연다 — 옷만 걸려 있다. "내가 예민했네." — 가짜 안심<br>
-     → 결말 (긴장 10)`},
+   /* 예시 — 오른쪽 예시 패널(넓은 화면)과 "예시 보기"(좁은 화면)에 쓴다.
+      {setup:[이름,내용], steps:[[라벨,내용,메모?,긴장도?]], point} — 긴장도가 있으면 미니 곡선을 그린다 */
+   examples:{
+     "공포":{setup:["결말","옷장 문을 열었더니 아무것도 없다. 그런데 바로 뒤에서 숨소리가 들린다."],
+       steps:[["비트 1","자취방에 돌아온 주인공, 늘 하던 대로 외투를 옷장에 건다.","평범한 일상",2],
+              ["비트 2","다음 날 아침, 옷장 문이 한 뼘쯤 열려 있다. 분명 닫았던 것 같은데.","작은 이상",4],
+              ["비트 3","밤, 옷장 안에서 옷걸이끼리 부딪히는 소리. 창문은 닫혀 있다.","설명할 수 없는 일",6],
+              ["비트 4","휴대폰 손전등을 켜고 옷장 앞에 선다. 손잡이를 잡는다.","가장 조여진 순간",8],
+              ["비트 5","확 연다 — 옷만 걸려 있다. \"내가 예민했네.\"","가짜 안심",5]],
+       point:"옷장이 비어 있다는 안심(비트 5)이 있어야, 등 뒤의 숨소리가 두 배로 무서워진다."},
+     "코미디":{setup:["결말","짝사랑에게 보낼 고백 문자를, 반 단체방에 보냈다."],
+       steps:[["비트 1","밤새 고백 문자를 썼다 지웠다 한다. 반 단체방에선 친구들이 쓸데없는 짤을 올리는 중.","평범한 일상 + 단체방 심어두기",2],
+              ["비트 2","드디어 완성. 손가락이 전송 버튼 위에서 멈춘다. \"내일 보낼까…\"","망설임",4],
+              ["비트 3","단체방 알림이 쏟아진다. 짜증 나서 채팅방 몇 개를 오가며 알림을 끈다.","실수의 씨앗",6],
+              ["비트 4","심호흡. 눈을 질끈 감고 — 전송.","가장 조여진 순간",8],
+              ["비트 5","\"보냈다…!\" 이불킥. 뿌듯하게 휴대폰을 엎어 둔다.","가짜 안심",4]],
+       point:"비트 1에서 단체방을 미리 보여주고 비트 3에서 채팅방을 오가게 해 둬야, 결말이 억지가 아니라 \"아, 그래서!\"가 된다."}
+   }},
   {id:"three", num:"②", title:"3의 법칙", summary:"패턴을 확립하고, 반복하고, 세 번째에 깬다",
    concept:`같은 일이 두 번 일어나면 독자는 패턴을 읽고 세 번째를 예상합니다. 그 예상을 <b>분명하게 만들어 둬야</b> 비틀 수 있습니다.<br>
      공포: 두 번은 별일 아니었다가(고양이였다) 세 번째에 진짜가 온다. 코미디: 같은 행동을 두 번 보여주고 세 번째에 엇나가게 한다.<br>
      ①·②를 건너뛰면 ③은 그냥 "이상한 일 하나"가 됩니다. 그리고 ③은 <b>짧을수록 세게</b> 터집니다.`,
-   example:`<b>상황</b>: 주인공은 무슨 일이든 "이건 쉽지"라며 시작한다. (코미디)<br>
-     ① 라면 앞에서 "이건 쉽지." — 완벽한 라면.<br>
-     ② 조립식 책장 앞에서 "이건 쉽지." — 나사 하나가 남았지만 멀쩡하다.<br>
-     ❓ 독자의 예상: 이번에도 어찌어찌 해내겠지.<br>
-     ③ 운전면허 시험장에서 "이건 쉽지." — 시동을 켜자마자 와이퍼가 돈다.`},
+   examples:{
+     "공포":{setup:["상황","자취방 현관 앞에 주문한 적 없는 택배가 매일 놓여 있다."],
+       steps:[["① 확립","현관 앞에 주문한 적 없는 택배. 안에는 내가 좋아하는 과자. 잘못 왔겠지."],
+              ["② 반복","다음 날도 택배. 이번엔 내가 어제 장바구니에 넣었다 뺀 이어폰."],
+              ["❓ 예상","누가 내 취향을 알고 선물을 보내는 거겠지. 내일은 뭐가 올까?"],
+              ["③ 깨기","셋째 날 상자는 비어 있다. 송장의 받는 곳: 우리 집 옷장 안."]],
+       point:"①·② 덕분에 독자는 \"또 선물이 오겠지\"를 기대한다. ③은 그 기대를 정확히 뒤집으면서도 짧다."},
+     "코미디":{setup:["상황","주인공은 무슨 일이든 \"이건 쉽지\"라며 시작한다."],
+       steps:[["① 확립","라면 앞에서 \"이건 쉽지.\" — 완벽한 라면."],
+              ["② 반복","조립식 책장 앞에서 \"이건 쉽지.\" — 나사 하나가 남았지만 멀쩡하다."],
+              ["❓ 예상","이번에도 어찌어찌 해내겠지."],
+              ["③ 깨기","운전면허 시험장에서 \"이건 쉽지.\" — 시동을 켜자마자 와이퍼가 돈다."]],
+       point:"같은 대사(\"이건 쉽지\")를 세 번 반복해서 독자가 리듬을 탄다. 세 번째는 설명 없이 한 장면으로 끝낸다."}
+   }},
   {id:"stretch", num:"③", title:"순간 늘리기", summary:"같은 한 순간을 1컷 · 3컷 · 7컷으로 연출한다",
    concept:`긴장은 <b>시간</b>이 만듭니다. 같은 순간이라도 몇 컷에 걸쳐 보여주느냐에 따라 효과가 완전히 달라집니다. 세로 스크롤 웹툰에서는 컷 사이 여백 자체가 독자가 기다리는 시간이 됩니다.<br>
      1컷은 정보만 전달하고, 3컷은 숨을 고르게 하고, 7컷은 독자를 붙잡아 둡니다. 단, 아무것도 더해지지 않는 컷이 이어지면 늘어질 뿐입니다 — 컷마다 소리·반응·디테일이 조금씩 더해져야 합니다.<br>
      아래 <b>늘리기 도구</b> 버튼을 누르면 마지막으로 입력하던 칸에 도구 표시가 붙습니다.`,
-   example:`<b>순간</b>: 닫힌 문을 연다. (공포, 7컷)<br>
-     1 [디테일] 문고리를 잡은 손. 손끝이 하얗다.<br>
-     2 [소리] "…끼익" — 문틈이 손가락 하나만큼 벌어진다.<br>
-     3 [반응] 주인공의 눈. 침을 삼킨다.<br>
-     4 [시점] 문 안쪽 어둠에서 바라본 주인공의 실루엣.<br>
-     5 [가짜 안심] 문 너머 방, 아무도 없다. 숨을 내쉰다.<br>
-     6 [여백] 검은 빈 칸.<br>
-     7 바닥에 젖은 발자국이, 방 안쪽에서 주인공 쪽으로 찍혀 있다.`},
+   examples:{
+     "공포":{setup:["순간","닫힌 문을 연다. (7컷)"],
+       steps:[["컷 1","문고리를 잡은 손. 손끝이 하얗다.","디테일"],
+              ["컷 2","\"…끼익\" — 문틈이 손가락 하나만큼 벌어진다.","소리"],
+              ["컷 3","주인공의 눈. 침을 삼킨다.","반응"],
+              ["컷 4","문 안쪽 어둠에서 바라본 주인공의 실루엣.","시점"],
+              ["컷 5","문 너머 방, 아무도 없다. 숨을 내쉰다.","가짜 안심"],
+              ["컷 6","검은 빈 칸.","여백"],
+              ["컷 7","바닥에 젖은 발자국이, 방 안쪽에서 주인공 쪽으로 찍혀 있다."]],
+       point:"1컷이었다면 \"문을 열었더니 발자국\"으로 끝난다. 컷마다 소리·반응·시점이 더해져 같은 순간이 7배 길어진다."},
+     "코미디":{setup:["순간","냉장고에 넣어둔 마지막 푸딩이 있는지 확인한다. (7컷)"],
+       steps:[["컷 1","시계 11:58. 하루 종일 참았다.","시간"],
+              ["컷 2","냉장고 손잡이를 잡은 손. 경건하다.","디테일"],
+              ["컷 3","\"철컥.\"","소리"],
+              ["컷 4","주인공의 눈이 반짝인다. 배경에 꽃가루.","반응"],
+              ["컷 5","냉장고 안쪽에서 본 주인공 — 빛을 받아 성스럽다.","시점"],
+              ["컷 6","빈 칸.","여백"],
+              ["컷 7","푸딩 자리에 포스트잇. \"맛있었다 — 아빠\""]],
+       point:"푸딩 하나를 과장되게 성스럽게 늘릴수록 마지막 포스트잇의 낙차가 커진다. 코미디의 늘리기는 '진지함'이 연료다."}
+   }},
   {id:"swap", num:"④", title:"장르 바꾸기", summary:"같은 빌드업에 공포 결말과 코미디 결말을 둘 다 붙인다",
    concept:`빌드업은 똑같아도 됩니다. 장르를 가르는 것은 마지막에 터진 것이 <b>위협인가, 무해한가</b>입니다.<br>
      공통 빌드업을 쓸 때는 결말을 들키지 않게, <b>어느 쪽으로도 갈 수 있게</b> 써야 합니다. 두 결말을 다 붙여 보면 "빌드업이 장르를 정하는 게 아니라, 기대를 만드는 장치"라는 걸 체감할 수 있습니다.`,
-   example:`<b>출발</b>: 새로 이사 온 집, 밤마다 벽 너머에서 누군가 노크를 한다.<br>
-     빌드업: 첫날은 무시한다 → 둘째 날 노크가 세 번으로 정확히 반복된다 → 셋째 날 주인공이 벽에 귀를 대자 노크가 멈춘다.<br>
-     <b>공포 결말</b>: 관리인이 말한다. "그 옆집은 10년째 비어 있어요."<br>
-     <b>코미디 결말</b>: 옆집 사람이 찾아온다. "저기요, 밤마다 그쪽에서 자꾸 노크를 하셔서…"`},
+   examples:{
+     "공통":{setup:["출발","새로 이사 온 집, 밤마다 벽 너머에서 누군가 노크를 한다."],
+       steps:[["비트 1","첫날 밤, 똑똑. 주인공은 이삿짐 정리에 바빠 무시한다."],
+              ["비트 2","둘째 날, 정확히 같은 시각에 똑, 똑, 똑. 세 번."],
+              ["비트 3","셋째 날, 주인공이 벽에 귀를 대자 노크가 뚝 멈춘다."],
+              ["공포 결말","관리인이 말한다. \"그 옆집은 10년째 비어 있어요.\"","위협이 남는다"],
+              ["코미디 결말","옆집 사람이 찾아온다. \"저기요, 밤마다 그쪽에서 자꾸 노크를 하셔서…\"","오해로 풀린다"]],
+       point:"비트 1~3은 한 글자도 안 바꿨다. 노크한 존재가 '있으면 안 되는 것'이면 공포, '나와 똑같은 사람'이면 코미디."}
+   }},
   {id:"info", num:"⑤", title:"정보 통제 표", summary:"장면마다 독자와 인물이 아는 것을 비교한다",
    concept:`탁자 밑에 폭탄이 있다는 걸 독자만 알고 있으면, 인물들의 평범한 대화가 조마조마한 시간으로 바뀝니다(히치콕의 폭탄 비유). 아무도 모르다가 터지면 놀라는 건 한 번뿐입니다.<br>
      <b>독자가 더 안다</b> → 공포에선 서스펜스, 코미디에선 극적 아이러니(인물만 모르는 상황이 웃김).<br>
      <b>인물이 더 안다</b> → 궁금증(미스터리), 나중에 밝혀질 반전의 준비.<br>
      <b>똑같이 안다</b> → 기다림이 생기지 않습니다. 모든 장면이 이렇다면 빌드업이 없는 것입니다.`,
-   example:`<b>장면</b>: 친구들과 거실에서 야식을 먹는다.<br>
-     독자가 아는 것: 1화 끝에서 소파 밑에 무언가 기어 들어가는 것을 봤다.<br>
-     인물이 아는 것: 아무것도 모른다. 리모컨이 소파 밑으로 굴러간다.<br>
-     → 독자가 더 안다 = 서스펜스. "손 넣지 마!"라는 마음으로 독자가 지켜보게 된다.`}
+   examples:{
+     "공포":{setup:["장면","친구들과 거실에서 야식을 먹는다."],
+       steps:[["독자가 아는 것","1화 끝에서 소파 밑으로 무언가 기어 들어가는 것을 봤다."],
+              ["인물이 아는 것","아무것도 모른다. 리모컨이 소파 밑으로 굴러간다."],
+              ["→ 독자가 더 안다","서스펜스","효과"]],
+       point:"평범한 야식 장면인데, 독자는 \"손 넣지 마!\"를 외치며 지켜보게 된다. 위험을 먼저 알려준 덕분이다."},
+     "코미디":{setup:["장면","주인공이 첫 소개팅에서 상대에게 자기 자랑을 늘어놓는다."],
+       steps:[["독자가 아는 것","상대는 어제 주인공이 길에서 화려하게 넘어지는 걸 바로 앞에서 본 사람이다(지난 화)."],
+              ["인물이 아는 것","주인공은 모른다. \"저는 운동 신경이 좋은 편이라~\""],
+              ["→ 독자가 더 안다","극적 아이러니","효과"]],
+       point:"주인공이 허세를 부릴 때마다 독자는 상대의 표정을 살피며 웃는다. 정보 차이 하나로 장면 전체가 개그가 된다."}
+   }}
 ];
 
 /* 늘리기 도구 — 순간 늘리기 연습에서 버튼으로 칸에 [도구] 표시를 붙인다 */
@@ -996,13 +1042,18 @@ function buildupPromptText(id, st){
 }
 
 function rPractice(){
+  if(feedbackPage && feedbackPage.type==="practice"){ rFeedbackPage(); return; }
   if(practiceFor==="buildup"){ rPracticeBuildup(); return; }
   practiceFor=null;
   const c=document.createElement("div");
-  c.innerHTML=`<div class="card"><h2>${ICONS.book} 스토리텔링 실습</h2>
+  c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.book} 스토리텔링 실습</h2>${submitBtnHtml()}</div>
     <p class="hint">스토리텔링 학습에서 본 이론을 직접 써 보며 익히는 연습장입니다. 작성한 내용은 작품과 상관없이 내 계정에 자동 저장됩니다.</p>
     <div class="learn-grid" id="practiceGrid"></div></div>`;
   app.appendChild(c);
+  wireSubmitBtn(c, "practice");
+  /* 목록 화면의 [제출]은 낼 연습을 고르는 화면이 없으니, 실습 안에서 내도록 안내만 한다 */
+  const sb=c.querySelector(".submit-tab-btn");
+  if(sb) sb.onclick=()=>alert("제출할 연습 화면(예: 빌드업 실습 → ① 거꾸로 쌓기)을 연 뒤, 그 화면의 [제출]을 눌러 주세요.\n지금 열려 있는 연습 하나가 제출됩니다.");
   const grid=c.querySelector("#practiceGrid");
   PRACTICE_TOPICS.forEach(t=>{
     const d=document.createElement("div"); d.className="learn-card-mini";
@@ -1023,7 +1074,11 @@ function rPracticeBuildup(){
   backBtn.onclick=()=>{ practiceFor=null; render(); window.scrollTo(0,0); };
   const ttl=document.createElement("h2"); ttl.textContent="빌드업 실습";
   top.append(backBtn, ttl);
+  top.insertAdjacentHTML("beforeend", submitBtnHtml());
+  const sbg=top.querySelector(".submit-btn-group"); if(sbg) sbg.style.marginLeft="auto";
+  wireSubmitBtn(top, "practice");
   wrap.appendChild(top);
+  if(submitBtnHtml()) wrap.insertAdjacentHTML("beforeend", `<p class="hint pr-submit-hint">[제출]을 누르면 <b>지금 열려 있는 연습 하나</b>가 과제로 제출됩니다.</p>`);
 
   const intro=document.createElement("details"); intro.className="pr-intro";
   intro.open=!Object.keys(practiceBuildupStore()).length; // 처음 들어왔을 때만 펼쳐 둔다
@@ -1035,15 +1090,76 @@ function rPracticeBuildup(){
     const b=document.createElement("button"); b.type="button";
     b.className="pr-step-btn"+(ex.id===practiceStep?" active":"");
     b.innerHTML=`<span class="pr-step-num">${esc(ex.num)}</span><span class="pr-step-title">${esc(ex.title)}</span><span class="pr-step-sum">${esc(ex.summary)}</span>`;
-    b.onclick=()=>{ practiceStep=ex.id; render(); };
+    b.onclick=()=>{ practiceStep=ex.id; practiceAsideGenre=null; render(); };
     tabs.appendChild(b);
   });
   wrap.appendChild(tabs);
 
   const body=document.createElement("div"); body.className="pr-body";
   wrap.appendChild(body);
-  app.appendChild(wrap);
+  /* 넓은 화면에서는 오른쪽 빈 공간에 지금 연습의 예시를 붙여 둔다(좁은 화면은 본문의 "예시 보기") */
+  const layout=document.createElement("div"); layout.className="pr-layout";
+  const aside=document.createElement("aside"); aside.className="pr-aside";
+  layout.append(wrap, aside);
+  app.appendChild(layout);
   renderBuildupStep(body);
+}
+
+/* 예시 → HTML. 긴장도가 있는 예시(거꾸로 쌓기)는 미니 곡선도 함께 */
+function buildupExampleHtml(exm){
+  if(!exm) return "";
+  const steps=exm.steps||[];
+  const withT=steps.filter(s=>typeof s[3]==="number");
+  const curve=withT.length ? `<div class="pr-ex-curve">${practiceCurveSvg(withT.map((s,i)=>({label:String(i+1), v:s[3]})).concat([{label:"결말", v:10, payoff:true}]))}</div>` : "";
+  return `<div class="pr-ex-setup"><span class="pr-ex-tag">${esc(exm.setup[0])}</span>${esc(exm.setup[1])}</div>
+    <ol class="pr-ex-steps">${steps.map(s=>`<li><div class="pr-ex-label">${esc(s[0])}${typeof s[3]==="number"?` <span class="pr-ex-t">긴장 ${s[3]}</span>`:""}${s[2]?` <span class="pr-ex-note">${esc(s[2])}</span>`:""}</div><div class="pr-ex-text">${esc(s[1])}</div></li>`).join("")}</ol>
+    ${curve}
+    <div class="pr-ex-point"><b>포인트</b> ${esc(exm.point||"")}</div>`;
+}
+/* 오른쪽 예시 패널 — 장르 예시가 둘이면 지금 고른 장르를 먼저 보여주고 탭으로 바꿔 볼 수 있다 */
+let practiceAsideGenre=null;
+function renderBuildupAside(ex, st){
+  const aside=document.querySelector(".pr-aside"); if(!aside) return;
+  const keys=Object.keys(ex.examples||{});
+  if(!keys.length){ aside.innerHTML=""; return; }
+  let g=practiceAsideGenre && keys.includes(practiceAsideGenre) ? practiceAsideGenre : (keys.includes(st.genre)?st.genre:keys[0]);
+  aside.innerHTML=`<div class="pr-aside-card">
+    <div class="pr-aside-head"><span class="pr-aside-title">예시 · ${esc(ex.title)}</span>
+      ${keys.length>1?`<span class="pr-aside-tabs">${keys.map(k=>`<button type="button" class="pr-aside-tab${k===g?" on":""}" data-g="${esc(k)}">${esc(k)}</button>`).join("")}</span>`:""}</div>
+    <div class="pr-aside-body">${buildupExampleHtml(ex.examples[g])}</div>
+  </div>`;
+  aside.querySelectorAll(".pr-aside-tab").forEach(b=>b.onclick=()=>{ practiceAsideGenre=b.dataset.g; renderBuildupAside(ex, st); });
+}
+
+/* 과제 제출용 — 지금 열려 있는 연습 하나를 [{id,label,text}] 항목으로 바꾼다(교수 첨삭 화면의 블럭 단위) */
+function buildupSubmissionData(){
+  const ex=PRACTICE_BUILDUP_EXERCISES.find(e=>e.id===practiceStep)||PRACTICE_BUILDUP_EXERCISES[0];
+  const st=buildupState(ex.id);
+  const items=[];
+  const add=(id,label,text)=>items.push({id, label, text:String(text||"").trim()});
+  /* 칸이 모두 비었으면 ""(번호만 남은 글이 "작성함"으로 잡히지 않게) */
+  const numbered=arr=>(arr||[]).some(v=>String(v||"").trim()) ? (arr||[]).map((v,i)=>`${i+1}. ${String(v||"").trim()}`).join("\n") : "";
+  const genre=ex.id==="swap"?"":` (${st.genre})`;
+  const promptLabel={reverse:"제시 결말", three:"출발 상황", stretch:"늘릴 순간", swap:"출발 상황"}[ex.id];
+  if(promptLabel) add("prompt", promptLabel+genre, buildupPromptText(ex.id, st));
+  if(ex.id==="reverse"){
+    (st.beats||[]).forEach((b,i)=>add("beat:"+b.id, `비트 ${i+1} · 긴장도 ${b.tension}`, b.text));
+  }else if(ex.id==="three"){
+    add("first","① 확립",st.first); add("second","② 반복",st.second); add("expect","❓ 독자의 예상",st.expect); add("third","③ 깨기",st.third);
+  }else if(ex.id==="stretch"){
+    add("v1","1컷 버전",numbered(st.v1)); add("v3","3컷 버전",numbered(st.v3)); add("v7","7컷 버전",numbered(st.v7)); add("reflect","돌아보기",st.reflect);
+  }else if(ex.id==="swap"){
+    add("setup","공통 빌드업",numbered(st.setup)); add("horror","공포 결말",st.horror); add("comedy","코미디 결말",st.comedy); add("reflect","돌아보기",st.reflect);
+  }else if(ex.id==="info"){
+    (st.rows||[]).forEach((r,i)=>{
+      const g=INFO_GAPS.find(x=>x.id===r.gap);
+      const filled=[r.text,r.reader,r.chara].some(v=>String(v||"").trim());
+      add("row:"+r.id, `장면 ${i+1}${genre}${g?" · "+g.label:""}`, !filled ? "" :
+        [String(r.text||"").trim(), `독자가 아는 것: ${String(r.reader||"").trim()}`, `인물이 아는 것: ${String(r.chara||"").trim()}`,
+         g?`→ ${g.effect[st.genre==="코미디"?"코미디":"공포"]}`:""].filter(Boolean).join("\n"));
+    });
+  }
+  return {topic:"buildup", exercise:ex.id, genre:ex.id==="swap"?"":st.genre, title:`빌드업 실습 ${ex.num} ${ex.title}`, items};
 }
 
 /* 한 연습 화면(개념 → 작업 공간 → 자가 점검 → 버튼)을 body에 그린다. 구조가 바뀌면(비트 추가, 장르 변경 등) 다시 호출 */
@@ -1056,8 +1172,9 @@ function renderBuildupStep(body){
   const concept=document.createElement("div"); concept.className="pr-concept";
   concept.innerHTML=`<h3 class="pr-h3">${esc(ex.num)} ${esc(ex.title)}</h3>
     <div class="pr-concept-text">${ex.concept}</div>
-    <details class="pr-example"><summary>예시 보기</summary><div class="pr-example-body">${ex.example}</div></details>`;
+    <details class="pr-example"><summary>예시 보기</summary><div class="pr-example-body">${buildupExampleHtml((ex.examples||{})[st.genre]||Object.values(ex.examples||{})[0])}</div></details>`;
   body.appendChild(concept);
+  renderBuildupAside(ex, st);
 
   const work=document.createElement("div"); work.className="pr-work";
   body.appendChild(work);
@@ -1103,7 +1220,7 @@ function buildupGenreToggle(st, rerender){
   ["공포","코미디"].forEach(g=>{
     const b=document.createElement("button"); b.type="button";
     b.className="opt-btn"+(st.genre===g?" on":""); b.textContent=g;
-    b.onclick=()=>{ if(st.genre===g) return; st.genre=g; if(st.prompt!==-1) st.prompt=0; save(); rerender(); };
+    b.onclick=()=>{ if(st.genre===g) return; st.genre=g; practiceAsideGenre=null; if(st.prompt!==-1) st.prompt=0; save(); rerender(); };
     d.appendChild(b);
   });
   return d;
@@ -6606,7 +6723,7 @@ async function doAdminReset(mode){
    제출물은 교수 계정 자신의 작품(P/DB)에 절대 합쳐지지 않는다 — 항상 /api/professor-* 로 별도 조회해서
    "과제 관리" 탭 안에서 페이지 전환으로 보여주고(과제 폴더 → 제출함 → 첨삭, 팝업 아님) 저장도
    professor-submission API로만 하므로, 교수 자신의 프로젝트 데이터와 완전히 분리되어 있다. */
-const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정", storyboard:"콘티", file:"파일 제출"};
+const TYPE_LABEL={plan:"기획서", plot:"플롯", write:"글쓰기", character:"캐릭터 설정", background:"배경 설정", event:"사건 설정", storyboard:"콘티", file:"파일 제출", practice:"스토리텔링 실습"};
 
 /* ===== 2026-09-22: 과제 점수 =====
    교수가 제출물에 매기는 점수. 제출함 목록(loadProfAssignmentFolder)과 첨삭 화면(rProfSubmissionReview)
@@ -6821,7 +6938,7 @@ function notifyOpenProfessor(it){
 /* 학생 — 알림을 누르면 해당 과제의 첨삭 보기 화면으로 이동 (열면 서버가 "확인함"으로 기록한다) */
 function notifyOpenStudent(it){
   const type=it.type;
-  forceTab(type);
+  forceTab(type==="file"?"fileAssign":type);  // 파일 과제는 탭 이름(fileAssign)이 종류 이름과 다르다
   feedbackPage={type, mode:"detail", id:it.submissionId};
   render();
   notifySignature="";
@@ -7063,6 +7180,7 @@ async function buildSubmissionData(type){
   if(type==="character"){
     return (P.characters||[]).map(ch=>({id:ch.id, name:ch.name||"", text:charFieldsToText(ch)}));
   }
+  if(type==="practice") return buildupSubmissionData();
   return null;
 }
 
@@ -7214,6 +7332,7 @@ async function openSubmitModal(type){
   const box=document.createElement("div"); box.className="plot-modal";
   const top=document.createElement("div"); top.className="plot-picker-top";
   const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`${TYPE_LABEL[type]} 제출`;
+  if(type==="practice") ttl.textContent+=` — ${buildupSubmissionData().title}`;  /* 지금 열려 있는 연습 하나를 낸다 */
   top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
   box.appendChild(top);
   const body=document.createElement("div"); body.innerHTML=`<p class="hint">불러오는 중…</p>`;
@@ -7267,8 +7386,9 @@ async function openSubmitModal(type){
       if(type==="storyboard" && (!data || !data.length)){ alert("아직 만든 콘티가 없습니다."); restore(); return; }
       if(type==="file" && !data){ alert("파일을 올리는 데 실패했습니다. 잠시 후 다시 시도해 주세요."); restore(); return; }
       if(type==="file" && !data.length){ alert("먼저 [파일 고르기]로 낼 파일을 골라주세요."); restore(); return; }
+      if(type==="practice" && !data.items.some(it=>it.id!=="prompt" && (it.text||"").trim())){ alert("아직 작성한 내용이 없습니다."); restore(); return; }
       const r=await apiFetch("student-submit", {method:"POST", body:JSON.stringify({
-        assignmentId:Number(btn.dataset.id), type, projectName:P.name||"", data,
+        assignmentId:Number(btn.dataset.id), type, projectName:type==="practice"?data.title:(P.name||""), data,
       })});
       /* 2026-09-15: 재제출은 덮어쓰지 않고 "N차 제출"로 따로 저장된다(이전 차수는 그대로 남는다) */
       if(r.ok){
@@ -7400,6 +7520,17 @@ async function rFeedbackDetail(type, id, version){
           ${sub.versions.slice().reverse().map(v=>`<option value="${v.version}"${v.version===sub.viewingVersion?" selected":""}>버전 ${v.version}${v.version===sub.latestVersion?" (최신)":""}</option>`).join("")}
         </select></label>`
     : "";
+  /* 2026-10-08: 스토리텔링 실습은 작품에 딸린 내용이 아니라 [내 작업물에 반영]이 없다 — 첨삭과 메모만 본다 */
+  if(sub.type==="practice"){
+    wrap.innerHTML=`${evalHtml}${versionPicker}<div id="feedbackPairs"></div>`;
+    const vs=document.getElementById("feedbackVersionSelect");
+    if(vs) vs.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(vs.value)}; render(); };
+    renderReviewPairs(document.getElementById("feedbackPairs"), buildReviewPairs(sub.type, sub.data, sub.feedback), false, null, memos, {
+      canDelete:true,
+      onDelete:(m)=>{ apiFetch("student-submission-memo", {method:"POST", body:JSON.stringify({id, version:sub.viewingVersion, memoId:m.id})}); },
+    });
+    return;
+  }
   wrap.innerHTML=`${evalHtml}${versionPicker}<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat}${memoNote} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
     ${mismatch?`<br><b style="color:#b3503a">※ 이 과제는 "${esc(sub.projectName)}" 작품에서 제출했는데, 지금 열려있는 작품은 "${esc(P.name)}"입니다. 다른 작품에 반영될 수 있으니 확인해주세요.</b>`:""}</p>
     <button class="btn" id="applyFeedbackBtn" style="margin-bottom:14px;width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>
@@ -8782,6 +8913,17 @@ function buildReviewPairs(type, data, feedback){
       return { id:ch.id||("i"+i), label:ch.name||`캐릭터 ${i+1}`, kind:"character", before:ch.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (ch.text||"") };
     });
   }
+  if(type==="practice"){
+    /* 스토리텔링 실습 — data.items([{id,label,text}])를 그대로 블럭으로. 첨삭은 [{id,text}] */
+    const items=(data&&Array.isArray(data.items))?data.items:[];
+    const fbArr=Array.isArray(feedback)?feedback:[];
+    const group=data&&data.title?{id:"practice", name:data.title}:null;
+    return items.map((it,i)=>{
+      const f=fbArr.find(x=>x&&x.id===it.id)||null;
+      return { id:it.id||("i"+i), label:it.label||`항목 ${i+1}`, group, before:it.text||"",
+               after: f&&typeof f.text==="string" ? f.text : (it.text||"") };
+    });
+  }
   return [];
 }
 
@@ -9457,6 +9599,10 @@ function buildFeedbackFromPairs(type, data, afterList){
     const chars=Array.isArray(data)?data:[];
     return chars.map((ch,i)=>({ id:ch.id, text:afterList[i]||"" }));
   }
+  if(type==="practice"){
+    const items=(data&&Array.isArray(data.items))?data.items:[];
+    return items.map((it,i)=>({ id:it.id||("i"+i), text:afterList[i]||"" }));
+  }
   return null;
 }
 
@@ -9694,7 +9840,8 @@ const GUIDE_SECTIONS=[
     <ul>
       <li>이론을 직접 써 보며 익히는 연습장입니다. 작성한 내용은 작품과 상관없이 내 계정에 자동 저장됩니다.</li>
       <li><b>빌드업 실습</b>(공포 · 코미디): <b>거꾸로 쌓기</b>(결말을 받고 앞의 비트만 쓰기, 긴장 곡선) · <b>3의 법칙</b>(확립 → 반복 → 깨기) · <b>순간 늘리기</b>(같은 순간을 1컷 · 3컷 · 7컷으로) · <b>장르 바꾸기</b>(같은 빌드업에 공포 · 코미디 결말) · <b>정보 통제 표</b>(독자와 인물이 아는 것 비교) 5가지 연습이 있습니다.</li>
-      <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다.</li>
+      <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다. 넓은 화면에서는 <b>오른쪽에 그 연습의 예시</b>(공포 · 코미디 탭)가 함께 보입니다.</li>
+      <li><b>과제 제출</b>: 교수님이 "스토리텔링 실습" 종류로 낸 과제에, 연습 화면 위쪽의 <b>[제출]</b>로 <b>지금 열려 있는 연습 하나</b>를 냅니다. 첨삭은 [피드백 보기]에서 확인합니다(작품과 무관한 연습이라 [내 작업물에 반영]은 없습니다).</li>
     </ul>`},
   {title:"샘플 데이터 (예시 작품)", html:`
     <ul>

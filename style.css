@@ -1449,3 +1449,33 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
   .pr-steps{grid-template-columns:repeat(2,1fr)}
   .pr-stretch{grid-template-columns:1fr}
 }
+
+/* 빌드업 실습 — 오른쪽 예시 패널 (넓은 화면 전용, 좁으면 본문의 "예시 보기") */
+.pr-layout{display:grid;grid-template-columns:minmax(0,860px) minmax(280px,400px);gap:18px;align-items:start}
+.pr-layout>.card{margin-bottom:18px}
+.pr-aside{position:sticky;top:calc(var(--topbar-h) + 14px);max-height:calc(100vh - var(--topbar-h) - 28px);overflow-y:auto}
+.pr-aside-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.pr-aside-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.pr-aside-title{font-size:14px;font-weight:800;color:var(--ink)}
+.pr-aside-tabs{display:flex;gap:4px}
+.pr-aside-tab{padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);font:inherit;font-size:12px;color:var(--muted);cursor:pointer}
+.pr-aside-tab.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.pr-ex-setup{font-size:13px;font-weight:700;line-height:1.5;color:var(--ink);padding:8px 10px;background:#fff7f3;border:1px solid #f0d8cd;border-radius:8px;margin-bottom:10px}
+.pr-ex-tag{display:inline-block;margin-right:6px;padding:1px 7px;border-radius:999px;background:var(--accent);color:#fff;font-size:11px}
+.pr-ex-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.pr-ex-steps li{border-left:3px solid var(--accent2);padding:2px 0 2px 10px}
+.pr-ex-label{font-size:12px;font-weight:800;color:var(--accent)}
+.pr-ex-t{font-weight:700;color:var(--muted);font-size:11px}
+.pr-ex-note{display:inline-block;margin-left:2px;padding:0 6px;border-radius:999px;background:var(--accent2);color:var(--accent);font-size:10.5px;font-weight:700}
+.pr-ex-text{font-size:12.5px;line-height:1.55;color:var(--ink)}
+.pr-ex-curve{margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:4px 6px;background:#fbfaf7}
+.pr-ex-point{margin-top:10px;font-size:12px;line-height:1.55;color:var(--ok);background:#e7f0e9;border-radius:8px;padding:8px 10px}
+.pr-ex-point b{margin-right:4px}
+.pr-example-body .pr-ex-steps li{border-left-color:var(--line)}
+.pr-submit-hint{margin:-6px 0 12px !important;font-size:12px !important}
+@media(min-width:1240px){ .pr-concept .pr-example{display:none} }
+@media(max-width:1239px){
+  .pr-layout{display:block}
+  .pr-aside{display:none}
+}
+.pr-layout .pr-steps{grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
