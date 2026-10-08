@@ -290,6 +290,8 @@ function fillProject(p){
   world.glossary=Array.isArray(world.glossary)?world.glossary.map(g=>Object.assign(
     {id:uid(), term:"", definition:"", firstEpisode:"", absoluteRule:"", disclosure:"", resolved:""}, g)):[];
   const event=Object.assign({}, b.event, p.event||{});
+  /* 2026-10-08: 사건 설정 선택지 개편 — 예전 선택지 값을 새 값으로 바꿔준다 */
+  Object.keys(EVENT_LEGACY_OPTS).forEach(k=>{ const m=EVENT_LEGACY_OPTS[k]; if(m[event[k]]) event[k]=m[event[k]]; });
   event.log=Array.isArray(event.log)?event.log.map(g=>Object.assign(
     {id:uid(), name:"", characters:"", episode:"", impact:"", nextLink:"", cliffhanger:""}, g)):[];
   event.customFields=Array.isArray(event.customFields)?event.customFields.map(x=>Object.assign({id:uid(),label:"",value:""},x)):[];
@@ -439,8 +441,12 @@ function blankProject(id,name){
     world:{summary:"",rules:"",era:"",place:"",type:"",regions:"",timeline:"",politics:"",
       factions:"",economy:"",taboo:"",culture:"",language:"",conflict:"",glossary:[]},
     background:{social:"",mood:"",detail:"",customFields:[]},
-    event:{main:"",conflict:"",ending:"",name:"",characters:"",agency:"",conflictType:"",
-      goal:"",disaster:"",reaction:"",decision:"",transform:"",nextLink:"",log:[],customFields:[]},
+    event:{main:"",conflict:"",ending:"",name:"",characters:"",agency:"",drive:"",conflictType:"",
+      goal:"",obstacleType:"",stakesType:"",stakes:"",choiceType:"",changeTarget:"",
+      extraConflict:"",personalConflict:"",innerConflict:"",expectation:"",escalation:"",
+      plotKind:"",twist:"",foreshadow:"",settingPressure:"",charDrive:"",organicCheck:"",
+      tensionPos:"",episodeRole:"",cliffQuestion:"",
+      disaster:"",reaction:"",decision:"",transform:"",nextLink:"",log:[],customFields:[]},
     plot:Array(12).fill(""),
     tagColors:{},
     plotDoc:{structure:"", sections:[], ideaOverrides:{}},
@@ -2087,38 +2093,228 @@ function rBg(){
 }
 
 /* 사건 */
-const EVENT_AGENCY_OPTS=["주인공 능동 사건 (주인공이 먼저 갈등을 겁니다)","주인공 피동 사건 (적대자가 갈등을 걸어옵니다)"];
-const EVENT_CONFLICT_TYPE_OPTS=["내적 갈등 (인물 내면의 심리·도덕적 딜레마)","외적 갈등 — 인물 vs 인물","외적 갈등 — 인물 vs 자신","외적 갈등 — 인물 vs 사회","외적 갈등 — 인물 vs 자연","외적 갈등 — 인물 vs 운명·초자연"];
+/* 2026-10-08: 강의노트 「플롯과 갈등」 기준으로 입력 항목 전면 개편.
+   항목 정의(EVENT_SECTIONS) 하나로 화면 · 제출 · PDF · 첨삭 목록(EVENT_FIELDS)을 모두 만든다.
+   type: "line"(한 줄) | "text"(여러 줄) | "combo"(드롭다운 + 직접 입력, options=[{v,tip}])
+   기존 키(name·main·characters·agency·conflictType·goal·conflict·disaster·reaction·decision·
+   transform·nextLink·ending)는 그대로 두어 예전 작품·제출물과 호환된다. */
+const EVENT_SECTIONS=[
+  {title:"사건 개요", hint:"사건은 인물의 욕망과 배경의 제약이 부딪치는 순간입니다. 먼저 무슨 일이, 왜 일어나는지부터 정리하세요.", fields:[
+    {k:"name", label:"사건명", type:"line", ph:"예: 왕궁 습격, 첫 만남, 원고 파일 증발",
+      guide:"이 사건을 한 줄로 부를 이름을 적으세요."},
+    {k:"main", label:"사건 설명", type:"text", ph:"누가 · 어디서 · 무엇을 하다가 · 무엇과 부딪치는가",
+      guide:"무슨 일이 일어나는지 적으세요. '주인공이 카페에서 커피를 마셨다'처럼 아무것도 부딪치지 않으면 사건이 아니라 '일어난 일'입니다."},
+    {k:"characters", label:"관련 인물", type:"text", ph:"주도하는 인물 / 영향을 받는 인물",
+      guide:"사건을 일으키거나 이끄는 인물과, 사건 때문에 영향을 받는 인물을 나눠서 적으세요."},
+    {k:"agency", label:"사건의 원인", type:"combo",
+      guide:"플롯은 사건과 사건 사이의 '왜'입니다(Forster). 독자가 '그다음엔?'이 아니라 '왜?'를 물을 수 있도록, 이 사건을 일으킨 것이 무엇인지 고르세요.",
+      options:[
+        {v:"주인공의 욕망·선택 (능동)", tip:"주인공이 원하는 것을 얻으려고 먼저 움직이다가 갈등이 터집니다. 독자는 주인공을 '이야기를 끌고 가는 사람'으로 느끼고, 사건의 책임이 주인공에게 돌아가 다음 선택이 무거워집니다. 예: 공모전 입상을 위해 마감 전날 무리하게 원고를 갈아엎는다."},
+        {v:"적대자·타인의 행동 (피동)", tip:"적대자나 다른 인물이 먼저 갈등을 걸어옵니다. 1화·도입부에서 사건을 빠르게 터뜨리기 좋지만, 피동 사건만 이어지면 주인공이 끌려다니는 인상을 줍니다. 피동으로 시작했다면 '선택'과 '변화'에서는 주인공이 반격하거나 스스로 고르게 만드세요."},
+        {v:"배경의 규칙·제약", tip:"세계의 규칙(신분제, 회사 위계, 계약직이라는 신분, '욕망이 커지면 괴물이 된다' 같은 설정)이 인물을 압박해 사건이 일어납니다. 배경이 '무대 그림'이 아니라 '압력'으로 작동하는 사건입니다. 예: 〈스위트홈〉에서는 괴물화 규칙 자체가 사건을 만든다."},
+        {v:"앞 사건의 결과", tip:"앞 사건에서 인물이 한 선택과 그로 인한 변화가 새 사건의 원인이 됩니다. 인과 사슬이 가장 단단한 형태이고, '갈등 엔진이 다시 돈다'는 말이 바로 이것입니다. 앞 사건의 '변화' 칸과 이 사건의 원인이 실제로 이어지는지 확인하세요."},
+        {v:"우연·외부 사고 (주의)", tip:"원인이 없는 사건은 독자에게 '우연'으로 읽힙니다. 이야기를 시작시키는 계기(사고, 우연한 만남)로는 쓸 수 있지만, 갈등을 '해결'하는 데 우연을 쓰면 '개연성이 없다'는 반응이 나옵니다. 우연으로 시작했다면 그 뒤의 전개는 인물의 선택으로 이어지게 하세요."},
+      ]},
+    {k:"drive", label:"플롯의 주된 동력", type:"combo",
+      guide:"이 사건을 앞으로 밀고 가는 힘이 무엇인지 고르세요. 실제로 둘은 분리되지 않으므로(헨리 제임스 — 인물이 사건을 정하고, 사건이 인물을 드러낸다), 주된 쪽을 고른 뒤 다른 쪽도 함께 움직이는지 점검하세요.",
+      options:[
+        {v:"사건 중심 (목표 달성·문제 해결)", tip:"'이 문제를 해결할 수 있을까?'가 독자의 질문이 됩니다. 액션·스릴러·스포츠·추리물에 많습니다. 다만 독자가 오래 기억하는 것은 동료·라이벌과의 관계이므로, 사건 안에서 관계도 한 칸이라도 움직이게 하세요."},
+        {v:"관계 중심 (인물 사이 관계의 변화)", tip:"'두 사람은 어떻게 될까?'가 독자의 질문이 됩니다. 로맨스·가족물·우정물에 많습니다. 관계를 실제로 움직이는 것은 오해 · 이별 통보 · 사고 같은 '사건'이므로, 관계를 바꾸는 구체적인 사건을 반드시 설계하세요."},
+        {v:"사건과 관계가 함께", tip:"외적 목표와 관계 변화가 서로의 원인이 되어 함께 굴러갑니다. 예: 〈미생〉 — 업무 하나를 해내는 과정이 동기·상사와의 관계를 바꾸고, 바뀐 관계가 다음 업무의 방식을 바꾼다. 가장 단단한 형태입니다."},
+      ]},
+  ]},
+  {title:"갈등 엔진 (욕망 → 장애 → 대가 → 선택 → 변화)", hint:"다섯 칸이 하나의 흐름으로 이어져야 갈등이 돌아갑니다. 막히면 '대가'부터 정하세요 — 무엇을 잃을까 → 그렇다면 무엇을 원할까.", fields:[
+    {k:"goal", label:"욕망 (목표)", type:"text", ph:"예: 이번 공모전에서 입상한다 / 정규직으로 전환된다",
+      guide:"인물이 이 사건에서 간절히 원하는 것. 구체적이어야 합니다 — '행복해지고 싶다' ✕ / '이번 공모전에서 입상' ○. 원하는 것이 없으면 장애도 없고, 장애가 없으면 이야기는 '일어난 일 목록'이 됩니다."},
+    {k:"obstacleType", label:"장애의 종류", type:"combo",
+      guide:"욕망을 가로막는 것이 어디에서 오는지 고르세요. 여러 개라면 가장 큰 것을 고르고 나머지는 아래 '장애' 칸에 함께 적으세요.",
+      options:[
+        {v:"내면 (두려움·결함·상처)", tip:"인물 자신의 성격적 결함, 두려움, 과거의 상처가 발목을 잡습니다. 겉으로는 조용해 보여도 웹툰에서는 독백 칸·표정 클로즈업·상상 컷으로 강하게 보여줄 수 있습니다. 예: 또 떨어질까 봐 완성한 원고를 제출하지 못한다."},
+        {v:"가까운 타인 (가족·연인·친구·동료)", tip:"인물이 아끼거나 매일 마주치는 사람이 장애가 됩니다. 미워할 수 없는 상대라서 이겨도 잃는 것이 생기고, 갈등이 복잡해집니다. 예: 웹툰 작가가 되겠다는 꿈을 부모가 반대한다."},
+        {v:"적대자 (라이벌·악역)", tip:"인물의 목표를 의도적으로 막는 상대. 적대자에게도 그만의 욕망과 이유가 있어야 '착한 쪽 vs 나쁜 쪽'을 넘어선 충돌이 됩니다. 적대자의 욕망을 한 줄로 적을 수 있는지 확인하세요."},
+        {v:"사회·제도·조직", tip:"위계, 법, 학교 서열, 신분, 회사 규칙처럼 개인이 혼자 바꾸기 어려운 구조가 막습니다. 예: 〈미생〉 — 계약직이라는 신분과 회사 위계가 '말할 수 없는 구조'를 만든다."},
+        {v:"세계관의 규칙 (마법·회귀·괴물화 등)", tip:"작품만의 설정 규칙이 장애가 됩니다. 규칙이 분명해야 갈등의 크기가 정해집니다 — '무엇은 되고 무엇은 안 되는지', '어기면 어떤 대가를 치르는지'를 배경 설정에 먼저 적어두세요."},
+        {v:"자연·재난·생존", tip:"재난, 질병, 괴물, 고립처럼 살아남는 것 자체가 장애입니다. 외적 긴장은 크지만 그것만으로는 단조로워지므로, 생존 상황이 관계(협력과 불신)와 내면(나도 괴물이 될 수 있다)을 함께 건드리게 하세요."},
+        {v:"시간·자원의 부족", tip:"마감, 시한부, 돈, 체력처럼 '모자람'이 장애가 됩니다. 시간 제한은 긴장을 만드는 가장 손쉬운 장치입니다. 예: 마감 10분 전, 원고 파일이 날아갔다."},
+      ]},
+    {k:"conflict", label:"장애 (목표를 가로막는 것)", type:"text", ph:"누가 / 무엇이, 어떻게 가로막는가",
+      guide:"장애를 구체적으로 적으세요. '방해를 받는다'가 아니라 '누가 · 무엇이 · 어떤 방식으로' 막는지까지."},
+    {k:"stakesType", label:"대가의 종류", type:"combo",
+      guide:"대가(위험부담)가 클수록 독자는 긴장합니다. 장애가 있어도 '실패하면 무엇을 잃는가'가 비어 있으면 긴장이 생기지 않습니다.",
+      options:[
+        {v:"생명·안전", tip:"인물이나 소중한 사람의 목숨·몸이 걸려 있습니다. 가장 큰 대가지만 자주 쓰면 무뎌집니다. 독자가 그 인물을 충분히 아끼게 된 뒤에 걸어야 효과가 큽니다."},
+        {v:"관계 (사랑·우정·가족)", tip:"실패하면 소중한 관계가 깨지거나 멀어집니다. 일상·학원·로맨스 웹툰에서 가장 강력한 대가입니다. 그 관계가 왜 소중한지를 앞 회차에서 먼저 보여줘야 합니다."},
+        {v:"지위·생계·직업", tip:"일자리, 학업, 신분, 생활 기반을 잃습니다. 예: 〈미생〉 — 정규직 전환에 실패하면 갈 곳이 없다. 이것을 '잘려도 다른 회사 가면 된다'로 바꾸면 긴장이 사라집니다."},
+        {v:"꿈·기회", tip:"다시 오지 않을 기회를 놓칩니다(데뷔, 입단, 대회, 합격). '마지막 기회'일수록, 그 기회를 위해 인물이 이미 많은 것을 걸었을수록 대가가 커집니다."},
+        {v:"자존감·정체성", tip:"'나는 누구인가', '나는 쓸모 있는 사람인가'가 흔들립니다. 겉으로는 작은 사건이라도 내면의 대가를 크게 걸면 장면이 깊어집니다."},
+        {v:"신념·양심", tip:"목표를 이루려면 자기가 믿는 가치를 버려야 합니다. 이겨도 잃는 구조라 선택이 가장 무거워지고, 인물의 정체가 가장 선명하게 드러납니다."},
+        {v:"공동체·세계의 운명", tip:"인물 한 명을 넘어 마을·나라·세계가 걸려 있습니다. 규모는 크지만 독자가 체감하기 어렵습니다. 인물이 아끼는 구체적인 한 사람, 한 장소로 대가를 좁혀서 보여주세요."},
+      ]},
+    {k:"stakes", label:"대가 (실패하면 무엇을 잃는가)", type:"text", ph:"예: 이번에 떨어지면 부모님과 약속한 대로 꿈을 접어야 한다",
+      guide:"실패했을 때 인물이 구체적으로 무엇을 잃는지 적으세요. 이 칸을 바꿔봤을 때 긴장이 줄어든다면, 지금의 대가가 제 역할을 하고 있는 것입니다."},
+    {k:"choiceType", label:"선택의 성격", type:"combo",
+      guide:"인물은 장애 앞에서 무언가를 '고르는' 순간 정체를 드러냅니다. '좋은 것 vs 나쁜 것'처럼 답이 뻔한 선택은 인물을 드러내지 못합니다.",
+      options:[
+        {v:"원하는 것 vs 지켜야 할 것", tip:"목표를 이루려면 관계 · 신념 · 안전 중 하나를 내려놓아야 합니다. 가장 흔하고 강력한 형태입니다. 예: 공모전 마감을 지키려면 아픈 친구의 부탁을 거절해야 한다."},
+        {v:"좋은 것 둘 중 하나 (딜레마)", tip:"둘 다 원하지만 하나만 가질 수 있습니다. 어느 쪽을 골라도 무언가를 잃기 때문에 독자도 함께 고민하게 됩니다. 예: 서울에서 데뷔할 기회 vs 고향에서 가족 곁에 남기."},
+        {v:"나쁜 것 둘 중 덜 나쁜 것", tip:"어느 쪽이든 손해지만 하나를 골라야 합니다. 무엇을 '덜 나쁘다'고 판단하는지에서 인물의 가치관이 드러납니다. 예: 동료의 실수를 보고할 것인가, 함께 책임을 질 것인가."},
+        {v:"물러설 것인가, 더 걸 것인가", tip:"기대와 다른 결과(간극)를 마주한 뒤, 포기할지 더 큰 위험을 질지 고릅니다. 이 선택이 반복되면서 갈등이 계단처럼 올라가고, 마지막에는 물러설 수 없는 선택(절정)에 이릅니다."},
+        {v:"말할 것인가, 숨길 것인가", tip:"비밀 · 거짓말 · 고백을 둘러싼 선택입니다. 숨기면 다음 사건의 복선이 되고, 말하면 관계가 크게 전환됩니다. 반전·발견과 함께 쓰기 좋습니다."},
+      ]},
+    {k:"decision", label:"선택 (인물이 실제로 고른 것)", type:"text", ph:"무엇과 무엇 사이에서, 무엇을 골랐고, 왜 그것을 골랐는가",
+      guide:"인물이 무엇을 골랐는지와 그 이유를 적으세요. 이 선택이 인물의 성격에서 나온 것인지 확인하세요 — 다른 인물이었다면 다르게 골랐을까요?"},
+    {k:"changeTarget", label:"변화가 일어나는 곳", type:"combo",
+      guide:"선택의 결과로 무엇이 바뀌는지 고르세요. 변화가 다음 갈등의 출발점이 되어 엔진이 다시 돕니다. 사건이 지나갔는데 아무것도 변하지 않았다면 그 사건은 장식입니다.",
+      options:[
+        {v:"인물의 내면 (가치관·태도·자기 인식)", tip:"선택의 결과로 인물이 자신에 대해 새로 알게 되거나 태도가 바뀝니다. 예: 〈스위트홈〉 — 세상과 단절됐던 현수가 사람을 구하러 나선다. 캐릭터 설정의 '인물의 변화' 칸과 이어지는지 확인하세요."},
+        {v:"인물 사이의 관계", tip:"신뢰 ↔ 배신, 적 ↔ 동료, 남 ↔ 연인처럼 관계의 값이 뒤집히거나 기울어집니다. 관계 중심 플롯에서 가장 중요한 변화입니다."},
+        {v:"인물의 처지·지위", tip:"직업, 신분, 소속, 가진 것이 바뀝니다. 눈에 보이는 변화라 회차 끝 '절단'으로 쓰기 좋습니다. 예: 합격 / 해고 / 전학 / 계약 해지."},
+        {v:"세계의 판도 (배경의 변화)", tip:"세력 구도, 규칙, 공동체의 상황이 바뀝니다. 장편 연재에서 시즌이 넘어가는 지점에 많이 쓰입니다. 배경 설정의 '연표'에도 함께 기록해두세요."},
+        {v:"여러 층위가 함께", tip:"내면 · 관계 · 세계가 동시에 바뀌는 사건입니다. 보통 이야기의 절정이나 큰 전환점이 됩니다. 아래 '갈등의 3층위'를 모두 채워보세요."},
+      ]},
+    {k:"transform", label:"변화 (이 사건으로 달라진 것)", type:"text", ph:"사건 전 → 사건 후 (예: 수동적으로 버티던 인물 → 스스로 개입하기 시작한 인물)",
+      guide:"사건 전과 후에 무엇이 어떻게 달라졌는지 '전 → 후' 형태로 적으세요. 이 변화가 다음 사건의 원인이 됩니다."},
+  ]},
+  {title:"갈등의 3층위 (McKee)", hint:"한 사건이 세 층위를 동시에 건드릴 때 장면이 깊어집니다. '외적 사건 하나 → 관계 압박 → 내면 흔들림' 순서로 적어보세요. 해당이 없는 층위는 비워도 됩니다.", fields:[
+    {k:"conflictType", label:"주된 갈등 층위", type:"combo",
+      guide:"이 사건에서 가장 크게 작동하는 층위를 고르세요. 문학의 갈등 유형(인간 vs 인간 · 자신 · 사회 · 자연)도 이 세 층위로 묶을 수 있습니다.",
+      options:[
+        {v:"내적 갈등 — 나 vs 나", tip:"인물 내면의 두려움 · 욕망 · 양심이 서로 부딪칩니다(인간 vs 자신). 소설이 강한 영역이지만, 웹툰에서는 독백 칸 · 표정 클로즈업 · 상상 컷으로 보여줄 수 있습니다."},
+        {v:"개인적 갈등 — 나 vs 가까운 타인", tip:"가족 · 연인 · 친구 · 동료 · 라이벌과의 충돌입니다(인간 vs 인간). 연극이 강한 영역이며, 웹툰에서는 대사와 두 인물의 클로즈업 교차로 보여주기 좋습니다."},
+        {v:"초개인적 갈등 — 나 vs 세계", tip:"사회 · 제도 · 자연 · 운명 · 초자연적 힘과의 충돌입니다(인간 vs 사회 · 자연). 영화가 강한 영역이며, 웹툰에서는 스펙터클 컷 · 큰 배경 컷이 힘을 발휘합니다."},
+        {v:"세 층위가 맞물림", tip:"외적 사건이 관계를 압박하고, 관계의 압박이 내면을 흔듭니다. 이야기의 '복잡성'은 여기서 생깁니다. 이야기의 핵심 회차나 절정에 권장합니다. 아래 세 칸을 모두 채워보세요."},
+      ]},
+    {k:"extraConflict", label:"초개인적 갈등 (나 vs 세계)", type:"text", ph:"예: 회사가 구조조정 명단을 발표한다",
+      guide:"이 사건에서 사회 · 제도 · 자연 · 세계관의 규칙과 부딪치는 부분."},
+    {k:"personalConflict", label:"개인적 갈등 (나 vs 가까운 타인)", type:"text", ph:"예: 가장 믿던 선배가 '네가 나가는 게 맞다'고 말한다",
+      guide:"이 사건에서 가까운 사람과 부딪치는 부분. 위의 외적 사건이 관계를 어떻게 압박하는지."},
+    {k:"innerConflict", label:"내적 갈등 (나 vs 나)", type:"text", ph:"예: '나는 처음부터 여기 있을 자격이 없었던 걸까' 흔들린다",
+      guide:"이 사건에서 인물의 내면이 흔들리는 부분. 관계의 압박이 내면의 어떤 두려움 · 욕망을 건드리는지."},
+  ]},
+  {title:"기대와 결과의 간극 (갈등의 상승)", hint:"인물은 결과를 기대하며 행동하지만 세계는 다르게 반응합니다(McKee). 간극이 생기면 인물은 더 큰 행동을 하고 더 큰 위험을 지게 되어, 갈등이 계단처럼 올라갑니다.", fields:[
+    {k:"expectation", label:"인물이 기대한 결과", type:"text", ph:"예: 사과하면 풀릴 줄 알았다",
+      guide:"인물이 행동하면서 '이렇게 하면 ~될 것'이라고 믿은 것."},
+    {k:"disaster", label:"실제 결과 (세계의 반응)", type:"text", ph:"예: 오히려 더 화를 냈다",
+      guide:"세계 · 상대가 실제로 어떻게 반응했는지. 성공했다면 그 성공이 만든 새로운 문제까지 적으세요."},
+    {k:"reaction", label:"간극의 계단 (반응 → 더 큰 행동 → …)", type:"text", ph:"예: 사과하면 풀릴 줄 알았다 → 더 화를 냄 → 직접 찾아감 → 문을 닫아버림 → 모든 걸 걸고 공개 고백",
+      guide:"간극을 마주할 때마다 인물이 어떻게 더 큰 행동을 하는지 화살표로 이어 적으세요. 계단마다 행동과 위험이 커져야 합니다. 같은 크기의 실패가 반복되면 '정체된 갈등'입니다."},
+    {k:"escalation", label:"갈등 흐름 자가 점검 (Egri)", type:"combo",
+      guide:"Lajos Egri의 갈등 4유형입니다. 지금 설계한 갈등이 어디에 가까운지 솔직하게 골라보세요. 앞의 둘은 좋은 갈등, 뒤의 둘은 고쳐야 할 갈등입니다.",
+      options:[
+        {v:"서서히 상승하는 갈등 (좋음)", tip:"동기가 분명한 행동이 한 단계씩 더 큰 반작용을 부르며 긴장이 올라갑니다. 독자는 '다음엔 더 큰 일이 터지겠구나'를 느낍니다. 목표로 삼아야 할 형태입니다."},
+        {v:"예고하는 갈등 (좋음)", tip:"앞으로 닥칠 충돌을 미리 암시해 독자를 기다리게 만듭니다. 복선 · 경고 · 불길한 징조가 여기에 해당합니다. 회차 끝 '절단'과 함께 쓰면 다음 화를 읽게 만드는 힘이 큽니다."},
+        {v:"정체된 갈등 (점검 필요)", tip:"같은 말다툼, 같은 실패가 반복되고 인물이 변하지 않습니다. 웹툰의 '고구마' 반응은 대개 여기서 나옵니다 — 답답함 자체가 아니라 '변화가 없음'이 문제입니다. 고치는 법: 계단마다 행동이나 대가를 키우거나, 인물이 새로운 방법을 시도하게 하세요."},
+        {v:"도약하는 갈등 (점검 필요)", tip:"동기와 중간 단계 없이 갑자기 극단으로 갑니다(어제까지 친구였는데 오늘 원수). 독자가 '왜?'를 납득하지 못합니다. 고치는 법: 그 사이에 간극의 계단을 한두 개 더 넣고, 각 계단의 동기를 보여주세요."},
+      ]},
+  ]},
+  {title:"반전 · 발견 (플롯의 형태)", hint:"아리스토텔레스는 반전과 발견이 함께 일어나는 복합 플롯을 가장 좋은 플롯으로 보았습니다. 모든 사건에 필요하지는 않으니, 핵심 사건에서 활용하세요.", fields:[
+    {k:"plotKind", label:"플롯의 형태", type:"combo",
+      guide:"이 사건이 인물의 운명을 한 방향으로 밀어주는지, 중간에 뒤집는지 고르세요.",
+      options:[
+        {v:"단순 플롯 (한 방향으로 직진)", tip:"운명이 한 방향으로 쭉 바뀝니다(가난 → 성공, 약체 → 우승). 이해하기 쉽고 카타르시스가 분명하지만 예측하기 쉽다는 약점이 있습니다. 성장 스포츠물이 우승까지 직진하는 경우."},
+        {v:"복합 플롯 — 반전 (페리페테이아)", tip:"인물의 행동이 의도와 정반대의 결과로 뒤집힙니다. 예: 동료를 지키려고 한 거짓말이 오히려 동료를 위험에 빠뜨린다. '기대와 결과의 간극'이 가장 극적으로 벌어진 형태입니다."},
+        {v:"복합 플롯 — 발견 (아나그노리시스)", tip:"모르던 진실을 깨닫는 순간입니다. 웹툰의 '떡밥 회수', '정체 폭로', '사실은 ~였다' 회차가 여기에 해당합니다. 예: 믿던 동료가 배신자였다. 반드시 앞에 복선을 깔아두세요."},
+        {v:"복합 플롯 — 반전 + 발견", tip:"진실을 깨닫는 순간 상황도 함께 뒤집힙니다. 가장 강력한 형태입니다(『오이디푸스 왕』). 예: 배신자의 정체를 알게 되는 순간, 지금까지 한 모든 행동이 적을 도운 것이었음이 드러난다. 시즌의 핵심 회차에 권장합니다."},
+      ]},
+    {k:"twist", label:"반전 · 발견의 내용", type:"text", ph:"무엇이 뒤집히는가 / 인물이 무엇을 깨닫는가",
+      guide:"반전이라면 '의도 → 정반대의 결과'를, 발견이라면 '몰랐던 진실 → 깨닫고 난 뒤 달라지는 것'을 적으세요."},
+    {k:"foreshadow", label:"복선 (앞에 깔아둘 단서)", type:"text", ph:"예: 3화 — 선배가 통화를 급히 끊는 컷 / 5화 — 선배 책상 위의 낯선 명함",
+      guide:"좋은 발견은 갑자기 튀어나오지 않고 앞에서 복선으로 깔려 있어야 합니다. 그래야 독자가 '다시 읽게' 됩니다. 몇 화에, 어떤 컷 · 대사 · 소품으로 깔지 적으세요."},
+  ]},
+  {title:"인물 · 사건 · 배경의 연결", hint:"인물은 욕망을 가진 주체, 배경은 규칙과 제약이 있는 세계, 사건은 둘이 부딪치는 순간입니다. 배경이 인물을 만들고, 인물이 사건을 만들고, 사건이 다시 인물과 배경을 바꿉니다.", fields:[
+    {k:"settingPressure", label:"배경의 압력", type:"text", ph:"예: 신분제(넘을 수 없는 선) / 회사 위계(말할 수 없는 구조) / 학교(서열과 시선) / 괴물 세계(생존 자체가 장애)",
+      guide:"배경은 무대가 아니라 '압력'입니다. 이 사건에서 시간 · 장소 · 그 세계의 규칙 중 무엇이 인물을 조이고 장애가 되는지 적으세요."},
+    {k:"charDrive", label:"인물에게서 나온 원인", type:"text", ph:"예: 〈미생〉 장그래 — 학력 · 경력의 결핍, 바둑으로 익힌 사고방식",
+      guide:"인물의 어떤 결핍 · 성격 · 과거가 이 사건을 부르거나, 사건을 대하는 방식을 정하는지 적으세요. 욕망 없는 인물은 구경꾼일 뿐입니다."},
+    {k:"organicCheck", label:"유기성 점검 (하나를 바꾸면?)", type:"text", ph:"예: 장그래를 웹툰 회사에 넣으면 → 바둑이라는 렌즈, 위계의 압력, 계약직이라는 대가가 모두 달라진다",
+      guide:"배경이나 인물의 성격 하나를 바꿔본다면 이 사건은 어떻게 달라질까요? 다른 요소도 함께 바뀐다면 플롯이 유기적인 것이고, 아무것도 안 바뀐다면 그 요소는 장식입니다."},
+  ]},
+  {title:"연재 속 위치 · 다음 사건", hint:"웹툰은 큰 플롯 안에 작은 플롯이 들어 있는 구조입니다. 작품 전체 · 시즌 · 회차마다 긴장 곡선이 반복됩니다. 전체 구조는 \"플롯 생성\" 탭에서 다룹니다.", fields:[
+    {k:"tensionPos", label:"긴장 곡선상의 위치 (Freytag)", type:"combo",
+      guide:"이 사건이 이야기 전체(또는 시즌)의 긴장 곡선에서 어디쯤인지 고르세요. 긴장은 계단을 오르듯 높아졌다가 절정을 지나 풀립니다.",
+      options:[
+        {v:"발단", tip:"인물과 세계를 소개하고, 그 균형을 깨는 사건이 일어납니다. '앞에 다른 것이 필요 없는 지점'입니다. 3막 구조로는 1막, 기승전결로는 '기'에 해당합니다."},
+        {v:"상승", tip:"간극이 생기고 행동과 위험이 계단처럼 커지는 구간입니다. 연재 분량의 대부분이 여기에 들어갑니다. 3막 구조로는 2막, 기승전결로는 '승'에 해당합니다."},
+        {v:"절정", tip:"물러설 수 없는 선택의 순간, 긴장이 가장 높은 지점입니다. 국면이 뒤집히는 '전'이 여기서 일어나는 경우가 많습니다. 반전 · 발견을 배치하기 가장 좋은 위치입니다."},
+        {v:"하강", tip:"절정의 결과가 펼쳐지며 긴장이 풀립니다. 남은 떡밥과 관계를 정리하는 구간입니다. 너무 길면 늘어지므로 짧고 분명하게."},
+        {v:"결말", tip:"새로운 균형에 도달합니다. '뒤에 다른 것이 필요 없는 지점'입니다. 3막 구조로는 3막의 끝, 기승전결로는 '결'에 해당합니다."},
+      ]},
+    {k:"episodeRole", label:"회차 안에서의 역할", type:"combo",
+      guide:"매 회차는 작은 시작 · 중간 · 끝을 갖습니다. 이 사건이 한 회차 안에서 어떤 역할을 하는지 고르세요.",
+      options:[
+        {v:"회차 도입 (훅)", tip:"회차를 여는 사건입니다. 앞 화의 '절단'이 던진 질문에 답하거나, 새로운 질문을 던져 독자를 첫 컷부터 붙잡습니다."},
+        {v:"회차 중간 (전개)", tip:"회차 안에서 간극이 한 단계 올라가는 사건입니다. 회차마다 이런 계단이 없으면 '진도가 안 나간다'는 반응이 나옵니다."},
+        {v:"회차 끝 '절단' (클리프행어)", tip:"질문을 남기고 끝내 다음 화를 읽게 만드는 사건입니다. 정체가 드러나는 순간(발견), 위기 직전, 선택의 직전에서 끊는 것이 효과적입니다. 아래 '회차 끝에 남길 질문'을 채워보세요."},
+        {v:"여러 회차에 걸친 큰 사건", tip:"시즌 · 에피소드 단위의 큰 플롯입니다. 큰 플롯이 약하면 '산으로 간다'는 반응이 나오므로 방향을 분명히 하고, 회차마다 작은 시작 · 중간 · 끝을 따로 설계하세요(아래 회차 일지 활용)."},
+      ]},
+    {k:"cliffQuestion", label:"회차 끝에 남길 질문", type:"text", ph:"예: 하람은 왜 경고를 멈췄을까?",
+      guide:"이 사건이 독자에게 남기는 질문을 한 문장으로 적으세요. 질문이 분명할수록 다음 화를 읽고 싶어집니다."},
+    {k:"nextLink", label:"다음 사건과의 연결", type:"text", ph:"이 사건의 변화 → 다음 사건의 원인",
+      guide:"이 사건의 '변화'가 다음 사건의 '원인'이 되도록 이어 적으세요. 사건 사이가 '그리고'가 아니라 '그래서'로 이어지는지 확인하세요."},
+    {k:"ending", label:"결말 방향 (선택)", type:"text", ph:"이 사건들이 궁극적으로 향하는 방향",
+      guide:"전체 이야기의 결말 구조는 \"플롯 생성\" 탭에서 다뤄주세요. 여기서는 이 사건이 결말과 어떻게 이어지는지만 간단히 적습니다."},
+  ]},
+];
+/* 예전 선택지 값 → 새 선택지 값 (fillProject에서 옛 작품을 열 때 변환) */
+const EVENT_LEGACY_OPTS={
+  agency:{
+    "주인공 능동 사건 (주인공이 먼저 갈등을 겁니다)":"주인공의 욕망·선택 (능동)",
+    "주인공 피동 사건 (적대자가 갈등을 걸어옵니다)":"적대자·타인의 행동 (피동)",
+  },
+  conflictType:{
+    "내적 갈등 (인물 내면의 심리·도덕적 딜레마)":"내적 갈등 — 나 vs 나",
+    "외적 갈등 — 인물 vs 자신":"내적 갈등 — 나 vs 나",
+    "외적 갈등 — 인물 vs 인물":"개인적 갈등 — 나 vs 가까운 타인",
+    "외적 갈등 — 인물 vs 사회":"초개인적 갈등 — 나 vs 세계",
+    "외적 갈등 — 인물 vs 자연":"초개인적 갈등 — 나 vs 세계",
+    "외적 갈등 — 인물 vs 운명·초자연":"초개인적 갈등 — 나 vs 세계",
+  },
+};
+/* 드롭다운 + 직접 입력 + 선택지 설명. 값은 obj[f.k]에 문자열로 저장한다
+   (목록에 없는 값이면 "직접 입력…" 상태로 열린다) */
+function eventComboHtml(f){
+  return `<select class="ev-combo-sel"><option value="">선택 안 함</option>${
+      f.options.map(o=>`<option value="${esc(o.v)}">${esc(o.v)}</option>`).join("")
+    }<option value="__custom__">직접 입력…</option></select>
+    <input type="text" class="ev-combo-custom" placeholder="직접 입력" style="display:none">
+    <div class="ev-combo-tip" hidden></div>
+    <details class="ev-combo-all"><summary>선택지 설명 모두 보기</summary>
+      <dl>${f.options.map(o=>`<dt>${esc(o.v)}</dt><dd>${esc(o.tip)}</dd>`).join("")}</dl>
+    </details>`;
+}
+function wireEventCombo(box, f, obj){
+  const sel=box.querySelector(".ev-combo-sel"), custom=box.querySelector(".ev-combo-custom"), tip=box.querySelector(".ev-combo-tip");
+  const showTip=()=>{
+    const opt=f.options.find(o=>o.v===sel.value);
+    const text= opt ? opt.tip : (sel.value==="__custom__" ? "직접 입력한 항목입니다. 위 선택지 설명을 참고해, 이 선택이 사건 안에서 어떤 역할을 하는지 스스로 점검하며 써보세요." : "");
+    tip.textContent=text; tip.hidden=!text;
+  };
+  const cur=obj[f.k]||"";
+  if(cur && f.options.some(o=>o.v===cur)) sel.value=cur;
+  else if(cur){ sel.value="__custom__"; custom.style.display="block"; custom.value=cur; }
+  showTip();
+  sel.onchange=()=>{
+    if(sel.value==="__custom__"){ custom.style.display="block"; custom.focus(); obj[f.k]=custom.value.trim(); }
+    else{ custom.style.display="none"; custom.value=""; obj[f.k]=sel.value; }
+    save(); showTip();
+  };
+  custom.oninput=()=>{ obj[f.k]=custom.value.trim(); save(); };
+}
 function rEvent(){
   if(feedbackPage && feedbackPage.type==="event"){ rFeedbackPage(); return; }
   const c=document.createElement("div");
-  const optHtml=(opts)=>opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("");
+  const fieldHtml=f=>`<div class="ev-field" data-k="${f.k}">
+      <label>${esc(f.label)}</label>${f.guide?`<p class="plan-guide">${esc(f.guide)}</p>`:""}
+      ${f.type==="combo" ? eventComboHtml(f)
+        : `<textarea id="e_${f.k}"${f.type==="line"?' class="ta-line" rows="1"':""} placeholder="${esc(f.ph||"")}"></textarea>`}
+    </div>`;
   c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.bolt} 사건 설정</h2>${submitBtnHtml()}</div>
-    <p class="hint">이야기 전체의 구조(발단~결말)는 "플롯 생성" 탭에서 다룹니다. 여기서는 사건 하나하나를
-    "목표 → 갈등 → 결과 → 다음 사건"의 흐름으로 설계합니다. 굵은 항목만 채워도 충분합니다.</p>
-
-    <div class="section-title">사건 개요</div>
-    <label>사건명</label><textarea id="e_name" class="ta-line" rows="1" placeholder="예: 왕궁 습격, 첫 만남…"></textarea>
-    <label>사건 설명 (무슨 일이 일어나는가)</label><textarea id="e_main" placeholder="이야기를 시작시키는 사건"></textarea>
-    <label>관련 인물</label><textarea id="e_characters" placeholder="이 사건을 주도하는 인물 / 영향을 받는 인물"></textarea>
-    <div class="row">
-      <div><label>사건 유형</label><select id="e_agency"><option value="">선택 안 함</option>${optHtml(EVENT_AGENCY_OPTS)}</select></div>
-      <div><label>갈등 유형</label><select id="e_conflictType"><option value="">선택 안 함</option>${optHtml(EVENT_CONFLICT_TYPE_OPTS)}</select></div>
-    </div>
-
-    <div class="section-title">사건 설계 (목표 → 갈등 → 결과)</div>
-    <label>목표 (인물이 이 사건에서 원하는 것)</label><textarea id="e_goal"></textarea>
-    <label>갈등 · 장애물 (목표를 가로막는 것)</label><textarea id="e_conflict" placeholder="주인공 vs 무엇/누구"></textarea>
-    <label>결과 (성공/실패 + 새로 생긴 문제)</label><textarea id="e_disaster"></textarea>
-
-    <div class="section-title">여파 (반응 → 결정, 선택)</div>
-    <label>인물의 반응</label><textarea id="e_reaction" placeholder="사건 직후 느끼는 감정적·물리적 반응"></textarea>
-    <label>결정 (다음 행동에 대한 결심)</label><textarea id="e_decision" placeholder="이 결심이 다음 사건의 목표가 됩니다"></textarea>
-
-    <div class="section-title">인과 · 전환 (선택)</div>
-    <label>이 사건으로 달라진 것</label><textarea id="e_transform" placeholder="가치·지위·관계의 전환 (삶↔죽음, 신뢰↔배신 등)"></textarea>
-    <label>다음 사건과의 연결</label><textarea id="e_nextLink"></textarea>
-    <label>결말 방향 (선택 — 전체 이야기의 결말 구조는 "플롯 생성" 탭에서 다뤄주세요)</label><textarea id="e_ending" placeholder="이 사건들이 궁극적으로 향하는 방향"></textarea>
+    <p class="hint">사건 하나를 "원인 → 욕망 · 장애 · 대가 · 선택 · 변화 → 다음 사건"의 흐름으로 설계합니다.
+    이야기 전체의 구조(발단~결말)는 "플롯 생성" 탭에서 다룹니다. 모든 칸을 채울 필요는 없습니다 —
+    <b>사건 개요</b>와 <b>갈등 엔진</b>부터 채워보세요. 드롭다운 항목은 목록에 없으면 "직접 입력…"을 고르세요.</p>
+    ${EVENT_SECTIONS.map(s=>`<div class="section-title">${esc(s.title)}</div>
+      ${s.hint?`<p class="hint" style="margin:0 0 6px">${esc(s.hint)}</p>`:""}
+      ${s.fields.map(fieldHtml).join("")}`).join("")}
 
     <div class="section-title">사건 관리 (회차 일지)</div>
     <p class="hint" style="margin:0 0 10px">여러 사건이 얽히는 장편 연재에서 인과 사슬을 놓치지 않기 위한 항목입니다. 사건이 하나씩 확정될 때마다 카드를 추가하세요.</p>
@@ -2132,20 +2328,12 @@ function rEvent(){
   </div>`;
   mountWithPlanViewer(c);
   wireSubmitBtn(c,"event");
-  bind(c.querySelector("#e_name"),P.event,"name");
-  bind(c.querySelector("#e_main"),P.event,"main");
-  bind(c.querySelector("#e_characters"),P.event,"characters");
-  bind(c.querySelector("#e_agency"),P.event,"agency");
-  bind(c.querySelector("#e_conflictType"),P.event,"conflictType");
-  bind(c.querySelector("#e_goal"),P.event,"goal");
-  bind(c.querySelector("#e_conflict"),P.event,"conflict");
-  bind(c.querySelector("#e_disaster"),P.event,"disaster");
-  bind(c.querySelector("#e_reaction"),P.event,"reaction");
-  bind(c.querySelector("#e_decision"),P.event,"decision");
-  bind(c.querySelector("#e_transform"),P.event,"transform");
-  bind(c.querySelector("#e_nextLink"),P.event,"nextLink");
-  bind(c.querySelector("#e_ending"),P.event,"ending");
-  EVENT_FIELDS.forEach(f=>{ const el=c.querySelector("#e_"+f.k); if(el) renderAppliedMemoBlockAfter(el,"event",f.k); });
+  EVENT_SECTIONS.forEach(s=>s.fields.forEach(f=>{
+    const box=c.querySelector(`.ev-field[data-k="${f.k}"]`);
+    if(f.type==="combo") wireEventCombo(box, f, P.event);
+    else bind(box.querySelector("textarea"), P.event, f.k);
+    renderAppliedMemoBlockAfter(box,"event",f.k);
+  }));
 
   /* 사건 관리(회차 일지) — 반복 카드 리스트 */
   function renderLog(){
@@ -6098,21 +6286,7 @@ const BG_FIELDS=[
   {k:"detail", label:"기타 세부 묘사", src:"background"},
 ];
 /* 사건 설정 제출용 항목 — 모두 P.event 하나의 객체에 있다 */
-const EVENT_FIELDS=[
-  {k:"name", label:"사건명"},
-  {k:"main", label:"사건 설명"},
-  {k:"characters", label:"관련 인물"},
-  {k:"agency", label:"사건 유형"},
-  {k:"conflictType", label:"갈등 유형"},
-  {k:"goal", label:"목표"},
-  {k:"conflict", label:"갈등 · 장애물"},
-  {k:"disaster", label:"결과"},
-  {k:"reaction", label:"인물의 반응"},
-  {k:"decision", label:"결정"},
-  {k:"transform", label:"이 사건으로 달라진 것"},
-  {k:"nextLink", label:"다음 사건과의 연결"},
-  {k:"ending", label:"결말 방향"},
-];
+const EVENT_FIELDS=EVENT_SECTIONS.flatMap(sec=>sec.fields.map(f=>({k:f.k, label:f.label})));
 /* 캐릭터 설정 제출용 항목 — 캐릭터 한 명당 하나의 텍스트 블록("라벨: 값" 줄들)으로 합쳐서 제출한다
    (여러 캐릭터 × 여러 항목을 전부 개별 칸으로 나누면 목록이 지나치게 길어지므로, 플롯/글쓰기 탭과
    같은 방식을 따름). 값에 줄바꿈이 있어도 다음 "라벨:"이 나오기 전까지는 같은 항목으로 이어붙인다. */
@@ -8853,7 +9027,7 @@ const GUIDE_SECTIONS=[
       <li><b>기획서 작성</b>: 제목 · 장르 · 로그라인 · 시놉시스 등 작품의 전체 뼈대를 정리합니다.</li>
       <li><b>캐릭터 설정</b>: 인물을 MBTI · 에니어그램(스트레스 · 성장 방향 화살표 포함)으로 구체화하고, 역할과 <b>역할의 변화</b>, 인물의 변화 3단계(사건 전 / 중 / 이후), 외모 세부 항목, 인물 간 관계를 정리합니다. <b>프로필 사진</b>과 <b>캐릭터 이미지(시트)</b>를 등록할 수 있고, 시트는 이미지를 올리거나 앱 안에서 직접 그릴 수 있습니다.</li>
       <li><b>배경 설정</b>: 세계관(시대 · 장소 · 규칙 · 세력 · 금기 등)과 분위기를 정리하고, <b>용어사전</b>에 작품 고유 용어를 등록합니다.</li>
-      <li><b>사건 설정</b>: 중심 사건의 목표 · 갈등 · 결과 · 결말 방향을 정리하고, <b>회차 일지</b>에 회차별 사건 · 파급효과 · 클리프행어를 기록합니다.</li>
+      <li><b>사건 설정</b>: 사건의 원인 · <b>갈등 엔진</b>(욕망 · 장애 · 대가 · 선택 · 변화) · 갈등의 3층위 · 기대와 결과의 간극 · 반전과 복선 · 연재 속 위치를 드롭다운(설명 포함)과 직접 입력으로 설계하고, <b>회차 일지</b>에 회차별 사건 · 파급효과 · 클리프행어를 기록합니다.</li>
       <li>캐릭터 · 배경 · 사건 화면에서는 <b>항목 추가</b>로 원하는 항목을 직접 만들어 쓸 수 있습니다.</li>
       <li>캐릭터 · 배경 · 사건 화면 오른쪽에서는 <b>기획서 미리보기</b>를 함께 볼 수 있고, 캐릭터 화면에서는 미리보기와 캐릭터 이미지를 탭으로 번갈아 볼 수 있습니다.</li>
       <li><b>플롯 생성</b>: 3막 구조 · 5막 구조 · 영웅의 여정 · 8단계 원형 구조 · 액자 구조 · 비선형 · 옴니버스 등 <b>여러 구조 중 하나를 골라</b> 단계별로 아이디어를 배치해 이야기 흐름을 짭니다.</li>

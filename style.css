@@ -174,6 +174,19 @@ textarea.ta-line{min-height:0}
 .plan-block textarea.plan-ta-lg{min-height:110px}
 .plan-block textarea.plan-ta-xl{min-height:220px}
 
+/* 사건 설정 — 항목 블럭 + 드롭다운(직접 입력) 선택지 설명 */
+.ev-field{margin-bottom:6px}
+.ev-field>label{margin-bottom:2px}
+.ev-combo-custom{margin-top:6px}
+.ev-combo-tip{margin:6px 0 0;padding:8px 11px;border-left:3px solid var(--accent);background:#fbfaf7;
+  border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.55;color:var(--ink)}
+.ev-combo-all{margin:6px 0 0;font-size:12px;color:var(--muted)}
+.ev-combo-all summary{cursor:pointer;width:max-content}
+.ev-combo-all dl{margin:6px 0 0;padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:#fbfaf7}
+.ev-combo-all dt{font-weight:700;color:var(--ink);margin-top:8px}
+.ev-combo-all dt:first-child{margin-top:0}
+.ev-combo-all dd{margin:2px 0 0;line-height:1.5}
+
 /* 세계관 설정 — 용어사전(설정 관리) 카드 리스트 */
 .wv-glossary-list{display:flex;flex-direction:column;gap:12px;margin-bottom:10px}
 .wv-term-head{display:flex;align-items:center;gap:8px}
