@@ -25,11 +25,11 @@ export async function onRequestPost({ request, env }) {
   let assignment;
   try {
     assignment = await env.DB.prepare(
-      "SELECT id, open, prof_id, class_id, type FROM assignments WHERE id = ?"
+      "SELECT id, open, prof_id, class_id, type, due_at FROM assignments WHERE id = ?"
     ).bind(assignmentId).first();
   } catch (e) {
     assignment = await env.DB.prepare(
-      "SELECT id, open, prof_id, class_id FROM assignments WHERE id = ?"
+      "SELECT id, open, prof_id, class_id, due_at FROM assignments WHERE id = ?"
     ).bind(assignmentId).first();
   }
   if (!assignment) return jsonResponse({ error: "과제를 찾을 수 없습니다." }, 404);
@@ -47,6 +47,12 @@ export async function onRequestPost({ request, env }) {
     if (!inClass) return jsonResponse({ error: "이 과제가 속한 수업의 수강생이 아닙니다." }, 403);
   }
   if (!assignment.open) return jsonResponse({ error: "제출이 마감된 과제입니다." }, 403);
+  /* 2026-10-08: 제출기한(due_at)이 지났으면 마감 스위치가 켜져 있어도 받지 않는다.
+     예전에는 due_at을 화면에 보여주기만 하고 서버는 open만 검사해서, 기한이 지나도 교수가 스위치를
+     직접 끄기 전까지는 (특히 기한 전에 제출 창을 열어둔 학생은) 계속 제출할 수 있었다. */
+  if (assignment.due_at && nowSec() > Number(assignment.due_at)) {
+    return jsonResponse({ error: "제출기한이 지난 과제입니다." }, 403);
+  }
 
   /* 2026-09-12: 과제에 종류가 지정돼 있으면 그 종류만 받는다 — 학생이 다른 탭(예: 플롯)에서
      글쓰기 과제에 제출해 교수 화면에 엉뚱한 형식이 넘어가던 일을 막는다.

@@ -6704,7 +6704,8 @@ async function openSubmitModal(type){
   const prof=res.body.prof, assignments=res.body.assignments||[];
   /* 2026-09-12: 과제에 종류가 지정돼 있으면 그 종류의 탭에서만 목록에 보인다(종류 미지정 과제는 늘 보임).
      "글쓰기 과제"에 플롯을 제출하는 등, 과제 폴더와 다른 형식이 섞여 들어오던 실수를 막는다. */
-  const openAll=assignments.filter(a=>a.open);
+  /* 2026-10-08: 제출기한이 지난 과제도 "제출할 수 있는 과제"에서 뺀다(서버도 같은 기준으로 거부) */
+  const openAll=assignments.filter(a=>isAssignOpen(a));
   const openList=openAll.filter(a=>!a.type || a.type===type);
   const hiddenCount=openAll.length-openList.length;
   body.innerHTML=!openList.length
@@ -7351,7 +7352,7 @@ async function renderProfAssignList(classId){
         <button type="button" class="assign-folder-del" data-id="${a.id}" title="과제 삭제">${ICONS.trash}</button>
       </div>
     </div>
-    <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.max_score!=null?("배점 "+a.max_score+"점 · "):""}${a.due_at?("제출기한 "+fmtDue(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?"제출 가능":"마감됨"}</div>
+    <div class="hint">${a.type?(esc(TYPE_LABEL[a.type]||a.type)+" 과제 · "):""}${a.max_score!=null?("배점 "+a.max_score+"점 · "):""}${a.due_at?("제출기한 "+fmtDue(a.due_at)):"제출기한 없음"} · 제출 ${a.submission_count}건 · ${a.open?(isAssignPastDue(a)?"기한 지남(제출 불가)":"제출 가능"):"마감됨"}</div>
   </div>`).join("");
   if(profAssignSig===listHtml) return;   // 바뀐 게 없으면 그대로 둔다
   profAssignSig=listHtml;
@@ -7419,6 +7420,9 @@ function fmtDue(sec){
   const d=new Date(sec*1000);
   return (d.getHours()===DUE_END_H && d.getMinutes()>=DUE_END_M) ? fmtDate(sec) : fmtDateTime(sec);
 }
+/* 2026-10-08: 제출 가능 = 마감 스위치가 켜져 있고 제출기한이 아직 안 지났을 때 (서버 student-submit과 같은 기준) */
+function isAssignPastDue(a){ return !!a.due_at && Date.now()/1000>Number(a.due_at); }
+function isAssignOpen(a){ return !!a.open && !isAssignPastDue(a); }
 function openNewAssignmentModal(classId){ openAssignmentModal(classId, null); }
 
 /* 과제 등록 / 설정 변경 공용 모달 (2026-09-08: 등록 후에도 과제명·제출기한·수업·마감 여부를 고칠 수
