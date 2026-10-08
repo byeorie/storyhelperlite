@@ -187,6 +187,18 @@ textarea.ta-line{min-height:0}
 .ev-combo-all dt:first-child{margin-top:0}
 .ev-combo-all dd{margin:2px 0 0;line-height:1.5}
 
+/* 사건 설정 — 사건 페이지(1, 2, 3 …) 전환 */
+.ev-pages{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 12px;
+  border:1px solid var(--line);border-radius:10px;background:#fbfaf7}
+.ev-pages-label{font-size:12.5px;font-weight:700;color:var(--muted);margin-right:4px}
+.ev-page-btn{min-width:32px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:8px;
+  background:var(--card);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
+.ev-page-btn:hover{border-color:var(--accent)}
+.ev-page-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.ev-page-title{margin:16px 0 0;font-size:16px;color:var(--ink)}
+.side-view-tabs{flex-wrap:wrap}
+.side-view-tab.is-editing{text-decoration:underline;text-underline-offset:3px}
+
 /* 세계관 설정 — 용어사전(설정 관리) 카드 리스트 */
 .wv-glossary-list{display:flex;flex-direction:column;gap:12px;margin-bottom:10px}
 .wv-term-head{display:flex;align-items:center;gap:8px}

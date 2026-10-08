@@ -313,6 +313,12 @@ function fillProject(p){
   event.log=Array.isArray(event.log)?event.log.map(g=>Object.assign(
     {id:uid(), name:"", characters:"", episode:"", impact:"", nextLink:"", cliffhanger:""}, g)):[];
   event.customFields=Array.isArray(event.customFields)?event.customFields.map(x=>Object.assign({id:uid(),label:"",value:""},x)):[];
+  /* 사건 2~ (2026-10-08) */
+  event.more=Array.isArray(event.more)?event.more.map(x=>{
+    const o=Object.assign({id:uid()}, x);
+    o.customFields=Array.isArray(o.customFields)?o.customFields.map(y=>Object.assign({id:uid(),label:"",value:""},y)):[];
+    return o;
+  }):[];
   const background=Object.assign({}, b.background, p.background||{});
   background.customFields=Array.isArray(background.customFields)?background.customFields.map(x=>Object.assign({id:uid(),label:"",value:""},x)):[];
   return Object.assign({}, b, p, {
@@ -464,7 +470,7 @@ function blankProject(id,name){
       extraConflict:"",personalConflict:"",innerConflict:"",expectation:"",escalation:"",
       plotKind:"",twist:"",foreshadow:"",settingPressure:"",charDrive:"",organicCheck:"",
       tensionPos:"",episodeRole:"",cliffQuestion:"",
-      disaster:"",reaction:"",decision:"",transform:"",nextLink:"",log:[],customFields:[]},
+      disaster:"",reaction:"",decision:"",transform:"",nextLink:"",log:[],customFields:[],more:[]},
     plot:Array(12).fill(""),
     tagColors:{},
     plotDoc:{structure:"", sections:[], ideaOverrides:{}},
@@ -1968,6 +1974,8 @@ function mountWithPlanViewer(cardEl, extraViews){
       const b=document.createElement("button"); b.type="button";
       b.className="side-view-tab"+(v.key===sideViewMode?" active":"");
       b.textContent=v.label;
+      if(v.title) b.title=v.title;
+      if(v.cls) b.classList.add(v.cls);
       b.onclick=()=>{ sideViewMode=v.key; render(); };
       tabs.appendChild(b);
     });
@@ -2303,39 +2311,139 @@ function wireEventCombo(box, f, obj){
   };
   custom.oninput=()=>{ obj[f.k]=custom.value.trim(); save(); };
 }
+/* 2026-10-08: 사건 여러 개 — 사건 1은 예전처럼 P.event 본체(회차 일지 log도 여기에 있음, 모든 사건 공통),
+   사건 2부터는 P.event.more[] 에 같은 항목 키로 들어간다. 제출 · 첨삭 · 메모에서는 사건 1은 예전 키 그대로("goal"),
+   사건 N(2~)은 "N:goal" 키를 쓴다 — 예전 제출물과 그대로 호환된다. */
+let eventPage=0; // 왼쪽에서 작성 중인 사건 (0 = 사건 1)
+function eventPageCount(){ return 1+((P.event&&P.event.more)||[]).length; }
+function eventPageObj(i){ return i===0 ? P.event : ((P.event.more||[])[i-1]); }
+function eventKey(i,k){ return i===0 ? k : `${i+1}:${k}`; }
+function eventPageTitle(i){
+  const nm=((eventPageObj(i)||{}).name||"").trim();
+  return `사건 ${i+1}`+(nm?` — ${nm}`:"");
+}
+/* 제출물/첨삭 객체 안에 사건이 몇 개인지 ("N:" 키의 가장 큰 N) */
+function eventPagesInData(d){
+  let n=1;
+  Object.keys(d||{}).forEach(k=>{ const m=/^(\d+):/.exec(k); if(m) n=Math.max(n,+m[1]); });
+  return n;
+}
+/* 사건 n개 분량의 평평한 항목 목록 — 제출 · 첨삭 화면 · 첨삭 반영이 모두 이 순서를 쓴다 */
+function eventFieldsFor(n){
+  const out=[];
+  for(let i=0;i<n;i++) EVENT_FIELDS.forEach(f=>out.push({
+    k:eventKey(i,f.k), fk:f.k, page:i, label:(n>1?`사건 ${i+1} · `:"")+f.label,
+  }));
+  return out;
+}
+/* 사건 i를 지운다 — 사건 1을 지우면 사건 2의 내용을 P.event 본체로 올린다(회차 일지는 그대로 유지).
+   반영된 첨삭 메모(appliedMemos.event)의 "N:" 키도 함께 당겨준다. */
+function deleteEventPage(i){
+  const more=P.event.more||[];
+  if(!more.length) return;
+  if(i===0){
+    const nx=more.shift();
+    EVENT_FIELDS.forEach(f=>{ P.event[f.k]=nx[f.k]||""; });
+    P.event.customFields=Array.isArray(nx.customFields)?nx.customFields:[];
+  }else more.splice(i-1,1);
+  const old=(P.appliedMemos&&P.appliedMemos.event)||null;
+  if(old){
+    const next={};
+    Object.keys(old).forEach(k=>{
+      const m=/^(\d+):(.*)$/.exec(k);
+      const pg=m?(+m[1]-1):0, fk=m?m[2]:k;
+      if(pg===i) return;
+      next[eventKey(pg>i?pg-1:pg, fk)]=old[k];
+    });
+    P.appliedMemos.event=next;
+  }
+}
+/* 오른쪽 패널 — 사건 i를 읽기 전용으로 */
+function renderEventViewInto(container, i){
+  const ev=eventPageObj(i)||{};
+  const isCur=i===eventPage;
+  const secs=EVENT_SECTIONS.map(s=>{
+    const rows=s.fields.filter(f=>((ev[f.k]||"")+"").trim());
+    if(!rows.length) return "";
+    return `<div class="section-title">${esc(s.title)}</div>`+rows.map(f=>`<div class="plan-block plan-view-block">
+        <label>${esc(f.label)}</label><div class="plan-view-text">${esc((ev[f.k]+"").trim())}</div>
+      </div>`).join("");
+  }).join("");
+  const customs=(Array.isArray(ev.customFields)?ev.customFields:[]).filter(f=>(f.value||"").trim());
+  const customHtml=customs.length ? `<div class="section-title">사용자 추가 항목</div>`+customs.map(f=>`<div class="plan-block plan-view-block">
+      <label>${esc((f.label||"추가 항목").trim()||"추가 항목")}</label><div class="plan-view-text">${esc(f.value.trim())}</div>
+    </div>`).join("") : "";
+  container.innerHTML=`<div class="card plan-viewer-card">
+    <h3>${ICONS.bolt} ${esc(eventPageTitle(i))}</h3>
+    <p class="hint">${isCur?"왼쪽에서 지금 작성 중인 사건입니다.":"참고용으로 보여드립니다. 여기서는 수정할 수 없습니다."}</p>
+    ${isCur?"":`<button type="button" class="btn ghost sm ev-view-edit" style="margin-bottom:10px">${ICONS.edit} 이 사건 편집하기</button>`}
+    ${(secs+customHtml) || `<p class="hint">아직 작성한 내용이 없습니다.</p>`}
+  </div>`;
+  const editBtn=container.querySelector(".ev-view-edit");
+  if(editBtn) editBtn.onclick=()=>{ eventPage=i; sideViewMode="plan"; render(); window.scrollTo(0,0); };
+}
 function rEvent(){
   if(feedbackPage && feedbackPage.type==="event"){ rFeedbackPage(); return; }
+  if(!Array.isArray(P.event.more)) P.event.more=[];
+  const n=eventPageCount();
+  if(eventPage>=n || eventPage<0) eventPage=0;
+  const ev=eventPageObj(eventPage);
   const c=document.createElement("div");
   const fieldHtml=f=>`<div class="ev-field" data-k="${f.k}">
       <label>${esc(f.label)}</label>${f.guide?`<p class="plan-guide">${esc(f.guide)}</p>`:""}
       ${f.type==="combo" ? eventComboHtml(f)
         : `<textarea id="e_${f.k}"${f.type==="line"?' class="ta-line" rows="1"':""} placeholder="${esc(f.ph||"")}"></textarea>`}
     </div>`;
+  const pageBtns=Array.from({length:n},(_,i)=>`<button type="button" class="ev-page-btn${i===eventPage?" active":""}" data-i="${i}" title="${esc(eventPageTitle(i))}">${i+1}</button>`).join("");
   c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.bolt} 사건 설정</h2>${submitBtnHtml()}</div>
     <p class="hint">사건 하나를 "원인 → 욕망 · 장애 · 대가 · 선택 · 변화 → 다음 사건"의 흐름으로 설계합니다.
     이야기 전체의 구조(발단~결말)는 "플롯 생성" 탭에서 다룹니다. 모든 칸을 채울 필요는 없습니다 —
     <b>사건 개요</b>와 <b>갈등 엔진</b>부터 채워보세요. 드롭다운 항목은 목록에 없으면 "직접 입력…"을 고르세요.</p>
+    <div class="ev-pages">
+      <span class="ev-pages-label">작성할 사건</span>${pageBtns}
+      <button type="button" class="btn ghost sm" id="evPageAdd">${ICONS.plus} 새 사건</button>
+      ${n>1?`<button type="button" class="btn ghost sm" id="evPageDel">${ICONS.close} 이 사건 삭제</button>`:""}
+    </div>
+    <p class="hint" style="margin:6px 0 0">새 사건을 추가하면 빈 페이지가 열립니다. 오른쪽 위 숫자 탭으로 기획서와 다른 사건을 골라 보면서 작성하세요.</p>
+    <h3 class="ev-page-title">${esc(eventPageTitle(eventPage))}</h3>
     ${EVENT_SECTIONS.map(s=>`<div class="section-title">${esc(s.title)}</div>
       ${s.hint?`<p class="hint" style="margin:0 0 6px">${esc(s.hint)}</p>`:""}
       ${s.fields.map(fieldHtml).join("")}`).join("")}
 
-    <div class="section-title">사건 관리 (회차 일지)</div>
-    <p class="hint" style="margin:0 0 10px">여러 사건이 얽히는 장편 연재에서 인과 사슬을 놓치지 않기 위한 항목입니다. 사건이 하나씩 확정될 때마다 카드를 추가하세요.</p>
-    <div class="wv-glossary-list" id="evLogList"></div>
-    <button type="button" class="btn ghost sm" id="evLogAdd">${ICONS.plus} 사건 추가</button>
-
     <div class="section-title">사용자 추가 항목</div>
-    <p class="hint" style="margin:0 0 10px">위 항목만으로 부족하다면 직접 이름을 붙여 항목을 추가해보세요.</p>
+    <p class="hint" style="margin:0 0 10px">위 항목만으로 부족하다면 직접 이름을 붙여 항목을 추가해보세요. (이 사건에만 들어갑니다)</p>
     <div class="wv-glossary-list" id="evCustomList"></div>
     <button type="button" class="btn ghost sm" id="evCustomAdd">${ICONS.plus} 항목 추가</button>
+
+    <div class="section-title">사건 관리 (회차 일지 · 모든 사건 공통)</div>
+    <p class="hint" style="margin:0 0 10px">여러 사건이 얽히는 장편 연재에서 인과 사슬을 놓치지 않기 위한 항목입니다. 사건이 회차에 배치될 때마다 기록을 추가하세요.</p>
+    <div class="wv-glossary-list" id="evLogList"></div>
+    <button type="button" class="btn ghost sm" id="evLogAdd">${ICONS.plus} 회차 기록 추가</button>
   </div>`;
-  mountWithPlanViewer(c);
+  mountWithPlanViewer(c, Array.from({length:n},(_,i)=>({
+    key:"ev"+i, label:String(i+1), title:eventPageTitle(i)+(i===eventPage?" (작성 중)":""),
+    cls:i===eventPage?"is-editing":"", render:el=>renderEventViewInto(el,i),
+  })));
   wireSubmitBtn(c,"event");
+  c.querySelectorAll(".ev-page-btn").forEach(b=>{ b.onclick=()=>{ eventPage=+b.dataset.i; render(); window.scrollTo(0,0); }; });
+  c.querySelector("#evPageAdd").onclick=()=>{
+    P.event.more.push({id:uid(), customFields:[]});
+    eventPage=eventPageCount()-1;
+    save(); render(); window.scrollTo(0,0);
+  };
+  const delBtn=c.querySelector("#evPageDel");
+  if(delBtn) delBtn.onclick=()=>{
+    if(!confirm(`"${eventPageTitle(eventPage)}"을(를) 삭제할까요? 입력한 내용이 모두 지워집니다.`)) return;
+    deleteEventPage(eventPage);
+    eventPage=Math.max(0,eventPage-1);
+    sideViewMode="plan";
+    save(); render(); window.scrollTo(0,0);
+  };
   EVENT_SECTIONS.forEach(s=>s.fields.forEach(f=>{
     const box=c.querySelector(`.ev-field[data-k="${f.k}"]`);
-    if(f.type==="combo") wireEventCombo(box, f, P.event);
-    else bind(box.querySelector("textarea"), P.event, f.k);
-    renderAppliedMemoBlockAfter(box,"event",f.k);
+    if(f.type==="combo") wireEventCombo(box, f, ev);
+    else bind(box.querySelector("textarea"), ev, f.k);
+    renderAppliedMemoBlockAfter(box,"event",eventKey(eventPage,f.k));
   }));
 
   /* 사건 관리(회차 일지) — 반복 카드 리스트 */
@@ -2387,7 +2495,7 @@ function rEvent(){
     P.event.log.push({id:uid(), name:"", characters:"", episode:"", impact:"", nextLink:"", cliffhanger:""});
     save(); renderLog();
   };
-  wireCustomFields(c, "#evCustomList", "#evCustomAdd", P.event);
+  wireCustomFields(c, "#evCustomList", "#evCustomAdd", ev);
 }
 
 /* ===== 📋 기획서 작성 =====
@@ -4209,7 +4317,14 @@ function settingsPdfBackgroundHtml(){
 /* 사건 설정 */
 function settingsPdfEventHtml(){
   const ev=P.event||{};
-  const rows=EVENT_FIELDS.map(f=>({label:f.label, v:((ev[f.k]||"")+"").trim()})).filter(x=>x.v);
+  const n=eventPageCount();
+  const pages=Array.from({length:n},(_,i)=>{
+    const pe=eventPageObj(i)||{};
+    const r=EVENT_FIELDS.map(f=>({label:f.label, v:((pe[f.k]||"")+"").trim()})).filter(x=>x.v);
+    const cu=settingsPdfCustomRows(pe);
+    if(!r.length && !cu.length) return "";
+    return (n>1?settingsPdfSubHead(eventPageTitle(i)):"")+settingsPdfRows(r)+(cu.length?settingsPdfSubHead("추가 항목")+settingsPdfRows(cu):"");
+  }).join("");
   const log=(ev.log||[]).filter(g=>(g.name||"").trim()||(g.impact||"").trim()||(g.characters||"").trim())
     .map((g,i)=>({label:"회차 "+(i+1)+(g.episode?` (${g.episode})`:""), v:[
       (g.name||"").trim(),
@@ -4218,11 +4333,9 @@ function settingsPdfEventHtml(){
       g.nextLink?("다음 사건과의 연결: "+g.nextLink):"",
       g.cliffhanger?("클리프행어: "+g.cliffhanger):"",
     ].filter(Boolean).join("\n")}));
-  const customs=settingsPdfCustomRows(ev);
   const body=[
-    settingsPdfRows(rows),
+    pages,
     log.length ? settingsPdfSubHead("사건 관리 (회차 일지)")+settingsPdfRows(log) : "",
-    customs.length ? settingsPdfSubHead("추가 항목")+settingsPdfRows(customs) : "",
   ].join("");
   if(!body) return "";
   return settingsPdfHead("사건 설정", P.name||"")+body;
@@ -6418,7 +6531,7 @@ async function buildSubmissionData(type){
   }
   if(type==="event"){
     const obj={};
-    EVENT_FIELDS.forEach(f=>{ obj[f.k]=(P.event||{})[f.k]||""; });
+    eventFieldsFor(eventPageCount()).forEach(f=>{ obj[f.k]=(eventPageObj(f.page)||{})[f.fk]||""; });
     return obj;
   }
   if(type==="character"){
@@ -8126,7 +8239,7 @@ function buildReviewPairs(type, data, feedback){
   }
   if(type==="event"){
     const fb=feedback||{};
-    return EVENT_FIELDS.map(f=>({
+    return eventFieldsFor(eventPagesInData(data)).map(f=>({
       id:f.k, label:f.label, before:(data&&data[f.k])||"",
       after: Object.prototype.hasOwnProperty.call(fb,f.k) ? fb[f.k] : ((data&&data[f.k])||""),
     }));
@@ -8808,7 +8921,7 @@ function buildFeedbackFromPairs(type, data, afterList){
     const fb={}; BG_FIELDS.forEach((f,i)=>{ fb[f.k]=afterList[i]||""; }); return fb;
   }
   if(type==="event"){
-    const fb={}; EVENT_FIELDS.forEach((f,i)=>{ fb[f.k]=afterList[i]||""; }); return fb;
+    const fb={}; eventFieldsFor(eventPagesInData(data)).forEach((f,i)=>{ fb[f.k]=afterList[i]||""; }); return fb;
   }
   if(type==="character"){
     const chars=Array.isArray(data)?data:[];
@@ -8985,7 +9098,13 @@ function applyFeedbackToProject(type, feedback, memos, data){
     });
   }else if(type==="event"){
     if(!P.event) P.event={};
-    EVENT_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)){ P.event[f.k]=feedback[f.k]||""; setAppliedMemos("event",f.k,memos); } });
+    if(!Array.isArray(P.event.more)) P.event.more=[];
+    eventFieldsFor(eventPagesInData(feedback)).forEach(f=>{
+      if(!Object.prototype.hasOwnProperty.call(feedback,f.k)) return;
+      while(eventPageCount()<=f.page) P.event.more.push({id:uid(), customFields:[]}); // 지운 사건이면 되살린다
+      eventPageObj(f.page)[f.fk]=feedback[f.k]||"";
+      setAppliedMemos("event",f.k,memos);
+    });
   }else if(type==="character"){
     if(!Array.isArray(P.characters)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
@@ -9030,7 +9149,7 @@ const GUIDE_SECTIONS=[
       <li><b>기획서 작성</b>: 제목 · 장르 · 로그라인 · 시놉시스 등 작품의 전체 뼈대를 정리합니다.</li>
       <li><b>캐릭터 설정</b>: 인물을 MBTI · 에니어그램(스트레스 · 성장 방향 화살표 포함)으로 구체화하고, 역할과 <b>역할의 변화</b>, 인물의 변화 3단계(사건 전 / 중 / 이후), 외모 세부 항목, 인물 간 관계를 정리합니다. <b>프로필 사진</b>과 <b>캐릭터 이미지(시트)</b>를 등록할 수 있고, 시트는 이미지를 올리거나 앱 안에서 직접 그릴 수 있습니다.</li>
       <li><b>배경 설정</b>: 세계관(시대 · 장소 · 규칙 · 세력 · 금기 등)과 분위기를 정리하고, <b>용어사전</b>에 작품 고유 용어를 등록합니다.</li>
-      <li><b>사건 설정</b>: 사건의 원인 · <b>갈등 엔진</b>(욕망 · 장애 · 대가 · 선택 · 변화) · 갈등의 3층위 · 기대와 결과의 간극 · 반전과 복선 · 연재 속 위치를 드롭다운(설명 포함)과 직접 입력으로 설계하고, <b>회차 일지</b>에 회차별 사건 · 파급효과 · 클리프행어를 기록합니다.</li>
+      <li><b>사건 설정</b>: 사건의 원인 · <b>갈등 엔진</b>(욕망 · 장애 · 대가 · 선택 · 변화) · 갈등의 3층위 · 기대와 결과의 간극 · 반전과 복선 · 연재 속 위치를 드롭다운(설명 포함)과 직접 입력으로 설계합니다. <b>새 사건</b>으로 사건을 여러 개 만들 수 있고, 오른쪽 위 숫자 탭으로 기획서와 다른 사건을 보면서 작성할 수 있습니다. 또한 <b>회차 일지</b>에 회차별 사건 · 파급효과 · 클리프행어를 기록합니다.</li>
       <li>캐릭터 · 배경 · 사건 화면에서는 <b>항목 추가</b>로 원하는 항목을 직접 만들어 쓸 수 있습니다.</li>
       <li>캐릭터 · 배경 · 사건 화면 오른쪽에서는 <b>기획서 미리보기</b>를 함께 볼 수 있고, 캐릭터 화면에서는 미리보기와 캐릭터 이미지를 탭으로 번갈아 볼 수 있습니다.</li>
       <li><b>플롯 생성</b>: 3막 구조 · 5막 구조 · 영웅의 여정 · 8단계 원형 구조 · 액자 구조 · 비선형 · 옴니버스 등 <b>여러 구조 중 하나를 골라</b> 단계별로 아이디어를 배치해 이야기 흐름을 짭니다.</li>
