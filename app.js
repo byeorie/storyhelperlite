@@ -773,7 +773,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn, fileAssign:rFileAssign};
+      profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
     (renderers[activeTab]||rIdea)();
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
@@ -864,6 +864,531 @@ function learnDetailPage(sec,card){
   body.innerHTML=html;
   wrap.appendChild(body);
   return wrap;
+}
+
+/* ===== 🎯 스토리텔링 실습 (2026-10-08) =====
+   학습 카드(이론)를 직접 써 보며 익히는 연습장. 첫 실습은 "빌드업" — 공포·코미디를 만들 때
+   빌드업 없이 바로 터뜨려 버리는 문제를 연습시키기 위한 5가지 연습.
+   작성 내용은 작품이 아니라 계정 단위(DB.practice.buildup)로 저장된다. 제시문은 data.js BUILDUP_PROMPTS */
+let practiceFor=null;        // null이면 실습 목록, "buildup"이면 빌드업 실습 화면
+let practiceStep="reverse";  // 빌드업 실습 안에서 열려 있는 연습 id
+
+const PRACTICE_TOPICS=[
+  {id:"buildup", num:"①", title:"빌드업 실습", tag:"공포 · 코미디",
+   summary:"기대를 만들고 → 늘리고 → 터뜨리거나 비트는 연습 5가지. 결말부터 쓰는 습관을 고칩니다."}
+];
+
+const BUILDUP_INTRO=`<b>빌드업</b>은 독자에게 기대를 만들고(셋업) → 그 기대를 늘리고 조이다가(지연·고조) → 터뜨리거나 비트는(페이오프) 과정입니다.
+  공포와 코미디는 이 구조가 똑같고, 마지막에 터진 것이 <b>위협</b>이면 공포, <b>무해하거나 어이없으면</b> 코미디가 됩니다.
+  <ul class="pr-intro-list">
+    <li>터지는 장면만 콘텐츠라고 생각하고, 그 앞은 빨리 넘긴다</li>
+    <li>평범한 상태나 규칙을 먼저 보여주지 않아, 무엇이 깨졌는지 독자가 모른다</li>
+    <li>독자가 지금 무엇을 예상하는지 생각하지 않아, 비틀 수가 없다</li>
+  </ul>
+  위 세 가지가 빌드업이 무너지는 가장 흔한 이유입니다. 아래 연습을 순서대로 해 보세요.`;
+
+const PRACTICE_BUILDUP_EXERCISES=[
+  {id:"reverse", num:"①", title:"거꾸로 쌓기", summary:"결말을 먼저 받고, 그 앞의 빌드업만 쓴다",
+   concept:`가장 흔한 실수는 터지는 장면부터 쓰는 것입니다. 이 연습은 결말을 미리 주기 때문에 <b>그 앞에 무엇을 깔아둘지</b>만 고민하면 됩니다.<br>
+     비트마다 긴장도(1~10)를 매기면 아래에 곡선이 그려집니다. 좋은 빌드업은 <b>낮게 시작해 계단처럼 오르고</b>, 한 번에 확 뛰지 않습니다.
+     결말 바로 앞에서 한 번 풀어주는 <b>가짜 안심</b>("별일 아니었네")은 공포와 코미디 모두에서 쓰는 고전적인 기술입니다.`,
+   example:`<b>결말</b>: 옷장 문을 열었더니 아무것도 없다. 그런데 바로 뒤에서 숨소리가 들린다.<br>
+     1 (긴장 2) 자취방에 돌아온 주인공, 늘 하던 대로 외투를 옷장에 건다. — 평범한 일상<br>
+     2 (긴장 4) 다음 날 아침, 옷장 문이 한 뼘쯤 열려 있다. 분명 닫았던 것 같은데.<br>
+     3 (긴장 6) 밤, 옷장 안에서 옷걸이끼리 부딪히는 소리. 창문은 닫혀 있다.<br>
+     4 (긴장 8) 휴대폰 손전등을 켜고 옷장 앞에 선다. 손잡이를 잡는다.<br>
+     5 (긴장 5) 확 연다 — 옷만 걸려 있다. "내가 예민했네." — 가짜 안심<br>
+     → 결말 (긴장 10)`},
+  {id:"three", num:"②", title:"3의 법칙", summary:"패턴을 확립하고, 반복하고, 세 번째에 깬다",
+   concept:`같은 일이 두 번 일어나면 독자는 패턴을 읽고 세 번째를 예상합니다. 그 예상을 <b>분명하게 만들어 둬야</b> 비틀 수 있습니다.<br>
+     공포: 두 번은 별일 아니었다가(고양이였다) 세 번째에 진짜가 온다. 코미디: 같은 행동을 두 번 보여주고 세 번째에 엇나가게 한다.<br>
+     ①·②를 건너뛰면 ③은 그냥 "이상한 일 하나"가 됩니다. 그리고 ③은 <b>짧을수록 세게</b> 터집니다.`,
+   example:`<b>상황</b>: 주인공은 무슨 일이든 "이건 쉽지"라며 시작한다. (코미디)<br>
+     ① 라면 앞에서 "이건 쉽지." — 완벽한 라면.<br>
+     ② 조립식 책장 앞에서 "이건 쉽지." — 나사 하나가 남았지만 멀쩡하다.<br>
+     ❓ 독자의 예상: 이번에도 어찌어찌 해내겠지.<br>
+     ③ 운전면허 시험장에서 "이건 쉽지." — 시동을 켜자마자 와이퍼가 돈다.`},
+  {id:"stretch", num:"③", title:"순간 늘리기", summary:"같은 한 순간을 1컷 · 3컷 · 7컷으로 연출한다",
+   concept:`긴장은 <b>시간</b>이 만듭니다. 같은 순간이라도 몇 컷에 걸쳐 보여주느냐에 따라 효과가 완전히 달라집니다. 세로 스크롤 웹툰에서는 컷 사이 여백 자체가 독자가 기다리는 시간이 됩니다.<br>
+     1컷은 정보만 전달하고, 3컷은 숨을 고르게 하고, 7컷은 독자를 붙잡아 둡니다. 단, 아무것도 더해지지 않는 컷이 이어지면 늘어질 뿐입니다 — 컷마다 소리·반응·디테일이 조금씩 더해져야 합니다.<br>
+     아래 <b>늘리기 도구</b> 버튼을 누르면 마지막으로 입력하던 칸에 도구 표시가 붙습니다.`,
+   example:`<b>순간</b>: 닫힌 문을 연다. (공포, 7컷)<br>
+     1 [디테일] 문고리를 잡은 손. 손끝이 하얗다.<br>
+     2 [소리] "…끼익" — 문틈이 손가락 하나만큼 벌어진다.<br>
+     3 [반응] 주인공의 눈. 침을 삼킨다.<br>
+     4 [시점] 문 안쪽 어둠에서 바라본 주인공의 실루엣.<br>
+     5 [가짜 안심] 문 너머 방, 아무도 없다. 숨을 내쉰다.<br>
+     6 [여백] 검은 빈 칸.<br>
+     7 바닥에 젖은 발자국이, 방 안쪽에서 주인공 쪽으로 찍혀 있다.`},
+  {id:"swap", num:"④", title:"장르 바꾸기", summary:"같은 빌드업에 공포 결말과 코미디 결말을 둘 다 붙인다",
+   concept:`빌드업은 똑같아도 됩니다. 장르를 가르는 것은 마지막에 터진 것이 <b>위협인가, 무해한가</b>입니다.<br>
+     공통 빌드업을 쓸 때는 결말을 들키지 않게, <b>어느 쪽으로도 갈 수 있게</b> 써야 합니다. 두 결말을 다 붙여 보면 "빌드업이 장르를 정하는 게 아니라, 기대를 만드는 장치"라는 걸 체감할 수 있습니다.`,
+   example:`<b>출발</b>: 새로 이사 온 집, 밤마다 벽 너머에서 누군가 노크를 한다.<br>
+     빌드업: 첫날은 무시한다 → 둘째 날 노크가 세 번으로 정확히 반복된다 → 셋째 날 주인공이 벽에 귀를 대자 노크가 멈춘다.<br>
+     <b>공포 결말</b>: 관리인이 말한다. "그 옆집은 10년째 비어 있어요."<br>
+     <b>코미디 결말</b>: 옆집 사람이 찾아온다. "저기요, 밤마다 그쪽에서 자꾸 노크를 하셔서…"`},
+  {id:"info", num:"⑤", title:"정보 통제 표", summary:"장면마다 독자와 인물이 아는 것을 비교한다",
+   concept:`탁자 밑에 폭탄이 있다는 걸 독자만 알고 있으면, 인물들의 평범한 대화가 조마조마한 시간으로 바뀝니다(히치콕의 폭탄 비유). 아무도 모르다가 터지면 놀라는 건 한 번뿐입니다.<br>
+     <b>독자가 더 안다</b> → 공포에선 서스펜스, 코미디에선 극적 아이러니(인물만 모르는 상황이 웃김).<br>
+     <b>인물이 더 안다</b> → 궁금증(미스터리), 나중에 밝혀질 반전의 준비.<br>
+     <b>똑같이 안다</b> → 기다림이 생기지 않습니다. 모든 장면이 이렇다면 빌드업이 없는 것입니다.`,
+   example:`<b>장면</b>: 친구들과 거실에서 야식을 먹는다.<br>
+     독자가 아는 것: 1화 끝에서 소파 밑에 무언가 기어 들어가는 것을 봤다.<br>
+     인물이 아는 것: 아무것도 모른다. 리모컨이 소파 밑으로 굴러간다.<br>
+     → 독자가 더 안다 = 서스펜스. "손 넣지 마!"라는 마음으로 독자가 지켜보게 된다.`}
+];
+
+/* 늘리기 도구 — 순간 늘리기 연습에서 버튼으로 칸에 [도구] 표시를 붙인다 */
+const STRETCH_TOOLS=[
+  {tag:"디테일", tip:"손끝·문고리·물방울 같은 작은 부분을 크게"},
+  {tag:"소리", tip:"그림 대신 소리만 (끼익, 째깍, 똑똑)"},
+  {tag:"반응", tip:"상황 대신 인물의 표정·몸짓"},
+  {tag:"시점", tip:"카메라 위치 바꾸기 (안쪽에서, 위에서, 무언가의 눈으로)"},
+  {tag:"여백", tip:"빈 칸 · 검은 칸 — 스크롤을 멈추게 하는 시간"},
+  {tag:"가짜 안심", tip:"\"별일 아니네\" — 풀어줬다가 터뜨리기"},
+  {tag:"딴짓", tip:"인물이 눈치 못 채고 다른 일을 함 (독자만 초조)"},
+  {tag:"시간", tip:"시계 · 카운트다운 · 반복되는 동작으로 시간을 보여줌"}
+];
+
+/* 장면별 정보 차이 → 효과 이름(장르별) */
+const INFO_GAPS=[
+  {id:"reader", label:"독자가 더 안다",
+   effect:{"공포":"서스펜스 — 독자가 위험을 알고 조마조마하게 지켜본다", "코미디":"극적 아이러니 — 인물만 모르는 상황이 웃음을 만든다"}},
+  {id:"same", label:"똑같이 안다",
+   effect:{"공포":"정보 차이 없음 — 기다림이 생기지 않는다(터질 때 한 번 놀랄 뿐)", "코미디":"정보 차이 없음 — 웃음이 터질 때까지 기대가 쌓이지 않는다"}},
+  {id:"chara", label:"인물이 더 안다",
+   effect:{"공포":"미스터리 — 인물이 무언가 숨기는 듯해 궁금해진다", "코미디":"반전 준비 — 나중에 인물의 속셈이 밝혀질 때 웃음"}}
+];
+
+function practiceBuildupStore(){
+  if(!DB.practice||typeof DB.practice!=="object") DB.practice={};
+  if(!DB.practice.buildup||typeof DB.practice.buildup!=="object") DB.practice.buildup={};
+  return DB.practice.buildup;
+}
+function blankBuildupState(id){
+  const beat=t=>({id:uid(), text:"", tension:t});
+  const row=()=>({id:uid(), text:"", reader:"", chara:"", gap:""});
+  if(id==="reverse") return {genre:"공포", prompt:0, custom:"", beats:[beat(2),beat(4),beat(6)]};
+  if(id==="three")   return {genre:"공포", prompt:0, custom:"", first:"", second:"", expect:"", third:""};
+  if(id==="stretch") return {genre:"공포", prompt:0, custom:"", v1:[""], v3:["","",""], v7:["","","","","","",""], reflect:""};
+  if(id==="swap")    return {prompt:0, custom:"", setup:["","",""], horror:"", comedy:"", reflect:""};
+  if(id==="info")    return {genre:"공포", rows:[row(),row(),row()]};
+  return {};
+}
+function buildupState(id){
+  const store=practiceBuildupStore();
+  if(!store[id]||typeof store[id]!=="object") store[id]=blankBuildupState(id);
+  return store[id];
+}
+/* 현재 고른 제시문 목록 / 제시문 텍스트 (prompt가 -1이면 직접 입력) */
+function buildupPromptList(id, st){
+  const P_=typeof BUILDUP_PROMPTS!=="undefined"?BUILDUP_PROMPTS:{};
+  if(id==="reverse") return (P_.payoff||{})[st.genre]||[];
+  if(id==="three")   return (P_.three||{})[st.genre]||[];
+  if(id==="stretch") return P_.stretch||[];
+  if(id==="swap")    return P_.swap||[];
+  return [];
+}
+function buildupPromptText(id, st){
+  if(st.prompt===-1) return (st.custom||"").trim();
+  const list=buildupPromptList(id, st);
+  return list[st.prompt]||list[0]||"";
+}
+
+function rPractice(){
+  if(practiceFor==="buildup"){ rPracticeBuildup(); return; }
+  practiceFor=null;
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>${ICONS.book} 스토리텔링 실습</h2>
+    <p class="hint">스토리텔링 학습에서 본 이론을 직접 써 보며 익히는 연습장입니다. 작성한 내용은 작품과 상관없이 내 계정에 자동 저장됩니다.</p>
+    <div class="learn-grid" id="practiceGrid"></div></div>`;
+  app.appendChild(c);
+  const grid=c.querySelector("#practiceGrid");
+  PRACTICE_TOPICS.forEach(t=>{
+    const d=document.createElement("div"); d.className="learn-card-mini";
+    d.innerHTML=`<div class="learn-card-num">${esc(t.num)}</div>
+      <div class="learn-card-title">${esc(t.title)}</div>
+      <div class="learn-card-summary">${esc(t.summary)}</div>
+      <div class="learn-card-count">${esc(t.tag)}</div>`;
+    d.onclick=()=>{ practiceFor=t.id; render(); window.scrollTo(0,0); };
+    grid.appendChild(d);
+  });
+}
+
+function rPracticeBuildup(){
+  if(!PRACTICE_BUILDUP_EXERCISES.some(e=>e.id===practiceStep)) practiceStep="reverse";
+  const wrap=document.createElement("div"); wrap.className="card pr-page";
+  const top=document.createElement("div"); top.className="char-detail-top";
+  const backBtn=document.createElement("button"); backBtn.type="button"; backBtn.className="btn ghost sm"; backBtn.textContent="← 실습 목록";
+  backBtn.onclick=()=>{ practiceFor=null; render(); window.scrollTo(0,0); };
+  const ttl=document.createElement("h2"); ttl.textContent="빌드업 실습";
+  top.append(backBtn, ttl);
+  wrap.appendChild(top);
+
+  const intro=document.createElement("details"); intro.className="pr-intro";
+  intro.open=!Object.keys(practiceBuildupStore()).length; // 처음 들어왔을 때만 펼쳐 둔다
+  intro.innerHTML=`<summary>빌드업이란? (공포와 코미디가 같은 구조인 이유)</summary><div class="pr-intro-body">${BUILDUP_INTRO}</div>`;
+  wrap.appendChild(intro);
+
+  const tabs=document.createElement("div"); tabs.className="pr-steps";
+  PRACTICE_BUILDUP_EXERCISES.forEach(ex=>{
+    const b=document.createElement("button"); b.type="button";
+    b.className="pr-step-btn"+(ex.id===practiceStep?" active":"");
+    b.innerHTML=`<span class="pr-step-num">${esc(ex.num)}</span><span class="pr-step-title">${esc(ex.title)}</span><span class="pr-step-sum">${esc(ex.summary)}</span>`;
+    b.onclick=()=>{ practiceStep=ex.id; render(); };
+    tabs.appendChild(b);
+  });
+  wrap.appendChild(tabs);
+
+  const body=document.createElement("div"); body.className="pr-body";
+  wrap.appendChild(body);
+  app.appendChild(wrap);
+  renderBuildupStep(body);
+}
+
+/* 한 연습 화면(개념 → 작업 공간 → 자가 점검 → 버튼)을 body에 그린다. 구조가 바뀌면(비트 추가, 장르 변경 등) 다시 호출 */
+function renderBuildupStep(body){
+  const ex=PRACTICE_BUILDUP_EXERCISES.find(e=>e.id===practiceStep);
+  const st=buildupState(ex.id);
+  body.innerHTML="";
+  const rerender=()=>{ renderBuildupStep(body); body.querySelectorAll("textarea").forEach(autoGrowTextarea); };
+
+  const concept=document.createElement("div"); concept.className="pr-concept";
+  concept.innerHTML=`<h3 class="pr-h3">${esc(ex.num)} ${esc(ex.title)}</h3>
+    <div class="pr-concept-text">${ex.concept}</div>
+    <details class="pr-example"><summary>예시 보기</summary><div class="pr-example-body">${ex.example}</div></details>`;
+  body.appendChild(concept);
+
+  const work=document.createElement("div"); work.className="pr-work";
+  body.appendChild(work);
+  const checksBox=document.createElement("div"); checksBox.className="pr-checks";
+  const refreshChecks=()=>renderBuildupChecks(checksBox, buildupChecks(ex.id, st));
+
+  /* 공통: 장르 토글 · 제시문 고르기 */
+  if(ex.id!=="swap") work.appendChild(buildupGenreToggle(st, rerender));
+  if(ex.id!=="info"){
+    const labels={reverse:"제시 결말 (터지는 장면)", three:"출발 상황 (반복될 패턴)", stretch:"늘릴 순간", swap:"출발 상황 (공포로도 코미디로도 갈 수 있는)"};
+    work.appendChild(buildupPromptPicker(ex.id, st, labels[ex.id], rerender, refreshChecks));
+  }
+
+  const builders={reverse:buildReverseWork, three:buildThreeWork, stretch:buildStretchWork, swap:buildSwapWork, info:buildInfoWork};
+  builders[ex.id](work, st, rerender, refreshChecks);
+
+  body.appendChild(checksBox);
+  refreshChecks();
+
+  const actions=document.createElement("div"); actions.className="pr-actions";
+  const copyBtn=document.createElement("button"); copyBtn.type="button"; copyBtn.className="btn ghost sm";
+  copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`;
+  copyBtn.title="작성한 내용을 글로 복사합니다 (과제 제출 · 메모에 붙여넣기용)";
+  copyBtn.onclick=()=>{
+    const txt=buildupPlainText(ex, st);
+    const done=()=>{ copyBtn.textContent="복사됨"; setTimeout(()=>{ copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`; },1200); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, ()=>prompt("아래 내용을 복사하세요", txt));
+    else prompt("아래 내용을 복사하세요", txt);
+  };
+  const resetBtn=document.createElement("button"); resetBtn.type="button"; resetBtn.className="btn danger sm";
+  resetBtn.textContent="처음부터 다시";
+  resetBtn.onclick=()=>{
+    if(!confirm(`'${ex.title}'에 작성한 내용을 모두 지우고 처음부터 시작할까요?`)) return;
+    practiceBuildupStore()[ex.id]=blankBuildupState(ex.id); save(); rerender();
+  };
+  actions.append(copyBtn, resetBtn);
+  body.appendChild(actions);
+}
+
+function buildupGenreToggle(st, rerender){
+  const d=document.createElement("div"); d.className="pr-genre";
+  d.innerHTML=`<span class="pr-label">장르</span>`;
+  ["공포","코미디"].forEach(g=>{
+    const b=document.createElement("button"); b.type="button";
+    b.className="opt-btn"+(st.genre===g?" on":""); b.textContent=g;
+    b.onclick=()=>{ if(st.genre===g) return; st.genre=g; if(st.prompt!==-1) st.prompt=0; save(); rerender(); };
+    d.appendChild(b);
+  });
+  return d;
+}
+function buildupPromptPicker(id, st, label, rerender, refreshChecks){
+  const list=buildupPromptList(id, st);
+  const d=document.createElement("div"); d.className="plan-block pr-prompt";
+  d.innerHTML=`<label>${esc(label)}</label>
+    <div class="pr-prompt-row">
+      <select class="pr-prompt-sel">${list.map((p,i)=>`<option value="${i}">${esc(p)}</option>`).join("")}<option value="-1">직접 입력…</option></select>
+      <button type="button" class="btn ghost sm pr-dice" title="다른 제시문을 무작위로 고릅니다">무작위</button>
+    </div>
+    <textarea class="ta-line pr-custom" placeholder="직접 쓴 제시문" ${st.prompt===-1?"":"hidden"}></textarea>`;
+  const sel=d.querySelector(".pr-prompt-sel"), custom=d.querySelector(".pr-custom");
+  sel.value=String(st.prompt===-1?-1:Math.min(st.prompt, Math.max(list.length-1,0)));
+  custom.value=st.custom||"";
+  sel.onchange=()=>{ st.prompt=Number(sel.value); save(); rerender(); };
+  d.querySelector(".pr-dice").onclick=()=>{
+    if(list.length<2) return;
+    let n; do{ n=Math.floor(Math.random()*list.length); }while(n===st.prompt);
+    st.prompt=n; save(); rerender();
+  };
+  custom.oninput=()=>{ st.custom=custom.value; save(); refreshChecks();
+    const pv=document.querySelector(".pr-payoff-text"); if(pv) pv.textContent=custom.value.trim()||"(결말을 입력하세요)"; };
+  return d;
+}
+/* 라벨 + 안내 + textarea 하나짜리 입력 블럭 */
+function practiceField(label, guide, value, placeholder, onInput, cls){
+  const d=document.createElement("div"); d.className="plan-block"+(cls?" "+cls:"");
+  d.innerHTML=`<label>${label}</label>${guide?`<p class="plan-guide">${guide}</p>`:""}<textarea placeholder="${esc(placeholder||"")}"></textarea>`;
+  const ta=d.querySelector("textarea"); ta.value=value||"";
+  ta.oninput=()=>onInput(ta.value);
+  return d;
+}
+
+/* ① 거꾸로 쌓기 — 비트 목록 + 긴장도 + 곡선 */
+function buildReverseWork(work, st, rerender, refreshChecks){
+  if(!Array.isArray(st.beats)||!st.beats.length) st.beats=blankBuildupState("reverse").beats;
+  const list=document.createElement("div"); list.className="pr-beats";
+  const curve=document.createElement("div"); curve.className="pr-curve";
+  const drawCurve=()=>{
+    const pts=st.beats.map((b,i)=>({label:String(i+1), v:b.tension}));
+    pts.push({label:"결말", v:10, payoff:true});
+    curve.innerHTML=`<div class="pr-label">긴장 곡선</div>`+practiceCurveSvg(pts);
+  };
+  const roleOf=(i,n)=> i===0 ? "정상 상태 · 규칙 세우기" : i===n-1 ? "결말 직전 — 가장 조여진 순간(또는 가짜 안심)" : "이상 징후 · 조금씩 고조";
+  st.beats.forEach((b,i)=>{
+    const n=st.beats.length;
+    const box=document.createElement("div"); box.className="plan-block pr-beat";
+    box.innerHTML=`<div class="pr-beat-head">
+        <span class="pr-beat-num">비트 ${i+1}</span><span class="pr-beat-role">${roleOf(i,n)}</span>
+        <span class="pr-beat-tools">
+          <button type="button" class="chip-x pr-up" title="위로" ${i===0?"disabled":""}>↑</button>
+          <button type="button" class="chip-x pr-down" title="아래로" ${i===n-1?"disabled":""}>↓</button>
+          <button type="button" class="chip-x pr-del" title="삭제" ${n<=1?"disabled":""}>${ICONS.close}</button>
+        </span></div>
+      <textarea placeholder="${i===0?"예: 자취방에 돌아온 주인공, 늘 하던 대로 외투를 옷장에 건다.":"이 비트에서 독자가 보고 듣는 것"}"></textarea>
+      <div class="pr-tension"><span>긴장도</span><input type="range" min="1" max="10" step="1"><b class="pr-tension-val"></b></div>`;
+    const ta=box.querySelector("textarea"); ta.value=b.text||"";
+    ta.oninput=()=>{ b.text=ta.value; save(); refreshChecks(); };
+    const rng=box.querySelector("input[type=range]"), val=box.querySelector(".pr-tension-val");
+    rng.value=String(b.tension); val.textContent=b.tension;
+    rng.oninput=()=>{ b.tension=Number(rng.value); val.textContent=b.tension; save(); drawCurve(); refreshChecks(); };
+    const move=dir=>{ const j=i+dir; if(j<0||j>=n) return; [st.beats[i],st.beats[j]]=[st.beats[j],st.beats[i]]; save(); rerender(); };
+    box.querySelector(".pr-up").onclick=()=>move(-1);
+    box.querySelector(".pr-down").onclick=()=>move(1);
+    box.querySelector(".pr-del").onclick=()=>{
+      if(b.text.trim() && !confirm(`비트 ${i+1}을(를) 삭제할까요?`)) return;
+      st.beats.splice(i,1); save(); rerender();
+    };
+    list.appendChild(box);
+  });
+  work.appendChild(list);
+  const add=document.createElement("button"); add.type="button"; add.className="btn ghost sm pr-add";
+  add.textContent=st.beats.length>=8?"비트는 8개까지":"+ 비트 추가";
+  add.disabled=st.beats.length>=8;
+  add.onclick=()=>{ const last=st.beats[st.beats.length-1]; st.beats.push({id:uid(), text:"", tension:Math.min(10,(last?last.tension:4)+1)}); save(); rerender(); };
+  work.appendChild(add);
+
+  const pay=document.createElement("div"); pay.className="pr-payoff";
+  pay.innerHTML=`<div class="pr-payoff-head">결말 · 긴장도 10</div><div class="pr-payoff-text"></div>`;
+  pay.querySelector(".pr-payoff-text").textContent=buildupPromptText("reverse", st)||"(결말을 입력하세요)";
+  work.appendChild(pay);
+  work.appendChild(curve);
+  drawCurve();
+}
+
+/* 긴장 곡선 SVG — pts: [{label, v(1~10), payoff?}] */
+function practiceCurveSvg(pts){
+  const W=560, H=170, L=28, R=16, T=14, B=26;
+  const n=pts.length, stepX=n>1?(W-L-R)/(n-1):0;
+  const x=i=>L+i*stepX, y=v=>T+(10-v)*(H-T-B)/9;
+  const grid=[1,5,10].map(v=>`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" class="pr-grid"/><text x="${L-8}" y="${y(v)+4}" class="pr-axis" text-anchor="end">${v}</text>`).join("");
+  const line=pts.map((p,i)=>`${x(i)},${y(p.v)}`).join(" ");
+  const dots=pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.v)}" r="${p.payoff?6:4.5}" class="${p.payoff?"pr-dot-pay":"pr-dot"}"/>
+    <text x="${x(i)}" y="${H-8}" class="pr-axis" text-anchor="middle">${esc(p.label)}</text>`).join("");
+  return `<svg class="pr-curve-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="비트별 긴장도 곡선">${grid}<polyline points="${line}" class="pr-line"/>${dots}</svg>`;
+}
+
+/* ② 3의 법칙 */
+function buildThreeWork(work, st, rerender, refreshChecks){
+  const horror=st.genre==="공포";
+  const f=(key,label,guide,ph,cls)=>work.appendChild(practiceField(label,guide,st[key],ph,v=>{ st[key]=v; save(); refreshChecks(); },cls));
+  f("first","① 확립","패턴을 처음 보여준다. 독자가 '아, 이런 일이 있구나'를 알게 된다.",
+    horror?"예: 새벽 3시 33분, 천장에서 무언가 굴러가는 소리. 주인공은 윗집 아이 장난감이겠거니 한다.":"예: 라면 앞에서 \"이건 쉽지.\" — 완벽한 라면.");
+  f("second","② 반복","같은 패턴을 한 번 더 — 독자가 다음을 예상할 수 있게, 조금 더 분명하게(또는 조금 더 크게).",
+    horror?"예: 다음 날도 정확히 3시 33분. 이번엔 소리가 침대 바로 위에서 멈춘다.":"예: 조립식 책장 앞에서 \"이건 쉽지.\" — 나사 하나가 남았지만 멀쩡하다.");
+  f("expect","❓ 독자의 예상","②까지 본 독자는 세 번째에 무슨 일이 일어날 거라고 예상할까? 이 예상을 알아야 ③에서 비틀 수 있다.",
+    horror?"예: 또 소리가 나겠지. 윗집에 올라가 보면 아이가 있겠지.":"예: 이번에도 어찌어찌 해내겠지.","pr-expect");
+  f("third","③ 깨기", horror?"예상을 비튼다 — 이번엔 '진짜'가 온다. 짧게 쓸수록 세게 터진다.":"예상과 엇나가게 한다 — 짧게 쓸수록 세게 터진다.",
+    horror?"예: 윗집에 올라가 보니, 그 집은 몇 달째 비어 있다.":"예: 운전면허 시험장에서 \"이건 쉽지.\" — 시동을 켜자마자 와이퍼가 돈다.");
+}
+
+/* ③ 순간 늘리기 — 1컷 / 3컷 / 7컷 */
+function buildStretchWork(work, st, rerender, refreshChecks){
+  let lastTa=null;
+  const tools=document.createElement("div"); tools.className="pr-tools";
+  tools.innerHTML=`<div class="pr-label">늘리기 도구 <span class="pr-sub">(누르면 마지막으로 입력하던 칸 앞에 표시가 붙습니다)</span></div>`;
+  STRETCH_TOOLS.forEach(t=>{
+    const b=document.createElement("button"); b.type="button"; b.className="pr-tool"; b.textContent=t.tag; b.title=t.tip;
+    b.onmousedown=e=>e.preventDefault(); // 누를 때 입력칸 포커스를 뺏지 않게
+    b.onclick=()=>{
+      if(!lastTa){ alert("먼저 컷 칸을 하나 눌러 주세요."); return; }
+      const mark=`[${t.tag}] `;
+      if(!lastTa.value.startsWith(mark)) lastTa.value=mark+lastTa.value;
+      lastTa.dispatchEvent(new Event("input",{bubbles:true})); lastTa.focus();
+    };
+    tools.appendChild(b);
+  });
+  work.appendChild(tools);
+
+  const cols=document.createElement("div"); cols.className="pr-stretch";
+  [["v1",1,"1컷 — 정보만"],["v3",3,"3컷 — 숨 고르기"],["v7",7,"7컷 — 붙잡아 두기"]].forEach(([key,n,label])=>{
+    if(!Array.isArray(st[key])) st[key]=[];
+    while(st[key].length<n) st[key].push("");
+    const col=document.createElement("div"); col.className="plan-block pr-stretch-col";
+    col.innerHTML=`<label>${label}</label>`;
+    for(let i=0;i<n;i++){
+      const ta=document.createElement("textarea"); ta.className="ta-line pr-cut";
+      ta.placeholder=`컷 ${i+1}`+(i===0&&n===7?" — 예: [디테일] 문고리를 잡은 손":"");
+      ta.value=st[key][i]||"";
+      ta.onfocus=()=>{ lastTa=ta; };
+      ta.oninput=()=>{ st[key][i]=ta.value; save(); refreshChecks(); };
+      col.appendChild(ta);
+    }
+    cols.appendChild(col);
+  });
+  work.appendChild(cols);
+  work.appendChild(practiceField("돌아보기","세 버전 중 어느 것이 가장 효과적인가? 7컷이 오히려 늘어진다면 어떤 컷을 빼겠는가?",
+    st.reflect,"예: 3컷은 너무 빨리 끝나서 놀랄 준비가 안 됐다. 7컷에서는 4번(시점) 컷을 빼도 될 것 같다.",v=>{ st.reflect=v; save(); refreshChecks(); }));
+}
+
+/* ④ 장르 바꾸기 — 공통 빌드업 + 결말 두 개 */
+function buildSwapWork(work, st, rerender, refreshChecks){
+  if(!Array.isArray(st.setup)) st.setup=["","",""];
+  const setup=document.createElement("div"); setup.className="plan-block";
+  setup.innerHTML=`<label>공통 빌드업</label><p class="plan-guide">결말을 들키지 않게 — 공포로도 코미디로도 갈 수 있게 쓴다. 비트마다 기대를 조금씩 키운다.</p>`;
+  st.setup.forEach((v,i)=>{
+    const ta=document.createElement("textarea"); ta.className="ta-line pr-cut"; ta.placeholder=`비트 ${i+1}`; ta.value=v||"";
+    ta.oninput=()=>{ st.setup[i]=ta.value; save(); refreshChecks(); };
+    setup.appendChild(ta);
+  });
+  work.appendChild(setup);
+  const row=document.createElement("div"); row.className="plan-row";
+  row.appendChild(practiceField("공포 결말","터진 것이 위협이다 — 대가가 있고, 되돌릴 수 없다.",st.horror,"예: 관리인이 말한다. \"그 옆집은 10년째 비어 있어요.\"",v=>{ st.horror=v; save(); refreshChecks(); },"pr-horror"));
+  row.appendChild(practiceField("코미디 결말","터진 것이 무해하거나 어이없다 — 긴장이 웃음으로 풀린다.",st.comedy,"예: 옆집 사람이 찾아온다. \"밤마다 그쪽에서 노크를 하셔서…\"",v=>{ st.comedy=v; save(); refreshChecks(); },"pr-comedy"));
+  work.appendChild(row);
+  work.appendChild(practiceField("돌아보기","같은 빌드업에서 두 결말을 가른 것은 무엇이었나?",st.reflect,"예: 노크한 존재가 사람이냐 아니냐. 위협이 남느냐, 오해로 풀리느냐.",v=>{ st.reflect=v; save(); refreshChecks(); }));
+}
+
+/* ⑤ 정보 통제 표 */
+function buildInfoWork(work, st, rerender, refreshChecks){
+  if(!Array.isArray(st.rows)||!st.rows.length) st.rows=blankBuildupState("info").rows;
+  const list=document.createElement("div"); list.className="pr-info-list";
+  st.rows.forEach((r,i)=>{
+    const box=document.createElement("div"); box.className="plan-block pr-info-row";
+    box.innerHTML=`<div class="pr-beat-head"><span class="pr-beat-num">장면 ${i+1}</span>
+        <span class="pr-beat-tools"><button type="button" class="chip-x pr-del" title="삭제" ${st.rows.length<=1?"disabled":""}>${ICONS.close}</button></span></div>
+      <textarea class="ta-line pr-info-text" placeholder="무슨 일이 일어나는 장면인가"></textarea>
+      <div class="plan-row">
+        <div class="pr-info-cell"><label>독자가 아는 것</label><textarea class="ta-line pr-info-reader" placeholder="예: 소파 밑에 무언가 들어간 것을 봤다"></textarea></div>
+        <div class="pr-info-cell"><label>인물이 아는 것</label><textarea class="ta-line pr-info-chara" placeholder="예: 아무것도 모른다"></textarea></div>
+      </div>
+      <div class="pr-gap"><span class="pr-label">누가 더 아는가</span></div>
+      <div class="pr-gap-effect"></div>`;
+    const bind=(sel,key)=>{ const ta=box.querySelector(sel); ta.value=r[key]||""; ta.oninput=()=>{ r[key]=ta.value; save(); refreshChecks(); }; };
+    bind(".pr-info-text","text"); bind(".pr-info-reader","reader"); bind(".pr-info-chara","chara");
+    const gapBox=box.querySelector(".pr-gap"), eff=box.querySelector(".pr-gap-effect");
+    const showEffect=()=>{ const g=INFO_GAPS.find(x=>x.id===r.gap); eff.textContent=g?"→ "+g.effect[st.genre==="코미디"?"코미디":"공포"]:""; eff.className="pr-gap-effect"+(r.gap==="same"?" weak":""); };
+    INFO_GAPS.forEach(g=>{
+      const b=document.createElement("button"); b.type="button"; b.className="opt-btn"+(r.gap===g.id?" on":""); b.textContent=g.label;
+      b.onclick=()=>{ r.gap=g.id; save(); gapBox.querySelectorAll(".opt-btn").forEach(x=>x.classList.remove("on")); b.classList.add("on"); showEffect(); refreshChecks(); };
+      gapBox.appendChild(b);
+    });
+    showEffect();
+    box.querySelector(".pr-del").onclick=()=>{
+      if((r.text||r.reader||r.chara).trim() && !confirm(`장면 ${i+1}을(를) 삭제할까요?`)) return;
+      st.rows.splice(i,1); save(); rerender();
+    };
+    list.appendChild(box);
+  });
+  work.appendChild(list);
+  const add=document.createElement("button"); add.type="button"; add.className="btn ghost sm pr-add"; add.textContent="+ 장면 추가";
+  add.disabled=st.rows.length>=10;
+  add.onclick=()=>{ st.rows.push({id:uid(), text:"", reader:"", chara:"", gap:""}); save(); rerender(); };
+  work.appendChild(add);
+}
+
+/* 자가 점검 — [{ok, label, tip, optional}] */
+function buildupChecks(id, st){
+  const has=s=>!!(s&&String(s).trim());
+  const out=[];
+  if(id==="reverse"){
+    const beats=st.beats||[], filled=beats.filter(b=>has(b.text));
+    const ts=beats.map(b=>b.tension);
+    let maxJump=0; for(let i=1;i<ts.length;i++) maxJump=Math.max(maxJump, ts[i]-ts[i-1]);
+    out.push({ok:has(buildupPromptText(id,st)), label:"결말이 정해져 있다", tip:"직접 입력을 골랐다면 결말을 써 주세요."});
+    out.push({ok:filled.length>=3, label:"빌드업 비트를 3개 이상 썼다", tip:"결말까지 가는 계단이 최소 세 칸은 있어야 합니다."});
+    out.push({ok:ts.length>0&&ts[0]<=4, label:"낮은 긴장에서 시작한다 (첫 비트 4 이하)", tip:"처음부터 무서우면(웃기면) 올라갈 곳이 없습니다. 먼저 평범한 일상이나 규칙을 보여주세요."});
+    out.push({ok:maxJump<=4, label:"한 번에 확 뛰지 않는다 (이웃한 비트의 긴장도 차이 4 이하)", tip:"긴장이 갑자기 뛰는 곳 사이에 비트를 하나 더 넣어 보세요."});
+    out.push({ok:ts.length>0&&Math.max(...ts)>=7, label:"충분히 조이는 순간이 있다 (가장 높은 비트 7 이상)", tip:"결말 전에 독자가 숨을 참게 되는 비트가 하나는 있어야 합니다."});
+    out.push({ok:ts.some((t,i)=>i>0&&t<ts[i-1]), label:"한 번 풀어주는 순간이 있다 (가짜 안심)", tip:"긴장도를 잠깐 내려 보세요. 풀렸다가 터지면 더 세게 느껴집니다.", optional:true});
+  }else if(id==="three"){
+    out.push({ok:has(st.first)&&has(st.second), label:"① 확립과 ② 반복을 썼다", tip:"패턴을 두 번 보여줘야 독자가 세 번째를 예상합니다."});
+    out.push({ok:has(st.expect), label:"독자의 예상을 적었다", tip:"무엇을 비틀지 알려면 독자가 무엇을 기대하는지 먼저 알아야 합니다."});
+    out.push({ok:has(st.third), label:"③ 깨기를 썼다", tip:""});
+    if(has(st.third)&&has(st.second))
+      out.push({ok:st.third.trim().length<=st.second.trim().length, label:"③이 ②보다 짧다", tip:"터지는 부분은 짧을수록 셉니다. 설명을 덜어내 보세요.", optional:true});
+  }else if(id==="stretch"){
+    const all=(arr,n)=>Array.isArray(arr)&&arr.slice(0,n).filter(has).length===n;
+    out.push({ok:has(buildupPromptText(id,st)), label:"늘릴 순간이 정해져 있다", tip:""});
+    out.push({ok:all(st.v1,1)&&all(st.v3,3), label:"1컷 · 3컷 버전을 다 썼다", tip:""});
+    out.push({ok:all(st.v7,7), label:"7컷 버전을 다 썼다", tip:"순간 자체만으로 7컷을 채우기 어렵다면 도구를 써 보세요."});
+    const used=new Set(); (st.v7||[]).forEach(v=>{ const m=String(v||"").match(/^\[([^\]]+)\]/); if(m) used.add(m[1]); });
+    out.push({ok:used.size>=3, label:`7컷 버전에 늘리기 도구를 3종류 이상 썼다 (지금 ${used.size}종류)`, tip:"같은 컷을 반복하면 늘어집니다. 소리 · 반응 · 디테일처럼 컷마다 다른 것을 더해 보세요."});
+    out.push({ok:has(st.reflect), label:"세 버전을 비교해 돌아봤다", tip:""});
+  }else if(id==="swap"){
+    out.push({ok:has(buildupPromptText(id,st)), label:"출발 상황이 정해져 있다", tip:""});
+    out.push({ok:(st.setup||[]).filter(has).length>=3, label:"공통 빌드업 비트를 3개 썼다", tip:""});
+    out.push({ok:has(st.horror)&&has(st.comedy), label:"공포 결말과 코미디 결말을 둘 다 썼다", tip:"두 결말이 모두 같은 빌드업에서 자연스럽게 나오는지 확인하세요."});
+    out.push({ok:has(st.reflect), label:"무엇이 장르를 갈랐는지 돌아봤다", tip:""});
+  }else if(id==="info"){
+    const rows=(st.rows||[]).filter(r=>has(r.text));
+    out.push({ok:rows.length>=3, label:"장면을 3개 이상 썼다", tip:""});
+    out.push({ok:rows.length>0&&rows.every(r=>r.gap), label:"모든 장면에 '누가 더 아는가'를 골랐다", tip:""});
+    out.push({ok:rows.some(r=>r.gap==="reader"), label:"독자가 더 아는 장면이 있다", tip:st.genre==="코미디"?"독자만 아는 비밀을 하나 만들어 보세요 — 인물이 모르고 행동할 때 웃음이 쌓입니다.":"독자에게 위험을 먼저 알려주세요 — 그 순간부터 모든 평범한 장면이 조마조마해집니다."});
+    out.push({ok:rows.length>0&&!rows.every(r=>r.gap==="same"), label:"모든 장면이 '똑같이 안다'는 아니다", tip:"정보 차이가 없으면 기다림이 생기지 않습니다."});
+  }
+  return out;
+}
+function renderBuildupChecks(box, checks){
+  const need=checks.filter(c=>!c.optional), done=need.filter(c=>c.ok).length;
+  box.innerHTML=`<div class="pr-checks-head"><span class="pr-label">자가 점검</span><span class="pr-checks-score${done===need.length?" all":""}">${done} / ${need.length}</span></div>`
+    +checks.map(c=>`<div class="pr-check ${c.ok?"ok":c.optional?"opt":"no"}">
+      <span class="pr-check-mark">${c.ok?"✓":c.optional?"☆":"·"}</span>
+      <span><b>${esc(c.label)}</b>${c.optional?' <span class="pr-sub">(선택)</span>':""}${!c.ok&&c.tip?`<br><span class="pr-check-tip">${esc(c.tip)}</span>`:""}</span></div>`).join("");
+}
+
+/* 텍스트로 복사 — 과제 제출란이나 메모에 붙여넣기 좋게 */
+function buildupPlainText(ex, st){
+  const L=[`[빌드업 실습 ${ex.num} ${ex.title}]`];
+  const t=s=>String(s||"").trim()||"(비어 있음)";
+  if(st.genre && ex.id!=="swap") L.push(`장르: ${st.genre}`);
+  if(ex.id==="reverse"){
+    L.push(`결말: ${t(buildupPromptText(ex.id,st))}`, "");
+    (st.beats||[]).forEach((b,i)=>L.push(`${i+1} (긴장 ${b.tension}) ${t(b.text)}`));
+    L.push(`→ 결말 (긴장 10)`);
+  }else if(ex.id==="three"){
+    L.push(`상황: ${t(buildupPromptText(ex.id,st))}`, "", `① 확립: ${t(st.first)}`, `② 반복: ${t(st.second)}`, `❓ 독자의 예상: ${t(st.expect)}`, `③ 깨기: ${t(st.third)}`);
+  }else if(ex.id==="stretch"){
+    L.push(`순간: ${t(buildupPromptText(ex.id,st))}`);
+    [["v1","1컷"],["v3","3컷"],["v7","7컷"]].forEach(([k,n])=>{ L.push("", `■ ${n}`); (st[k]||[]).forEach((v,i)=>L.push(`${i+1}. ${t(v)}`)); });
+    L.push("", `돌아보기: ${t(st.reflect)}`);
+  }else if(ex.id==="swap"){
+    L.push(`출발: ${t(buildupPromptText(ex.id,st))}`, "", "공통 빌드업:");
+    (st.setup||[]).forEach((v,i)=>L.push(`${i+1}. ${t(v)}`));
+    L.push("", `공포 결말: ${t(st.horror)}`, `코미디 결말: ${t(st.comedy)}`, "", `돌아보기: ${t(st.reflect)}`);
+  }else if(ex.id==="info"){
+    (st.rows||[]).forEach((r,i)=>{
+      const g=INFO_GAPS.find(x=>x.id===r.gap);
+      L.push("", `장면 ${i+1}: ${t(r.text)}`, `  독자가 아는 것: ${t(r.reader)}`, `  인물이 아는 것: ${t(r.chara)}`,
+        `  → ${g?g.label+" · "+g.effect[st.genre==="코미디"?"코미디":"공포"]:"(선택 안 함)"}`);
+    });
+  }
+  return L.join("\n");
 }
 
 /* ===== 💡 아이디어 모음 ===== */
@@ -6322,7 +6847,7 @@ let feedbackPage=null;
 let navRestoring=false;
 function navSnapshot(){
   try{
-    return {activeTab, learnDetailFor, charDetailFor, charViewMode, sideViewMode,
+    return {activeTab, learnDetailFor, practiceFor, practiceStep, charDetailFor, charViewMode, sideViewMode,
       profClassId, profClassTab, profAssignFolderId, profReviewId, profReviewVersion,
       feedbackPage: feedbackPage ? {type:feedbackPage.type, mode:feedbackPage.mode, id:feedbackPage.id||null} : null};
   }catch(e){ return null; }
@@ -6347,6 +6872,7 @@ window.addEventListener("popstate", e=>{
     return;
   }
   activeTab=st.activeTab; learnDetailFor=st.learnDetailFor; charDetailFor=st.charDetailFor;
+  practiceFor=st.practiceFor||null; practiceStep=st.practiceStep||"reverse";
   charViewMode=st.charViewMode; sideViewMode=st.sideViewMode;
   profClassId=st.profClassId; profClassTab=st.profClassTab; profAssignFolderId=st.profAssignFolderId;
   profReviewId=st.profReviewId; profReviewVersion=st.profReviewVersion; feedbackPage=st.feedbackPage;
@@ -9163,6 +9689,12 @@ const GUIDE_SECTIONS=[
   {title:"스토리텔링 학습", html:`
     <ul>
       <li>창작이 막힐 때 참고할 수 있는 스토리텔링 이론 카드 모음입니다. 항목을 눌러 자세한 설명 · 표 · 예시를 볼 수 있습니다.</li>
+    </ul>`},
+  {title:"스토리텔링 실습", html:`
+    <ul>
+      <li>이론을 직접 써 보며 익히는 연습장입니다. 작성한 내용은 작품과 상관없이 내 계정에 자동 저장됩니다.</li>
+      <li><b>빌드업 실습</b>(공포 · 코미디): <b>거꾸로 쌓기</b>(결말을 받고 앞의 비트만 쓰기, 긴장 곡선) · <b>3의 법칙</b>(확립 → 반복 → 깨기) · <b>순간 늘리기</b>(같은 순간을 1컷 · 3컷 · 7컷으로) · <b>장르 바꾸기</b>(같은 빌드업에 공포 · 코미디 결말) · <b>정보 통제 표</b>(독자와 인물이 아는 것 비교) 5가지 연습이 있습니다.</li>
+      <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다.</li>
     </ul>`},
   {title:"샘플 데이터 (예시 작품)", html:`
     <ul>
