@@ -1479,3 +1479,35 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
   .pr-aside{display:none}
 }
 .pr-layout .pr-steps{grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
+
+/* 클리셰 비틀기 실습 (2026-10-15) */
+.pr-layer{display:inline-block;margin-left:4px;padding:0 7px;border-radius:999px;background:var(--accent2);color:var(--accent);font-size:10.5px;font-weight:700;vertical-align:1px}
+.pr-layer-w{background:#e4ecf5;color:#3e6690}
+.pr-layer-g{background:#f6e3dc;color:var(--accent)}
+.pr-layer-s{background:#eceae4;color:var(--muted)}
+.pr-genre-custom{width:100%;margin:-4px 0 12px}
+.pr-from-map{display:block;margin-top:6px;padding:0;border:0;background:none;font:inherit;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;text-align:left}
+.pr-from-map:hover{text-decoration:underline}
+.pr-worst{border:2px solid var(--accent);background:#fff7f3}
+.pr-worst .pr-genre{margin:8px 0 6px}
+.pr-prompt .pr-genre,.pr-tool-box .pr-genre{margin:8px 0 0}
+.pr-spot-score{font-size:13px;color:var(--muted);margin-bottom:10px}
+.pr-spot-score b{color:var(--accent)}
+.pr-case-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.pr-case-head b{font-size:14.5px;color:var(--ink)}
+.pr-case-sub{font-size:11.5px;color:var(--muted)}
+.pr-case-row{font-size:13px;line-height:1.6;margin-bottom:6px}
+.pr-case-tag{display:inline-block;margin-right:6px;padding:0 7px;border-radius:999px;background:#eceae4;color:var(--muted);font-size:11px;font-weight:700}
+.pr-case-tag.twist{background:var(--accent);color:#fff}
+.pr-case .pr-genre{margin:10px 0 0}
+.pr-case-result{margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12.5px;line-height:1.6}
+.pr-case-result.ok{background:#e7f0e9;color:#2f5e3e}
+.pr-case-result.no{background:#f7ece4;color:#7a4a32}
+.pr-lever-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.pr-self-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px dashed var(--line)}
+.pr-self-row .pr-genre{margin:0;flex-shrink:0}
+.pr-self-row .opt-btn{min-width:40px}
+.pr-self-q{font-size:13px;font-weight:700;line-height:1.45}
+.pr-self-q .pr-check-tip{display:block;font-weight:400}
+.pr-self textarea{margin-top:8px}
+@media(max-width:860px){ .pr-lever-grid{grid-template-columns:1fr} }

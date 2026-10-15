@@ -766,7 +766,7 @@ function render(){
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
     app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
-      ||(activeTab==="practice" && practiceFor==="buildup" && !feedbackPage));  // 빌드업 실습: 오른쪽에 예시 패널
+      ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
@@ -876,7 +876,9 @@ let practiceStep="reverse";  // 빌드업 실습 안에서 열려 있는 연습 
 
 const PRACTICE_TOPICS=[
   {id:"buildup", num:"①", title:"빌드업 실습", tag:"공포 · 코미디",
-   summary:"기대를 만들고 → 늘리고 → 터뜨리거나 비트는 연습 5가지. 결말부터 쓰는 습관을 고칩니다."}
+   summary:"기대를 만들고 → 늘리고 → 터뜨리거나 비트는 연습 5가지. 결말부터 쓰는 습관을 고칩니다."},
+  {id:"cliche", num:"②", title:"클리셰 비틀기 실습", tag:"장르 · 클리셰",
+   summary:"클리셰를 정확히 짚고 → 쾌감을 찾고 → 레버 하나로 비트는 연습 5가지. 클리셰를 피할 적이 아니라 재료로 씁니다."}
 ];
 
 const BUILDUP_INTRO=`<b>빌드업</b>은 독자에게 기대를 만들고(셋업) → 그 기대를 늘리고 조이다가(지연·고조) → 터뜨리거나 비트는(페이오프) 과정입니다.
@@ -1044,6 +1046,7 @@ function buildupPromptText(id, st){
 function rPractice(){
   if(feedbackPage && feedbackPage.type==="practice"){ rFeedbackPage(); return; }
   if(practiceFor==="buildup"){ rPracticeBuildup(); return; }
+  if(practiceFor==="cliche"){ rPracticeCliche(); return; }
   practiceFor=null;
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.book} 스토리텔링 실습</h2>${submitBtnHtml()}</div>
@@ -1053,7 +1056,7 @@ function rPractice(){
   wireSubmitBtn(c, "practice");
   /* 목록 화면의 [제출]은 낼 연습을 고르는 화면이 없으니, 실습 안에서 내도록 안내만 한다 */
   const sb=c.querySelector(".submit-tab-btn");
-  if(sb) sb.onclick=()=>alert("제출할 연습 화면(예: 빌드업 실습 → ① 거꾸로 쌓기)을 연 뒤, 그 화면의 [제출]을 눌러 주세요.\n지금 열려 있는 연습 하나가 제출됩니다.");
+  if(sb) sb.onclick=()=>alert("제출할 연습 화면(예: 빌드업 실습 → ① 거꾸로 쌓기, 클리셰 비틀기 실습 → ⑤ 비틀기 기획안)을 연 뒤, 그 화면의 [제출]을 눌러 주세요.\n지금 열려 있는 연습 하나가 제출됩니다.");
   const grid=c.querySelector("#practiceGrid");
   PRACTICE_TOPICS.forEach(t=>{
     const d=document.createElement("div"); d.className="learn-card-mini";
@@ -1068,11 +1071,19 @@ function rPractice(){
 
 function rPracticeBuildup(){
   if(!PRACTICE_BUILDUP_EXERCISES.some(e=>e.id===practiceStep)) practiceStep="reverse";
+  const body=practicePageShell({title:"빌드업 실습", introSummary:"빌드업이란? (공포와 코미디가 같은 구조인 이유)", introHtml:BUILDUP_INTRO,
+    introOpen:!Object.keys(practiceBuildupStore()).length, exercises:PRACTICE_BUILDUP_EXERCISES, current:practiceStep,
+    onPick:id=>{ practiceStep=id; }});
+  renderBuildupStep(body);
+}
+
+/* 실습 화면 공통 틀 — 상단(목록으로·제목·제출) → 접는 소개 → 연습 탭 → 본문 + 오른쪽 예시 패널. 본문(div)을 돌려준다 */
+function practicePageShell(o){
   const wrap=document.createElement("div"); wrap.className="card pr-page";
   const top=document.createElement("div"); top.className="char-detail-top";
   const backBtn=document.createElement("button"); backBtn.type="button"; backBtn.className="btn ghost sm"; backBtn.textContent="← 실습 목록";
   backBtn.onclick=()=>{ practiceFor=null; render(); window.scrollTo(0,0); };
-  const ttl=document.createElement("h2"); ttl.textContent="빌드업 실습";
+  const ttl=document.createElement("h2"); ttl.textContent=o.title;
   top.append(backBtn, ttl);
   top.insertAdjacentHTML("beforeend", submitBtnHtml());
   const sbg=top.querySelector(".submit-btn-group"); if(sbg) sbg.style.marginLeft="auto";
@@ -1081,16 +1092,16 @@ function rPracticeBuildup(){
   if(submitBtnHtml()) wrap.insertAdjacentHTML("beforeend", `<p class="hint pr-submit-hint">[제출]을 누르면 <b>지금 열려 있는 연습 하나</b>가 과제로 제출됩니다.</p>`);
 
   const intro=document.createElement("details"); intro.className="pr-intro";
-  intro.open=!Object.keys(practiceBuildupStore()).length; // 처음 들어왔을 때만 펼쳐 둔다
-  intro.innerHTML=`<summary>빌드업이란? (공포와 코미디가 같은 구조인 이유)</summary><div class="pr-intro-body">${BUILDUP_INTRO}</div>`;
+  intro.open=!!o.introOpen; // 처음 들어왔을 때만 펼쳐 둔다
+  intro.innerHTML=`<summary>${esc(o.introSummary)}</summary><div class="pr-intro-body">${o.introHtml}</div>`;
   wrap.appendChild(intro);
 
   const tabs=document.createElement("div"); tabs.className="pr-steps";
-  PRACTICE_BUILDUP_EXERCISES.forEach(ex=>{
+  o.exercises.forEach(ex=>{
     const b=document.createElement("button"); b.type="button";
-    b.className="pr-step-btn"+(ex.id===practiceStep?" active":"");
+    b.className="pr-step-btn"+(ex.id===o.current?" active":"");
     b.innerHTML=`<span class="pr-step-num">${esc(ex.num)}</span><span class="pr-step-title">${esc(ex.title)}</span><span class="pr-step-sum">${esc(ex.summary)}</span>`;
-    b.onclick=()=>{ practiceStep=ex.id; practiceAsideGenre=null; render(); };
+    b.onclick=()=>{ o.onPick(ex.id); practiceAsideGenre=null; render(); };
     tabs.appendChild(b);
   });
   wrap.appendChild(tabs);
@@ -1102,7 +1113,7 @@ function rPracticeBuildup(){
   const aside=document.createElement("aside"); aside.className="pr-aside";
   layout.append(wrap, aside);
   app.appendChild(layout);
-  renderBuildupStep(body);
+  return body;
 }
 
 /* 예시 → HTML. 긴장도가 있는 예시(거꾸로 쌓기)는 미니 곡선도 함께 */
@@ -1118,19 +1129,23 @@ function buildupExampleHtml(exm){
 }
 /* 오른쪽 예시 패널 — 장르 예시가 둘이면 지금 고른 장르를 먼저 보여주고 탭으로 바꿔 볼 수 있다 */
 let practiceAsideGenre=null;
-function renderBuildupAside(ex, st){
+function renderBuildupAside(ex, st){ renderPracticeAside(ex.title, ex.examples, st.genre); }
+/* examples: {탭 이름: 예시} — preferKey가 있으면 그 탭을 먼저 연다 */
+function renderPracticeAside(title, examples, preferKey){
   const aside=document.querySelector(".pr-aside"); if(!aside) return;
-  const keys=Object.keys(ex.examples||{});
+  const keys=Object.keys(examples||{});
   if(!keys.length){ aside.innerHTML=""; return; }
-  let g=practiceAsideGenre && keys.includes(practiceAsideGenre) ? practiceAsideGenre : (keys.includes(st.genre)?st.genre:keys[0]);
+  let g=practiceAsideGenre && keys.includes(practiceAsideGenre) ? practiceAsideGenre : (keys.includes(preferKey)?preferKey:keys[0]);
   aside.innerHTML=`<div class="pr-aside-card">
-    <div class="pr-aside-head"><span class="pr-aside-title">예시 · ${esc(ex.title)}</span>
+    <div class="pr-aside-head"><span class="pr-aside-title">예시 · ${esc(title)}</span>
       ${keys.length>1?`<span class="pr-aside-tabs">${keys.map(k=>`<button type="button" class="pr-aside-tab${k===g?" on":""}" data-g="${esc(k)}">${esc(k)}</button>`).join("")}</span>`:""}</div>
-    <div class="pr-aside-body">${buildupExampleHtml(ex.examples[g])}</div>
+    <div class="pr-aside-body">${buildupExampleHtml(examples[g])}</div>
   </div>`;
-  aside.querySelectorAll(".pr-aside-tab").forEach(b=>b.onclick=()=>{ practiceAsideGenre=b.dataset.g; renderBuildupAside(ex, st); });
+  aside.querySelectorAll(".pr-aside-tab").forEach(b=>b.onclick=()=>{ practiceAsideGenre=b.dataset.g; renderPracticeAside(title, examples, preferKey); });
 }
 
+/* 과제 제출용 — 지금 열려 있는 실습(빌드업/클리셰)의 연습 하나 */
+function practiceSubmissionData(){ return practiceFor==="cliche" ? clicheSubmissionData() : buildupSubmissionData(); }
 /* 과제 제출용 — 지금 열려 있는 연습 하나를 [{id,label,text}] 항목으로 바꾼다(교수 첨삭 화면의 블럭 단위) */
 function buildupSubmissionData(){
   const ex=PRACTICE_BUILDUP_EXERCISES.find(e=>e.id===practiceStep)||PRACTICE_BUILDUP_EXERCISES[0];
@@ -1505,6 +1520,523 @@ function buildupPlainText(ex, st){
         `  → ${g?g.label+" · "+g.effect[st.genre==="코미디"?"코미디":"공포"]:"(선택 안 함)"}`);
     });
   }
+  return L.join("\n");
+}
+
+/* ===== 🎭 클리셰 비틀기 실습 (2026-10-15) =====
+   「만화 장르론 — 클리셰 비틀기」 강의를 직접 써 보며 익히는 연습 5가지:
+   클리셰 지도(단어/문법) → 비틀기 감별(네 레버) → 네 레버 돌리기 → 도구 6가지 → 비틀기 기획안(수업 과제 양식).
+   화면 틀·예시 패널·자가 점검은 빌드업 실습과 같은 것을 쓴다(practicePageShell, renderPracticeAside, renderBuildupChecks).
+   작성 내용은 계정 단위(DB.practice.cliche)로 저장된다. 장르 지도·제시문·사례는 data.js CLICHE_GENRES / CLICHE_PROMPTS / CLICHE_CASES */
+let clicheStep="map";
+
+const CLICHE_INTRO=`<b>클리셰</b>는 너무 많이 찍어서 닳아 버린 장치입니다. 동시에 독자와 이미 공유하고 있는 <b>약속</b>이기도 합니다 — 설명 없이 빨리 이해시키고(경제성), 그 장르를 고른 독자가 원하는 쾌감을 약속합니다.
+  문제는 독자가 장면을 '읽지 않고 알아보고' 넘어갈 때입니다(자동화). <b>비틀기</b>는 그 장면을 다시 '보게' 만드는 것 — 장르 안에서 하는 낯설게 하기입니다.
+  <ul class="pr-intro-list">
+    <li><b>비판적 차이를 둔 반복</b> — 반복이 없으면 독자가 원래 클리셰를 알아보지 못하고, 차이가 없으면 그냥 클리셰다</li>
+    <li><b>단어와 문법</b> — 장르는 단어(배경 · 인물형 · 소품)와 문법(그것들이 맺는 관계 · 구조)으로 되어 있다</li>
+    <li><b>네 레버</b> — 무엇을(단어) · 누가(시점) · 어떻게(문법 · 형식) · 그래서(결과). 한 번에 하나만 당긴다</li>
+  </ul>
+  그리고 기억할 것: <b>어제의 비틀기가 오늘의 클리셰가 된다.</b> 아래 연습을 순서대로 해 보세요.`;
+
+/* 클리셰를 읽는 다섯 칸 — 인물·설정 = 단어, 전개 = 문법, 장면·대사 = 둘이 표면에 드러난 것 */
+const CLICHE_CELLS=[
+  {id:"char", label:"인물", layer:"단어", guide:"이 장르에 늘 나오는 인물형", ph:"늘 나오는 인물형을 쉼표로 이어서"},
+  {id:"set", label:"설정", layer:"단어", guide:"배경 · 세계의 규칙 · 소품", ph:"배경 · 규칙 · 소품을 쉼표로 이어서"},
+  {id:"flow", label:"전개", layer:"문법", guide:"사건이 늘 흘러가는 순서 — 장르의 문법", ph:"○○ → ○○ → ○○ 처럼 화살표로"},
+  {id:"scene", label:"장면", layer:"표면", guide:"너무 많이 본 한 장면", ph:"한 장면을 한 문장으로"},
+  {id:"line", label:"대사", layer:"표면", guide:"너무 많이 들은 한마디", ph:"따옴표 안에 대사로"}
+];
+
+/* 네 레버 — 강의자 정리 틀(Altman의 의미론/통사론 + TV Tropes 분류) */
+const CLICHE_LEVERS=[
+  {id:"what", name:"무엇을", layer:"단어", q:"배경 · 인물형 · 소품을 바꾸면?", hint:"문법은 남기고 단어만 바꾼다. 다른 장르의 단어를 옮겨 오면 장르 이식."},
+  {id:"who", name:"누가", layer:"시점", q:"누구의 자리에서 보면?", hint:"악역 · 조연 · 엑스트라 · 독자의 자리에서 같은 이야기를 본다."},
+  {id:"how", name:"어떻게", layer:"문법 · 형식", q:"순서 · 목표 · 보여주는 방식을 바꾸면?", hint:"끝에서 시작하기, 목표 뒤집기, 낯선 형식으로 보여주기."},
+  {id:"sowhat", name:"그래서", layer:"결과", q:"그 클리셰를 끝까지 따라가면?", hint:"진지하게 끝까지 밀어붙여 대가와 결과를 보여준다(해체)."}
+];
+/* 비틀기 도구 6가지 — TV Tropes "Playing With a Trope" 중 창작에 바로 쓸 것 + 장르 이식 */
+const CLICHE_TOOLS=[
+  {id:"subvert", name:"반전", en:"Subverted", desc:"기대를 세운 뒤 배반한다. 독자가 그 클리셰를 예상하도록 먼저 세팅해야 성립한다.", ph:"세팅해 둔 기대가 어떻게 배반되는가"},
+  {id:"invert", name:"역전", en:"Inverted", desc:"구도의 자리를 바꾼다(강자↔약자, 쫓는 쪽↔쫓기는 쪽). 성별 반전이 가장 흔하지만 그것만은 아니다.", ph:"누구와 누구의 자리를 바꾸는가"},
+  {id:"decon", name:"해체", en:"Deconstructed", desc:"클리셰를 평소보다 훨씬 진지하게, 끝까지 따라가서 그것이 얼마나 비현실적이거나 잔인한지 드러낸다.", ph:"이 클리셰가 현실이라면 끝에 무엇이 남는가"},
+  {id:"recon", name:"재구성", en:"Reconstructed", desc:"해체로 드러난 문제를 인정한 상태에서, 그 클리셰를 다시 믿을 만하게 세운다.", ph:"문제를 알고도 왜 다시 이 클리셰를 선택하는가"},
+  {id:"lamp", name:"대놓고 지적하기", en:"Lampshaded", desc:"인물이 클리셰를 말로 언급한다. 클리셰를 그대로 쓰면서도 독자에게 '우리도 알아'라고 윙크한다.", ph:"인물의 대사로 — 예: \"이거 그거네, ○○ 클리셰\""},
+  {id:"transplant", name:"장르 이식", en:"", desc:"A 장르의 문법 + B 장르의 단어. 같은 문법을 공유하는 장르끼리 이식이 쉽다.", ph:"이 클리셰의 문법을 어느 장르의 단어에 옮겨 심는가"}
+];
+/* ⑤ 기획안 — 스스로 점검(O/X). 강의노트 53~54번(비틀기가 실패하는 이유, 역클리셰) */
+const CLICHE_SELF_CHECKS=[
+  {id:"keep", q:"원래 쾌감이 남아 있다 (또는 더 나은 쾌감으로 대체했다)", tip:"장르 독자는 그 쾌감 때문에 왔다. 다 빼면 떠난다."},
+  {id:"setup", q:"비틀기 전에 원래 클리셰를 먼저 세팅했다", tip:"세팅 없는 반전은 그냥 '이상한 전개'다."},
+  {id:"one", q:"레버를 하나만 당겼다", tip:"레버를 다 당기면 독자가 원래 클리셰를 알아보지 못한다."},
+  {id:"reason", q:"비틀기 말고도 이 이야기를 하는 이유가 있다", tip:"비틀기 자체가 목적이면 한 번 웃고 끝난다."},
+  {id:"fresh", q:"이 비틀기가 이미 흔한 '역클리셰'는 아니다", tip:"악역영애물처럼 비틀기도 퍼지면 클리셰가 된다. 비슷한 작품을 찾아보자."}
+];
+
+const PRACTICE_CLICHE_EXERCISES=[
+  {id:"map", num:"①", title:"클리셰 지도", summary:"장르 하나의 클리셰를 다섯 칸에 채우고, 가장 지겨운 하나를 고른다",
+   concept:`비틀려면 먼저 정확히 알아야 합니다. 장르 하나를 골라 <b>인물 · 설정 · 전개 · 장면 · 대사</b> 다섯 칸에 "너무 많이 본 것"을 채워 보세요.<br>
+     인물 · 설정은 장르의 <b>단어</b>(의미론), 전개는 장르의 <b>문법</b>(통사론), 장면 · 대사는 그 둘이 표면에 드러난 것입니다.
+     같은 문법에 단어만 바꿀 수도 있고(로판의 '공작가'를 '아이돌 기획사'로 바꿔도 '운명을 알고 바꾼다'는 문법은 남는다), 같은 단어로 다른 문법을 쓸 수도 있습니다.<br>
+     마지막으로 <b>가장 지겨운 클리셰 하나</b>를 고르고, 그게 단어 문제인지 문법 문제인지 표시하세요. ③~⑤ 연습의 재료가 됩니다.`},
+  {id:"spot", num:"②", title:"비틀기 감별", summary:"실제 작품이 네 레버 중 무엇을 당겼는지 맞혀 본다",
+   concept:`아래 작품들은 모두 익숙한 클리셰를 비틀어 새로워졌고, 그중 몇은 아예 새 장르가 됐습니다. 사례마다 <b>원래 클리셰</b>와 <b>비튼 지점</b>을 읽고, 네 레버 중 어느 것을 가장 크게 당겼는지 골라 보세요. 고르면 해설이 열립니다.<br>
+     <b>무엇을</b> = 단어를 바꾸거나 다른 장르에서 옮겨 옴 · <b>누가</b> = 누구의 자리에서 보는가 · <b>어떻게</b> = 구조 · 목표 · 보여주는 방식 · <b>그래서</b> = 클리셰를 끝까지 따라간 결과<br>
+     한 작품이 여러 레버를 함께 쓰기도 합니다. 해설은 수업에서 정리한 기준이니, 다르게 생각했다면 맨 아래 '돌아보기'에 이유를 적어 보세요.`},
+  {id:"levers", num:"③", title:"네 레버 돌리기", summary:"클리셰 하나를 무엇을 · 누가 · 어떻게 · 그래서로 각각 비튼다",
+   concept:`같은 클리셰 하나를 네 레버로 <b>하나씩</b> 비틀어 봅니다. 한 버전에 레버 하나만 — 다 당기면 독자가 원래 클리셰를 알아보지 못합니다(반복이 사라짐).<br>
+     먼저 이 클리셰가 <b>왜 살아남았는지</b>, 독자에게 어떤 쾌감을 주는지 적으세요. 비틀어도 그 쾌감이 남거나, 다른 쾌감으로 대체돼야 합니다.<br>
+     네 버전을 다 쓰면 가장 좋은 하나를 고르세요. 그리고 좋은 비틀기는 금방 장르가 됩니다 — 이미 그런 작품이 있는지도 떠올려 보세요.`,
+   examples:{
+     "트럭 전생":{setup:["클리셰","트럭에 치여 이세계로 전생했다."],
+       steps:[["쾌감","답답한 현실에서 벗어나 새 세계에서 다시 시작하는 해방감","먼저 적기"],
+              ["무엇을","이세계 대신 1998년의 우리 동네로 전생한다. '다른 세계에서 새 삶'이라는 문법은 그대로, 세계라는 단어만 바꿨다.","단어"],
+              ["누가","치인 사람이 아니라 트럭 기사의 이야기. 매일 누군가를 이세계로 보내야 하는 '전생 트럭' 기사의 직업 고충.","시점"],
+              ["어떻게","이세계 모험이 다 끝나고 현실로 돌아온 '이후'에서 시작한다.","문법 · 형식"],
+              ["그래서","전생해도 현실의 문제(빚 · 우울 · 인간관계)가 그대로 따라온다. 도망친 곳에 낙원은 없다는 것을 끝까지 보여준다.","결과"]],
+       point:"'어떻게' 버전은 이미 '귀환자물'이라는 하위 장르로 있다. 좋은 비틀기는 금방 장르가 된다. (강의 예시 — 비슷한 기존 작품이 있을 수 있음)"}
+   }},
+  {id:"tools", num:"④", title:"비틀기 도구 6가지", summary:"반전 · 역전 · 해체 · 재구성 · 대놓고 지적하기 · 장르 이식",
+   concept:`레버가 '무엇을 바꿀까'라면, 도구는 '어떻게 비틀까'입니다. 같은 클리셰에 도구를 <b>세 가지 이상</b> 써 보세요.<br>
+     <b>반전</b>과 <b>역전</b>은 자주 헷갈립니다. 반전은 기대를 세운 뒤 배반하는 것, 역전은 구도의 자리를 바꾸는 것입니다.
+     그리고 클리셰를 아예 안 쓰는 것(회피)은 반전이 아닙니다 — 반전은 독자가 그 클리셰를 <b>예상하도록 먼저 세팅</b>해야 성립합니다. 그래서 반전 칸에는 세팅부터 적습니다.`,
+   examples:{
+     "학원 로맨스":{setup:["클리셰","차가운 완벽남이 평범한 여주에게만 다정하다."],
+       steps:[["반전","세팅: 완벽남이 매일 여주를 따라다니며 차갑게 지켜본다(독자: 반했구나). → 사실은 여주가 빌려 간 카메라를 돌려받으려는 것.","Subverted"],
+              ["역전","평범한 여주가 차갑고, 완벽남이 매달리는 쪽이 된다.","Inverted"],
+              ["해체","차가운 태도를 진지하게 따라가 보면 그건 매력이 아니라 상대를 지치게 하는 감정적 방치다. 여주는 결국 지쳐서 떠난다.","Deconstructed"],
+              ["재구성","그 차가움이 상처에서 왔다는 걸 인정하고, 남주가 스스로 말하는 법을 배우며 관계를 다시 세운다.","Reconstructed"],
+              ["대놓고 지적하기","여주: \"아, 이거 그거네. 나한테만 다정한 차가운 완벽남. 다음엔 우산 씌워 주지?\"","Lampshaded"],
+              ["장르 이식","'거리를 좁힌다'는 문법을 오컬트로 — 차가운 완벽남은 사실 학교의 지박령이고, 여주에게만 보인다.","A 문법 + B 단어"]],
+       point:"같은 클리셰라도 도구마다 전혀 다른 작품이 된다. 해체 → 재구성은 짝으로 쓰기 좋다."}
+   }},
+  {id:"plan", num:"⑤", title:"비틀기 기획안", summary:"클리셰 → 쾌감 → 레버 하나 → 로그라인 → 3컷 콘티",
+   concept:`수업 과제 '클리셰 비틀기 기획안'의 워크시트입니다. 가장 중요한 단계는 <b>② 왜 살아남았나</b>와 <b>④ 쾌감을 어떻게 남기나</b>입니다 — 비틀기 전에 그 클리셰가 어떤 쾌감을 주는지 먼저 알아야 합니다.<br>
+     비틀기가 실패하는 이유는 세 가지입니다. 쾌감을 다 빼면 독자가 떠나고, 세팅 없는 반전은 그냥 이상한 전개가 되고, 비틀기 자체가 목적이면 한 번 웃고 끝납니다.<br>
+     3컷 콘티는 그림 실력이 아니라 <b>비튼 순간을 어떻게 보여주는가</b>를 봅니다. 오래 남는 작품은 "왜 이 이야기를 하는가"라는 이유를 갖고 있습니다.`,
+   examples:{
+     "원펀맨":{setup:["클리셰","배틀물 — 수련해서 점점 더 강한 적을 넘는 성장 서사"],
+       steps:[["① 단어/문법","문법 문제 — '성장 → 최강'이라는 순서"],
+              ["② 쾌감","적을 압도하는 통쾌함"],
+              ["③ 레버","어떻게 — 성장 서사의 끝(이미 최강)에서 시작한다","구조 뒤집기"],
+              ["④ 쾌감 처리","남긴 것: 한 방에 끝내는 통쾌함 / 더한 것: 너무 강해서 생기는 허무 개그"],
+              ["⑤ 로그라인","취미로 히어로를 하다 너무 강해져 버린 남자가, 모든 적을 한 방에 이겨 버리는 바람에 싸움의 설렘을 잃는다."],
+              ["⑦ 3컷","1 거대한 괴인이 도시를 짓밟으며 등장(정석 세팅) · 2 주인공이 무심한 얼굴로 다가간다 · 3 한 방. 괴인은 산산조각, 주인공은 \"…또 한 방이네.\""]],
+       point:"비틀어도 원래 쾌감(통쾌함)은 한 방으로 남겼다. 그래서 배틀물 독자가 떠나지 않는다. (강의 예시를 바탕으로 정리)"},
+     "천리마마트":{setup:["클리셰","경영물 — 망해가는 가게를 주인공이 살려낸다"],
+       steps:[["① 단어/문법","문법 문제 — '살린다'는 목표"],
+              ["② 쾌감","가게가 살아나는 성공의 쾌감, 무시받던 쪽이 이기는 통쾌함"],
+              ["③ 레버","어떻게 — 주인공의 목표를 정반대로 뒤집는다","목표 뒤집기"],
+              ["④ 쾌감 처리","남긴 것: 가게가 살아나는 쾌감 / 더한 것: 의도와 결과가 엇나가는 블랙코미디"],
+              ["⑤ 로그라인","그룹의 유배지로 좌천된 이사가 마트를 망하게 하려 하지만, 하는 일마다 대박이 난다."],
+              ["⑦ 3컷","1 이사가 직원들에게 말도 안 되는 행사를 지시한다 · 2 직원들 경악 · 3 다음 날 마트 앞에 끝없는 줄, 이사는 절망한다"]],
+       point:"목표만 뒤집고 마트 · 직원 · 경영이라는 단어는 그대로 뒀다 — 독자가 원래 클리셰를 알아보기 때문에 비튼 것이 보인다. (강의 예시를 바탕으로 정리)"}
+   }}
+];
+
+function practiceClicheStore(){
+  if(!DB.practice||typeof DB.practice!=="object") DB.practice={};
+  if(!DB.practice.cliche||typeof DB.practice.cliche!=="object") DB.practice.cliche={};
+  return DB.practice.cliche;
+}
+function blankClicheState(id){
+  if(id==="map")    return {genre:(CLICHE_GENRES[0]||{}).name||"", genreCustom:"", cells:{}, worst:"", worstKind:"", worstWhy:"", alive:""};
+  if(id==="spot")   return {picks:{}, reflect:""};
+  if(id==="levers") return {prompt:0, custom:"", pleasure:"", what:"", who:"", how:"", sowhat:"", pick:"", pickWhy:"", exists:""};
+  if(id==="tools")  return {prompt:0, custom:"", subvertSetup:"", subvert:"", invert:"", decon:"", recon:"", lamp:"", transplant:""};
+  if(id==="plan")   return {prompt:0, custom:"", kind:"", pleasure:"", lever:"", tool:"", keep:"", add:"", logline:"", why:"", cuts:["","",""], self:{}, similar:""};
+  return {};
+}
+function clicheState(id){
+  const store=practiceClicheStore();
+  if(!store[id]||typeof store[id]!=="object") store[id]=blankClicheState(id);
+  return store[id];
+}
+/* 제시문 — data.js CLICHE_PROMPTS를 [{g,t}] 한 줄로 펴서 번호로 고른다(prompt가 -1이면 직접 입력) */
+function clichePromptFlat(){
+  const P_=typeof CLICHE_PROMPTS!=="undefined"?CLICHE_PROMPTS:{};
+  const out=[]; Object.keys(P_).forEach(g=>(P_[g]||[]).forEach(t=>out.push({g,t})));
+  return out;
+}
+function clichePromptText(st){
+  if(st.prompt===-1) return (st.custom||"").trim();
+  const list=clichePromptFlat(), p=list[st.prompt]||list[0];
+  return p?`${p.t} (${p.g})`:"";
+}
+function clicheMapGenre(st){ return st.genre==="-1" ? (st.genreCustom||"").trim() : (st.genre||""); }
+const leverName=id=>(CLICHE_LEVERS.find(l=>l.id===id)||{}).name||"";
+
+function rPracticeCliche(){
+  if(!PRACTICE_CLICHE_EXERCISES.some(e=>e.id===clicheStep)) clicheStep="map";
+  const body=practicePageShell({title:"클리셰 비틀기 실습", introSummary:"클리셰 비틀기란? (클리셰는 진부함인가, 독자와의 약속인가)", introHtml:CLICHE_INTRO,
+    introOpen:!Object.keys(practiceClicheStore()).length, exercises:PRACTICE_CLICHE_EXERCISES, current:clicheStep,
+    onPick:id=>{ clicheStep=id; }});
+  renderClicheStep(body);
+}
+
+/* 지금 연습의 예시 묶음 — ① 지도는 고른 장르의 지도, ② 감별은 네 레버 표 */
+function clicheExamples(ex, st){
+  if(ex.id==="map"){
+    const g=CLICHE_GENRES.find(x=>x.name===st.genre)||CLICHE_GENRES[0];
+    if(!g) return {};
+    return {[g.name]:{setup:["문법", g.grammar], steps:CLICHE_CELLS.map(c=>[c.label, g.cells[c.id]||"", c.layer]),
+      point:"내 지도와 비교해 보세요. 같은 문법을 공유하는 장르끼리는 이식이 쉽습니다 — 배틀물과 헌터물은 '약자가 강해진다', 로판과 회귀물은 '운명을 안다'를 공유합니다."}};
+  }
+  if(ex.id==="spot") return {"네 레버":{setup:["원칙","레버는 한 번에 하나만 — 다 당기면 독자가 원래 클리셰를 알아보지 못한다"],
+    steps:CLICHE_LEVERS.map(l=>[l.name, `${l.q} ${l.hint}`, l.layer]),
+    point:"레버는 '무엇을 바꿨나'를 묻습니다. '어떻게 비틀었나'는 ④ 도구 6가지에서 연습합니다."}};
+  return ex.examples||{};
+}
+
+/* 한 연습 화면(개념 → 작업 공간 → 자가 점검 → 버튼) */
+function renderClicheStep(body){
+  const ex=PRACTICE_CLICHE_EXERCISES.find(e=>e.id===clicheStep);
+  const st=clicheState(ex.id);
+  body.innerHTML="";
+  const rerender=()=>{ renderClicheStep(body); body.querySelectorAll("textarea").forEach(autoGrowTextarea); };
+  const examples=clicheExamples(ex, st);
+
+  const concept=document.createElement("div"); concept.className="pr-concept";
+  const firstEx=Object.values(examples)[0];
+  concept.innerHTML=`<h3 class="pr-h3">${esc(ex.num)} ${esc(ex.title)}</h3>
+    <div class="pr-concept-text">${ex.concept}</div>
+    ${firstEx?`<details class="pr-example"><summary>예시 보기</summary><div class="pr-example-body">${buildupExampleHtml(firstEx)}</div></details>`:""}`;
+  body.appendChild(concept);
+  renderPracticeAside(ex.title, examples, ex.id==="map"?st.genre:null);
+
+  const work=document.createElement("div"); work.className="pr-work";
+  body.appendChild(work);
+  const checksBox=document.createElement("div"); checksBox.className="pr-checks";
+  const refreshChecks=()=>renderBuildupChecks(checksBox, clicheChecks(ex.id, st));
+
+  const builders={map:buildClicheMapWork, spot:buildClicheSpotWork, levers:buildClicheLeversWork, tools:buildClicheToolsWork, plan:buildClichePlanWork};
+  builders[ex.id](work, st, rerender, refreshChecks);
+
+  body.appendChild(checksBox);
+  refreshChecks();
+
+  const actions=document.createElement("div"); actions.className="pr-actions";
+  const copyBtn=document.createElement("button"); copyBtn.type="button"; copyBtn.className="btn ghost sm";
+  copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`;
+  copyBtn.title="작성한 내용을 글로 복사합니다 (과제 제출 · 메모에 붙여넣기용)";
+  copyBtn.onclick=()=>{
+    const txt=clichePlainText(ex, st);
+    const done=()=>{ copyBtn.textContent="복사됨"; setTimeout(()=>{ copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`; },1200); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, ()=>prompt("아래 내용을 복사하세요", txt));
+    else prompt("아래 내용을 복사하세요", txt);
+  };
+  const resetBtn=document.createElement("button"); resetBtn.type="button"; resetBtn.className="btn danger sm";
+  resetBtn.textContent="처음부터 다시";
+  resetBtn.onclick=()=>{
+    if(!confirm(`'${ex.title}'에 작성한 내용을 모두 지우고 처음부터 시작할까요?`)) return;
+    practiceClicheStore()[ex.id]=blankClicheState(ex.id); save(); rerender();
+  };
+  actions.append(copyBtn, resetBtn);
+  body.appendChild(actions);
+}
+
+/* 알약 버튼 한 줄 — options [{id,label,title?}]. toggle이면 다시 누를 때 선택 해제("") */
+function practicePills(label, options, value, onPick, toggle){
+  const d=document.createElement("div"); d.className="pr-genre";
+  if(label) d.innerHTML=`<span class="pr-label">${label}</span>`;
+  options.forEach(o=>{
+    const b=document.createElement("button"); b.type="button";
+    b.className="opt-btn"+(value===o.id?" on":""); b.textContent=o.label; if(o.title) b.title=o.title;
+    b.onclick=()=>{
+      const nv=(toggle && value===o.id) ? "" : o.id;
+      if(nv===value && !toggle) return;
+      value=nv;
+      d.querySelectorAll(".opt-btn").forEach(x=>x.classList.remove("on"));
+      if(nv) b.classList.add("on");
+      onPick(nv);
+    };
+    d.appendChild(b);
+  });
+  return d;
+}
+
+/* 비틀 클리셰 고르기 — 장르별 묶음 + 무작위 + 직접 입력 + ① 지도에서 가져오기 */
+function clichePromptPicker(st, label, rerender, refreshChecks){
+  const list=clichePromptFlat();
+  const groups={}; list.forEach((p,i)=>{ (groups[p.g]=groups[p.g]||[]).push(`<option value="${i}">${esc(p.t)}</option>`); });
+  const worst=String((practiceClicheStore().map||{}).worst||"").trim();
+  const d=document.createElement("div"); d.className="plan-block pr-prompt";
+  d.innerHTML=`<label>${esc(label)}</label>
+    <div class="pr-prompt-row">
+      <select class="pr-prompt-sel">${Object.keys(groups).map(g=>`<optgroup label="${esc(g)}">${groups[g].join("")}</optgroup>`).join("")}<option value="-1">직접 입력…</option></select>
+      <button type="button" class="btn ghost sm pr-dice" title="다른 클리셰를 무작위로 고릅니다">무작위</button>
+    </div>
+    ${worst?`<button type="button" class="pr-from-map" title="${esc(worst)}">↳ ① 클리셰 지도에서 고른 '가장 지겨운 클리셰' 가져오기</button>`:""}
+    <textarea class="ta-line pr-custom" placeholder="비틀 클리셰를 직접 쓰세요 (예: 계약 결혼한 두 사람이 결국 진짜 사랑에 빠진다)" ${st.prompt===-1?"":"hidden"}></textarea>`;
+  const sel=d.querySelector(".pr-prompt-sel"), custom=d.querySelector(".pr-custom");
+  sel.value=String(st.prompt===-1?-1:Math.min(st.prompt, Math.max(list.length-1,0)));
+  custom.value=st.custom||"";
+  sel.onchange=()=>{ st.prompt=Number(sel.value); save(); rerender(); };
+  d.querySelector(".pr-dice").onclick=()=>{
+    if(list.length<2) return;
+    let n; do{ n=Math.floor(Math.random()*list.length); }while(n===st.prompt);
+    st.prompt=n; save(); rerender();
+  };
+  const fm=d.querySelector(".pr-from-map");
+  if(fm) fm.onclick=()=>{
+    if(st.prompt===-1 && (st.custom||"").trim() && st.custom.trim()!==worst && !confirm("직접 입력한 클리셰를 지도에서 고른 것으로 바꿀까요?")) return;
+    st.prompt=-1; st.custom=worst; save(); rerender();
+  };
+  custom.oninput=()=>{ st.custom=custom.value; save(); refreshChecks(); };
+  return d;
+}
+
+/* ① 클리셰 지도 */
+function buildClicheMapWork(work, st, rerender, refreshChecks){
+  if(!st.cells||typeof st.cells!=="object") st.cells={};
+  const opts=CLICHE_GENRES.map(g=>({id:g.name, label:g.name})).concat([{id:"-1", label:"직접 입력"}]);
+  work.appendChild(practicePills("장르", opts, st.genre, v=>{ st.genre=v; practiceAsideGenre=null; save(); rerender(); }));
+  if(st.genre==="-1"){
+    const gc=document.createElement("input"); gc.type="text"; gc.className="pr-genre-custom"; gc.placeholder="장르 이름 (예: 오피스 로맨스, 좀비 아포칼립스)";
+    gc.value=st.genreCustom||""; gc.oninput=()=>{ st.genreCustom=gc.value; save(); refreshChecks(); };
+    work.appendChild(gc);
+  }
+  CLICHE_CELLS.forEach(c=>{
+    work.appendChild(practiceField(`${esc(c.label)} <span class="pr-layer pr-layer-${c.layer==="문법"?"g":c.layer==="단어"?"w":"s"}">${esc(c.layer)}</span>`, esc(c.guide),
+      st.cells[c.id], c.ph, v=>{ st.cells[c.id]=v; save(); refreshChecks(); }));
+  });
+  const worst=document.createElement("div"); worst.className="plan-block pr-worst";
+  worst.innerHTML=`<label>가장 지겨운 클리셰 하나</label><p class="plan-guide">위에서 쓴 것 중 하나, 또는 새로 하나. ③~⑤ 연습에서 [지도에서 가져오기]로 불러올 수 있습니다.</p>
+    <textarea class="ta-line pr-worst-text" placeholder="예: 동료가 쓰러지자 주인공이 숨겨진 힘에 각성한다"></textarea>`;
+  const wt=worst.querySelector(".pr-worst-text"); wt.value=st.worst||"";
+  wt.oninput=()=>{ st.worst=wt.value; save(); refreshChecks(); };
+  worst.appendChild(practicePills("무엇이 지겨운가", [{id:"word",label:"단어 문제",title:"인물형 · 배경 · 소품이 지겹다"},{id:"grammar",label:"문법 문제",title:"사건이 흘러가는 순서 · 관계가 지겹다"}],
+    st.worstKind, v=>{ st.worstKind=v; save(); refreshChecks(); }, true));
+  const why=document.createElement("textarea"); why.className="ta-line"; why.placeholder="이유 한 줄 — 예: 각성할 걸 다 아니까 동료가 쓰러져도 긴장이 안 된다";
+  why.value=st.worstWhy||""; why.oninput=()=>{ st.worstWhy=why.value; save(); refreshChecks(); };
+  worst.appendChild(why);
+  work.appendChild(worst);
+  work.appendChild(practiceField("아직 살아 있는 관습 <span class=\"pr-sub\">(선택)</span>","같은 장치라도 살아 있으면 관습이고, 독자가 감흥 없이 넘기면 클리셰다. 최근 본 작품에서 '이건 관습인데 아직 살아 있다'고 느낀 장면은?",
+    st.alive, "예: 회귀물 1화의 \"눈을 떠 보니 10년 전\" — 한 줄로 설명을 다 해 줘서 여전히 편하다", v=>{ st.alive=v; save(); refreshChecks(); }));
+}
+
+/* ② 비틀기 감별 — 사례 카드 + 레버 고르기 + 해설 */
+function buildClicheSpotWork(work, st, rerender, refreshChecks){
+  if(!st.picks||typeof st.picks!=="object") st.picks={};
+  const score=document.createElement("div"); score.className="pr-spot-score";
+  const drawScore=()=>{
+    const picked=CLICHE_CASES.filter(c=>st.picks[c.id]), ok=picked.filter(c=>st.picks[c.id]===c.lever).length;
+    score.innerHTML=`고른 사례 <b>${picked.length}</b> / ${CLICHE_CASES.length} · 수업 정리와 같은 답 <b>${ok}</b>`;
+  };
+  work.appendChild(score);
+  CLICHE_CASES.forEach(c=>{
+    const card=document.createElement("div"); card.className="plan-block pr-case";
+    const draw=()=>{
+      const pick=st.picks[c.id], ok=pick===c.lever;
+      card.innerHTML=`<div class="pr-case-head"><b>${esc(c.title)}</b><span class="pr-case-sub">${esc(c.sub||"")}</span></div>
+        <div class="pr-case-row"><span class="pr-case-tag">원래 클리셰</span>${esc(c.before)}</div>
+        <div class="pr-case-row"><span class="pr-case-tag twist">비튼 지점</span>${esc(c.after)}</div>`;
+      card.appendChild(practicePills("당긴 레버", CLICHE_LEVERS.map(l=>({id:l.id, label:l.name, title:l.q})), pick||"",
+        v=>{ if(v) st.picks[c.id]=v; else delete st.picks[c.id]; save(); draw(); drawScore(); refreshChecks(); }, true));
+      if(pick){
+        const r=document.createElement("div"); r.className="pr-case-result "+(ok?"ok":"no");
+        r.innerHTML=`<b>${ok?"✓ 수업 정리와 같습니다":`수업 정리에서는 '${esc(leverName(c.lever))}'`}</b> · 도구: ${esc(c.tool||"")}<br>${esc(c.why)}`;
+        card.appendChild(r);
+      }
+    };
+    draw();
+    work.appendChild(card);
+  });
+  drawScore();
+  work.appendChild(practiceField("돌아보기","가장 인상적인 비틀기는? 해설과 다르게 생각한 사례가 있다면 그 이유는?",
+    st.reflect,"예: 원펀맨과 왓치맨은 같은 히어로물을 비틀었는데 하나는 웃기고 하나는 무겁다. 레버가 달라서인 것 같다.", v=>{ st.reflect=v; save(); refreshChecks(); }));
+}
+
+/* ③ 네 레버 돌리기 */
+function buildClicheLeversWork(work, st, rerender, refreshChecks){
+  work.appendChild(clichePromptPicker(st, "비틀 클리셰", rerender, refreshChecks));
+  work.appendChild(practiceField("이 클리셰의 쾌감","이 클리셰는 왜 살아남았나? 독자가 이 장면에서 얻는 것(빠른 이해 · 기대 · 통쾌함 · 설렘…)은?",
+    st.pleasure,"예: 답답한 현실에서 벗어나 새 세계에서 다시 시작하는 해방감",v=>{ st.pleasure=v; save(); refreshChecks(); },"pr-expect"));
+  const grid=document.createElement("div"); grid.className="pr-lever-grid";
+  CLICHE_LEVERS.forEach(l=>{
+    grid.appendChild(practiceField(`${esc(l.name)} <span class="pr-layer">${esc(l.layer)}</span>`, `${esc(l.q)} ${esc(l.hint)}`,
+      st[l.id], `${l.name} 레버만 당긴 버전`, v=>{ st[l.id]=v; save(); refreshChecks(); }));
+  });
+  work.appendChild(grid);
+  const pick=document.createElement("div"); pick.className="plan-block";
+  pick.innerHTML=`<label>가장 좋은 비틀기</label><p class="plan-guide">네 버전 중 하나를 고르고 이유를 적으세요. 원래 쾌감이 남아 있는지, 독자가 원래 클리셰를 알아볼 수 있는지가 기준입니다.</p>`;
+  pick.appendChild(practicePills("", CLICHE_LEVERS.map(l=>({id:l.id, label:l.name})), st.pick, v=>{ st.pick=v; save(); refreshChecks(); }, true));
+  const pw=document.createElement("textarea"); pw.placeholder="고른 이유"; pw.value=st.pickWhy||"";
+  pw.oninput=()=>{ st.pickWhy=pw.value; save(); refreshChecks(); };
+  pick.appendChild(pw);
+  work.appendChild(pick);
+  work.appendChild(practiceField("이미 있는 장르인가? <span class=\"pr-sub\">(선택)</span>","좋은 비틀기는 금방 장르가 된다. 네 버전 중 이미 비슷한 작품 · 하위 장르가 있는 것은?",
+    st.exists,"예: '어떻게' 버전 — 이미 '귀환자물'이라는 하위 장르가 있다",v=>{ st.exists=v; save(); refreshChecks(); }));
+}
+
+/* ④ 비틀기 도구 6가지 */
+function buildClicheToolsWork(work, st, rerender, refreshChecks){
+  work.appendChild(clichePromptPicker(st, "비틀 클리셰", rerender, refreshChecks));
+  CLICHE_TOOLS.forEach(t=>{
+    const box=document.createElement("div"); box.className="plan-block pr-tool-box";
+    box.innerHTML=`<label>${esc(t.name)}${t.en?` <span class="pr-sub">${esc(t.en)}</span>`:""}</label><p class="plan-guide">${esc(t.desc)}</p>`;
+    if(t.id==="subvert"){
+      const s=document.createElement("textarea"); s.className="ta-line pr-expect"; s.placeholder="① 세팅 — 독자가 무엇을 예상하게 만드는가 (예: 완벽남이 매일 여주를 따라다니며 지켜본다 → 독자: 반했구나)";
+      s.value=st.subvertSetup||""; s.oninput=()=>{ st.subvertSetup=s.value; save(); refreshChecks(); };
+      box.appendChild(s);
+    }
+    const ta=document.createElement("textarea"); ta.placeholder=(t.id==="subvert"?"② 배반 — ":"")+t.ph; ta.value=st[t.id]||"";
+    ta.oninput=()=>{ st[t.id]=ta.value; save(); refreshChecks(); };
+    box.appendChild(ta);
+    work.appendChild(box);
+  });
+}
+
+/* ⑤ 비틀기 기획안 */
+function buildClichePlanWork(work, st, rerender, refreshChecks){
+  if(!Array.isArray(st.cuts)) st.cuts=["","",""];
+  while(st.cuts.length<3) st.cuts.push("");
+  if(!st.self||typeof st.self!=="object") st.self={};
+  const f=(key,label,guide,ph,cls)=>work.appendChild(practiceField(label,guide,st[key],ph,v=>{ st[key]=v; save(); refreshChecks(); },cls));
+
+  const step1=clichePromptPicker(st, "① 원래 클리셰", rerender, refreshChecks);
+  step1.appendChild(practicePills("무엇이 지겨운가", [{id:"word",label:"단어 문제"},{id:"grammar",label:"문법 문제"}], st.kind, v=>{ st.kind=v; save(); refreshChecks(); }, true));
+  work.appendChild(step1);
+  f("pleasure","② 왜 살아남았나","이 클리셰가 독자에게 주는 쾌감. 비틀기 전에 반드시 먼저 알아야 한다.","예: 적을 압도하는 통쾌함","pr-expect");
+
+  const lv=document.createElement("div"); lv.className="plan-block";
+  lv.innerHTML=`<label>③ 당길 레버 하나</label><p class="plan-guide">하나만 고른다. 도구는 선택.</p>`;
+  lv.appendChild(practicePills("레버", CLICHE_LEVERS.map(l=>({id:l.id, label:l.name, title:`${l.q} ${l.hint}`})), st.lever, v=>{ st.lever=v; save(); refreshChecks(); }, true));
+  lv.appendChild(practicePills("도구", CLICHE_TOOLS.map(t=>({id:t.id, label:t.name, title:t.desc})), st.tool, v=>{ st.tool=v; save(); refreshChecks(); }, true));
+  work.appendChild(lv);
+
+  const row=document.createElement("div"); row.className="plan-row";
+  row.appendChild(practiceField("④ 남긴 쾌감","비틀어도 그대로 남긴 원래의 쾌감",st.keep,"예: 한 방에 끝내는 통쾌함",v=>{ st.keep=v; save(); refreshChecks(); }));
+  row.appendChild(practiceField("④ 새로 더한 쾌감","비틀어서 새로 생긴 쾌감",st.add,"예: 너무 강해서 생기는 허무 개그",v=>{ st.add=v; save(); refreshChecks(); }));
+  work.appendChild(row);
+  f("logline","⑤ 비튼 로그라인","한 줄로. 독자가 원래 클리셰를 알아볼 수 있게(반복) + 비튼 지점이 보이게(차이).","예: 취미로 히어로를 하다 너무 강해져 버린 남자가, 모든 적을 한 방에 이겨 버리는 바람에 싸움의 설렘을 잃는다.");
+  f("why","⑥ 왜 이 이야기를 하는가","비틀기 말고, 이 이야기를 하고 싶은 이유. 오래 남는 작품은 이유를 갖고 있다.","예: 강함만 좇는 이야기에게 '강해진 다음엔 뭐가 남나'를 묻고 싶다");
+
+  const cuts=document.createElement("div"); cuts.className="plan-block";
+  cuts.innerHTML=`<label>⑦ 3컷 콘티 — 비튼 순간</label><p class="plan-guide">그림 실력이 아니라 '비튼 순간을 어떻게 보여주는가'를 본다. 컷 1에서 원래 클리셰를 먼저 세팅할 것.</p>`;
+  const cutPh=["컷 1 — 세팅: 독자가 원래 클리셰를 알아보는 장면","컷 2 — 기대가 가장 커지는 순간","컷 3 — 비튼 순간"];
+  st.cuts.slice(0,3).forEach((v,i)=>{
+    const ta=document.createElement("textarea"); ta.className="ta-line pr-cut"; ta.placeholder=cutPh[i]; ta.value=v||"";
+    ta.oninput=()=>{ st.cuts[i]=ta.value; save(); refreshChecks(); };
+    cuts.appendChild(ta);
+  });
+  work.appendChild(cuts);
+
+  const self=document.createElement("div"); self.className="plan-block pr-self";
+  self.innerHTML=`<label>⑧ 스스로 점검</label><p class="plan-guide">옆 사람과 바꿔 읽고 서로 매겨 봐도 좋습니다. X가 나온 항목은 고쳐 보세요.</p>`;
+  CLICHE_SELF_CHECKS.forEach(c=>{
+    const r=document.createElement("div"); r.className="pr-self-row";
+    r.innerHTML=`<div class="pr-self-q">${esc(c.q)}<span class="pr-check-tip">${esc(c.tip)}</span></div>`;
+    r.appendChild(practicePills("", [{id:"o",label:"O"},{id:"x",label:"X"}], st.self[c.id]||"", v=>{ if(v) st.self[c.id]=v; else delete st.self[c.id]; save(); refreshChecks(); }, true));
+    self.appendChild(r);
+  });
+  const sim=document.createElement("textarea"); sim.className="ta-line"; sim.placeholder="비슷한 작품 · 이미 있는 하위 장르 (있다면)";
+  sim.value=st.similar||""; sim.oninput=()=>{ st.similar=sim.value; save(); refreshChecks(); };
+  self.appendChild(sim);
+  work.appendChild(self);
+}
+
+/* 자가 점검 — [{ok, label, tip, optional}] (renderBuildupChecks로 그린다) */
+function clicheChecks(id, st){
+  const has=s=>!!(s&&String(s).trim());
+  const out=[];
+  if(id==="map"){
+    const n=CLICHE_CELLS.filter(c=>has((st.cells||{})[c.id])).length;
+    out.push({ok:has(clicheMapGenre(st)), label:"장르를 정했다", tip:"직접 입력을 골랐다면 장르 이름을 써 주세요."});
+    out.push({ok:n>=4, label:`다섯 칸 중 4칸 이상 채웠다 (지금 ${n}칸)`, tip:"막히면 오른쪽 예시를 보지 말고, 최근 본 작품 하나를 떠올려 보세요."});
+    out.push({ok:has((st.cells||{}).flow), label:"전개(문법) 칸을 채웠다", tip:"인물 · 설정만 모으면 단어 목록일 뿐입니다. 사건이 늘 어떤 순서로 흘러가는지 적어 보세요."});
+    out.push({ok:has(st.worst)&&!!st.worstKind, label:"가장 지겨운 클리셰를 고르고 단어/문법을 표시했다", tip:""});
+    out.push({ok:has(st.worstWhy), label:"지겨운 이유를 적었다", tip:"'왜 지겨운가'가 곧 비틀 지점입니다."});
+    out.push({ok:has(st.alive), label:"아직 살아 있는 관습을 하나 찾았다", tip:"", optional:true});
+  }else if(id==="spot"){
+    const picks=st.picks||{}, picked=CLICHE_CASES.filter(c=>picks[c.id]), ok=picked.filter(c=>picks[c.id]===c.lever).length;
+    out.push({ok:picked.length===CLICHE_CASES.length, label:`모든 사례에 레버를 골랐다 (${picked.length} / ${CLICHE_CASES.length})`, tip:""});
+    out.push({ok:has(st.reflect), label:"돌아보기를 적었다", tip:""});
+    if(picked.length) out.push({ok:ok>=Math.ceil(CLICHE_CASES.length*2/3), label:`수업 정리와 같은 답 ${ok}개`, tip:"다르게 고른 사례의 해설을 읽고, 단어 · 시점 · 구조 · 결과 중 무엇이 가장 크게 바뀌었는지 다시 보세요.", optional:true});
+  }else if(id==="levers"){
+    const n=CLICHE_LEVERS.filter(l=>has(st[l.id])).length;
+    out.push({ok:has(clichePromptText(st)), label:"비틀 클리셰가 정해져 있다", tip:""});
+    out.push({ok:has(st.pleasure), label:"이 클리셰의 쾌감을 적었다", tip:"쾌감을 모르고 비틀면 독자가 그 장르를 고른 이유까지 빼 버리게 됩니다."});
+    out.push({ok:n===4, label:`네 레버로 모두 비틀었다 (${n} / 4)`, tip:""});
+    out.push({ok:!!st.pick&&has(st.pickWhy), label:"가장 좋은 비틀기를 고르고 이유를 적었다", tip:""});
+    out.push({ok:has(st.exists), label:"이미 있는 장르인지 따져 봤다", tip:"", optional:true});
+  }else if(id==="tools"){
+    const n=CLICHE_TOOLS.filter(t=>has(st[t.id])).length;
+    out.push({ok:has(clichePromptText(st)), label:"비틀 클리셰가 정해져 있다", tip:""});
+    out.push({ok:n>=3, label:`도구를 3가지 이상 써 봤다 (지금 ${n}가지)`, tip:""});
+    if(has(st.subvert)) out.push({ok:has(st.subvertSetup), label:"반전에 세팅을 먼저 적었다", tip:"세팅 없는 반전은 그냥 '이상한 전개'입니다. 독자가 무엇을 예상하게 되는지부터 적으세요."});
+    out.push({ok:n===CLICHE_TOOLS.length, label:"여섯 가지를 모두 써 봤다", tip:"", optional:true});
+  }else if(id==="plan"){
+    const selfN=CLICHE_SELF_CHECKS.filter(c=>(st.self||{})[c.id]).length;
+    out.push({ok:has(clichePromptText(st))&&!!st.kind, label:"① 원래 클리셰를 정하고 단어/문법을 표시했다", tip:""});
+    out.push({ok:has(st.pleasure), label:"② 쾌감을 적었다", tip:"가장 중요한 단계입니다."});
+    out.push({ok:!!st.lever, label:"③ 레버를 하나 골랐다", tip:""});
+    out.push({ok:has(st.keep)||has(st.add), label:"④ 원래 쾌감을 남기거나 대체했다", tip:"남긴 쾌감과 새로 더한 쾌감 중 적어도 하나는 있어야 합니다."});
+    out.push({ok:has(st.logline), label:"⑤ 로그라인을 썼다", tip:""});
+    out.push({ok:has(st.why), label:"⑥ 이 이야기를 하는 이유를 적었다", tip:""});
+    out.push({ok:(st.cuts||[]).slice(0,3).filter(has).length===3, label:"⑦ 3컷 콘티를 다 썼다", tip:""});
+    out.push({ok:selfN===CLICHE_SELF_CHECKS.length, label:`⑧ 스스로 점검에 모두 답했다 (${selfN} / ${CLICHE_SELF_CHECKS.length})`, tip:""});
+    if(selfN) out.push({ok:!CLICHE_SELF_CHECKS.some(c=>(st.self||{})[c.id]==="x"), label:"스스로 점검에 X가 없다", tip:"X가 나온 항목의 설명을 읽고 기획안을 고쳐 보세요.", optional:true});
+  }
+  return out;
+}
+
+/* 작성 내용 → [{id,label,text}] — 과제 제출(교수 첨삭 블럭)과 텍스트 복사에 같이 쓴다 */
+function clicheItems(ex, st){
+  const items=[];
+  const T=s=>String(s||"").trim();
+  const add=(id,label,text)=>items.push({id, label, text:T(text)});
+  const lines=arr=>arr.filter(x=>x[1]).map(x=>x[0]+x[1]).join("\n");
+  if(ex.id==="map"){
+    add("prompt","장르",clicheMapGenre(st));
+    CLICHE_CELLS.forEach(c=>add("cell:"+c.id, `${c.label} (${c.layer})`, (st.cells||{})[c.id]));
+    const kind={word:"단어 문제",grammar:"문법 문제"}[st.worstKind];
+    add("worst", "가장 지겨운 클리셰"+(kind?` · ${kind}`:""), lines([["",T(st.worst)],["이유: ",T(st.worstWhy)]]));
+    add("alive","아직 살아 있는 관습",st.alive);
+  }else if(ex.id==="spot"){
+    CLICHE_CASES.forEach(c=>{
+      const p=(st.picks||{})[c.id];
+      add("case:"+c.id, c.title, p ? `내 답: ${leverName(p)}${p===c.lever?" (수업 정리와 같음)":` (수업 정리: ${leverName(c.lever)})`}` : "");
+    });
+    add("reflect","돌아보기",st.reflect);
+  }else if(ex.id==="levers"){
+    add("prompt","비틀 클리셰",clichePromptText(st));
+    add("pleasure","이 클리셰의 쾌감",st.pleasure);
+    CLICHE_LEVERS.forEach(l=>add(l.id, `${l.name} (${l.layer})`, st[l.id]));
+    add("pick","가장 좋은 비틀기", lines([["",leverName(st.pick)],["이유: ",T(st.pickWhy)]]));
+    add("exists","이미 있는 장르인가",st.exists);
+  }else if(ex.id==="tools"){
+    add("prompt","비틀 클리셰",clichePromptText(st));
+    CLICHE_TOOLS.forEach(t=>{
+      const text=t.id==="subvert" ? lines([["세팅: ",T(st.subvertSetup)],["배반: ",T(st.subvert)]]) : st[t.id];
+      if(T(text)) add(t.id, t.name, text);
+    });
+  }else if(ex.id==="plan"){
+    const kind={word:"단어 문제",grammar:"문법 문제"}[st.kind];
+    add("prompt","① 원래 클리셰"+(kind?` · ${kind}`:""), clichePromptText(st));
+    add("pleasure","② 왜 살아남았나 (쾌감)",st.pleasure);
+    const tool=(CLICHE_TOOLS.find(t=>t.id===st.tool)||{}).name;
+    add("lever","③ 당긴 레버", st.lever ? leverName(st.lever)+(tool?` · 도구: ${tool}`:"") : "");
+    add("pleasureKeep","④ 쾌감 처리", lines([["남긴 쾌감: ",T(st.keep)],["새로 더한 쾌감: ",T(st.add)]]));
+    add("logline","⑤ 비튼 로그라인",st.logline);
+    add("why","⑥ 왜 이 이야기를 하는가",st.why);
+    add("cuts","⑦ 3컷 콘티", (st.cuts||[]).some(v=>T(v)) ? (st.cuts||[]).slice(0,3).map((v,i)=>`${i+1}. ${T(v)}`).join("\n") : "");
+    const selfLines=CLICHE_SELF_CHECKS.filter(c=>(st.self||{})[c.id]).map(c=>`${(st.self||{})[c.id]==="o"?"O":"X"}  ${c.q}`);
+    if(T(st.similar)) selfLines.push(`비슷한 작품: ${T(st.similar)}`);
+    add("self","⑧ 스스로 점검", selfLines.join("\n"));
+  }
+  return items;
+}
+function clicheSubmissionData(){
+  const ex=PRACTICE_CLICHE_EXERCISES.find(e=>e.id===clicheStep)||PRACTICE_CLICHE_EXERCISES[0];
+  return {topic:"cliche", exercise:ex.id, genre:"", title:`클리셰 비틀기 실습 ${ex.num} ${ex.title}`, items:clicheItems(ex, clicheState(ex.id))};
+}
+function clichePlainText(ex, st){
+  const L=[`[클리셰 비틀기 실습 ${ex.num} ${ex.title}]`];
+  clicheItems(ex, st).forEach(it=>{
+    const t=it.text||"(비어 있음)";
+    L.push("", t.includes("\n") ? `■ ${it.label}\n${t}` : `■ ${it.label}: ${t}`);
+  });
   return L.join("\n");
 }
 
@@ -6964,7 +7496,7 @@ let feedbackPage=null;
 let navRestoring=false;
 function navSnapshot(){
   try{
-    return {activeTab, learnDetailFor, practiceFor, practiceStep, charDetailFor, charViewMode, sideViewMode,
+    return {activeTab, learnDetailFor, practiceFor, practiceStep, clicheStep, charDetailFor, charViewMode, sideViewMode,
       profClassId, profClassTab, profAssignFolderId, profReviewId, profReviewVersion,
       feedbackPage: feedbackPage ? {type:feedbackPage.type, mode:feedbackPage.mode, id:feedbackPage.id||null} : null};
   }catch(e){ return null; }
@@ -6989,7 +7521,7 @@ window.addEventListener("popstate", e=>{
     return;
   }
   activeTab=st.activeTab; learnDetailFor=st.learnDetailFor; charDetailFor=st.charDetailFor;
-  practiceFor=st.practiceFor||null; practiceStep=st.practiceStep||"reverse";
+  practiceFor=st.practiceFor||null; practiceStep=st.practiceStep||"reverse"; clicheStep=st.clicheStep||"map";
   charViewMode=st.charViewMode; sideViewMode=st.sideViewMode;
   profClassId=st.profClassId; profClassTab=st.profClassTab; profAssignFolderId=st.profAssignFolderId;
   profReviewId=st.profReviewId; profReviewVersion=st.profReviewVersion; feedbackPage=st.feedbackPage;
@@ -7180,7 +7712,7 @@ async function buildSubmissionData(type){
   if(type==="character"){
     return (P.characters||[]).map(ch=>({id:ch.id, name:ch.name||"", text:charFieldsToText(ch)}));
   }
-  if(type==="practice") return buildupSubmissionData();
+  if(type==="practice") return practiceSubmissionData();
   return null;
 }
 
@@ -7332,7 +7864,7 @@ async function openSubmitModal(type){
   const box=document.createElement("div"); box.className="plot-modal";
   const top=document.createElement("div"); top.className="plot-picker-top";
   const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=`${TYPE_LABEL[type]} 제출`;
-  if(type==="practice") ttl.textContent+=` — ${buildupSubmissionData().title}`;  /* 지금 열려 있는 연습 하나를 낸다 */
+  if(type==="practice") ttl.textContent+=` — ${practiceSubmissionData().title}`;  /* 지금 열려 있는 연습 하나를 낸다 */
   top.append(ttl, iconBtn(ICONS.close,"닫기",()=>document.body.removeChild(overlay)));
   box.appendChild(top);
   const body=document.createElement("div"); body.innerHTML=`<p class="hint">불러오는 중…</p>`;
@@ -9840,6 +10372,7 @@ const GUIDE_SECTIONS=[
     <ul>
       <li>이론을 직접 써 보며 익히는 연습장입니다. 작성한 내용은 작품과 상관없이 내 계정에 자동 저장됩니다.</li>
       <li><b>빌드업 실습</b>(공포 · 코미디): <b>거꾸로 쌓기</b>(결말을 받고 앞의 비트만 쓰기, 긴장 곡선) · <b>3의 법칙</b>(확립 → 반복 → 깨기) · <b>순간 늘리기</b>(같은 순간을 1컷 · 3컷 · 7컷으로) · <b>장르 바꾸기</b>(같은 빌드업에 공포 · 코미디 결말) · <b>정보 통제 표</b>(독자와 인물이 아는 것 비교) 5가지 연습이 있습니다.</li>
+      <li><b>클리셰 비틀기 실습</b>: <b>클리셰 지도</b>(장르의 인물 · 설정 · 전개 · 장면 · 대사, 단어/문법 구분) · <b>비틀기 감별</b>(실제 작품이 무엇을 · 누가 · 어떻게 · 그래서 중 어느 레버를 당겼는지 맞히기) · <b>네 레버 돌리기</b> · <b>비틀기 도구 6가지</b>(반전 · 역전 · 해체 · 재구성 · 대놓고 지적하기 · 장르 이식) · <b>비틀기 기획안</b>(쾌감 → 레버 하나 → 로그라인 → 3컷 콘티 → 스스로 점검) 5가지 연습이 있습니다.</li>
       <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다. 넓은 화면에서는 <b>오른쪽에 그 연습의 예시</b>(공포 · 코미디 탭)가 함께 보입니다.</li>
       <li><b>과제 제출</b>: 교수님이 "스토리텔링 실습" 종류로 낸 과제에, 연습 화면 위쪽의 <b>[제출]</b>로 <b>지금 열려 있는 연습 하나</b>를 냅니다. 첨삭은 [피드백 보기]에서 확인합니다(작품과 무관한 연습이라 [내 작업물에 반영]은 없습니다).</li>
     </ul>`},
