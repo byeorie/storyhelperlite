@@ -882,7 +882,7 @@ const PRACTICE_TOPICS=[
   {id:"romance", num:"③", title:"로맨스 글쓰기 실습", tag:"로맨스 · 설정 → 플롯 → 글쓰기",
    summary:"무작위로 뽑은 로맨스 클리셰 장면 하나에서 출발해 → 인물 · 배경 → 5부 플롯 → A4 1~2장 글까지 한 편을 끝냅니다."},
   {id:"twist", num:"④", title:"복선과 반전 실습", tag:"복선 · 반전 · P‑H‑P",
-   summary:"장치를 구분하고 → 반전을 해부하고 → 단서를 숨기고 → 실패를 진단한 뒤, 반전 하나와 복선 3개를 P‑H‑P 표로 설계합니다. 무작위 반전 결말로 이야기를 거꾸로 짓는 연습도 있습니다."}
+   summary:"장치를 구분하고 → 실패를 진단하고 → 반전을 해부하고 → 단서를 숨긴 뒤, 반전 하나와 복선 3개를 P‑H‑P 표로 설계합니다. 무작위 반전 결말로 이야기를 거꾸로 짓는 연습도 있습니다."}
 ];
 
 const BUILDUP_INTRO=`<b>빌드업</b>은 독자에게 기대를 만들고(셋업) → 그 기대를 늘리고 조이다가(지연·고조) → 터뜨리거나 비트는(페이오프) 과정입니다.
@@ -2584,7 +2584,7 @@ function romancePlainText(ex, st){
 
 /* ===== 🔍 복선과 반전 실습 (2026-10-15) =====
    「스토리 연출론 — 복선과 반전」 강의를 직접 해 보며 익히는 연습 5가지:
-   장치 감별(복선 · 체호프의 총 · 레드헤링 · 맥거핀) → 반전 해부(P‑H‑P) → 숨기기 다섯 가지 → 실패한 반전 진단 → 반전 설계표(수업 과제 양식).
+   장치 감별(복선 · 체호프의 총 · 레드헤링 · 맥거핀) → 실패한 반전 진단 → 반전 해부(P‑H‑P) → 숨기기 다섯 가지 → 반전 설계표(수업 과제 양식) → 반전 결말 이야기.
    화면 틀 · 예시 패널 · 자가 점검은 다른 실습과 같은 것을 쓴다(practicePageShell, renderPracticeAside, renderBuildupChecks).
    작성 내용은 계정 단위(DB.practice.twist)에 연습별로 저장. 감별 사례 · 숨기기 제시문은 data.js TWIST_DEVICE_CASES / TWIST_FAIL_CASES / TWIST_HIDE_PROMPTS */
 let twistStep="devices";
@@ -2680,20 +2680,20 @@ const PRACTICE_TWIST_EXERCISES=[
      <b>복선</b>은 은근히 심어 두고 회수해 결말을 필연으로 만듭니다. <b>체호프의 총</b>은 분명히 보여 기대를 만들고 반드시 쏩니다 — 심고 거두지 않으면 '헛총'(실망), 심지 않고 거두면 '데우스 엑스 마키나'(불신).
      <b>레드헤링</b>은 분명히 보이지만 가짜 단서이고, <b>맥거핀</b>은 인물을 움직이는 핑계일 뿐 그 정체는 중요하지 않습니다.<br>
      아래 장면마다 어떤 장치인지 골라 보세요. 고르면 해설이 열립니다.`},
-  {id:"anatomy", num:"②", title:"반전 해부", summary:"내가 본 작품의 반전을 P‑H‑P로 뜯어본다",
+  {id:"fail", num:"②", title:"실패한 반전 진단", summary:"반전이 왜 실패했는지 4유형으로 진단하고 고쳐 쓴다",
+   concept:`독자가 "속았다"고 느끼는 반전에는 이유가 있습니다. <b>① 심지 않은 반전</b>("누구?") · <b>② 무효화 반전</b>("그럼 지금까지 뭘 본 거지?") · <b>③ 논리 충돌 반전</b>("말이 안 되잖아") · <b>④ 다 보이는 반전</b>("알고 있었어").<br>
+     아래 짧은 줄거리마다 어느 유형인지 진단해 보세요. 실패가 아닌 <b>성공한 반전</b>도 섞여 있습니다.<br>
+     마지막으로 실패한 반전 하나를 골라 <b>고쳐 쓰세요</b>. 무엇을 심고, 어떻게 숨기면 살아날까요?`},
+  {id:"anatomy", num:"③", title:"반전 해부", summary:"내가 본 작품의 반전을 P‑H‑P로 뜯어본다",
    concept:`두 번째 볼 때 완전히 다르게 보인 작품이 있나요? 그 작품의 반전을 <b>심기 → 숨기기 → 거두기</b>로 뜯어봅니다.<br>
      먼저 반전이 <b>무엇을 뒤집었는지</b>(5유형) 고르세요. 반전은 사건이 아니라 사건의 <b>의미</b>를 바꿉니다.
      그리고 단서가 처음엔 무엇으로 보였는지(숨기기), 어떻게 다시 불려 나왔는지(거두기)를 적습니다.<br>
      마지막으로 <b>좋은 반전 체크리스트</b> 네 가지를 ○ · △ · ✕로 매겨 보세요. 반대로 "이건 반칙이지" 싶었던 작품을 해부해도 좋습니다 — ✕가 어디서 나오는지 보입니다.`},
-  {id:"hide", num:"③", title:"숨기기 다섯 가지", summary:"같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로 숨긴다",
+  {id:"hide", num:"④", title:"숨기기 다섯 가지", summary:"같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로 숨긴다",
    concept:`단서는 <b>보이되 눈에 띄지 않아야</b> 합니다. 너무 숨기면 반칙(공정성 ✕), 너무 드러내면 다 보이는 반전이 됩니다.<br>
      반전과 단서 하나를 받고, 그 단서를 <b>다섯 가지 숨기기 기법</b>으로 각각 한 장면씩 심어 보세요(세 가지 이상).
      원칙은 <b>한 장면에 두 가지 일을 시키는 것</b> — 장면은 표면의 기능(웃음 · 감동 · 다른 사건)을 하면서, 몰래 단서를 실어 나릅니다.<br>
      다 쓰면 가장 잘 숨긴 버전을 고르고, 그래도 독자가 <b>볼 수는 있는지</b>(공정한지) 따져 보세요.`},
-  {id:"fail", num:"④", title:"실패한 반전 진단", summary:"반전이 왜 실패했는지 4유형으로 진단하고 고쳐 쓴다",
-   concept:`독자가 "속았다"고 느끼는 반전에는 이유가 있습니다. <b>① 심지 않은 반전</b>("누구?") · <b>② 무효화 반전</b>("그럼 지금까지 뭘 본 거지?") · <b>③ 논리 충돌 반전</b>("말이 안 되잖아") · <b>④ 다 보이는 반전</b>("알고 있었어").<br>
-     아래 짧은 줄거리마다 어느 유형인지 진단해 보세요. 실패가 아닌 <b>성공한 반전</b>도 섞여 있습니다.<br>
-     마지막으로 실패한 반전 하나를 골라 <b>고쳐 쓰세요</b>. 무엇을 심고, 어떻게 숨기면 살아날까요?`},
   {id:"design", num:"⑤", title:"반전 설계표", summary:"반전 하나 + 복선 3개를 P‑H‑P 표로 설계하고 점검한다",
    concept:`수업 과제 '반전 설계표'의 워크시트입니다. 반전 하나를 정하고, 그 반전을 위한 <b>복선 3개</b>를 P‑H‑P 표로 설계한 뒤, <b>실패 4유형</b>으로 스스로 점검합니다.<br>
      복선마다 <b>처음 볼 땐</b>(숨기기 — 독자가 무엇으로 받아들이나)과 <b>다시 볼 땐</b>(거두기 — 반전 뒤 무엇이 되나)을 나눠 적는 것이 핵심입니다. 처음 볼 땐 배경, 다시 볼 땐 증거.<br>
@@ -2757,7 +2757,7 @@ function rPracticeTwist(){
   renderTwistStep(body);
 }
 
-/* 지금 연습의 예시 묶음 — ①은 네 장치 표, ②는 강의 사례 세 편, ③은 숨기기 예시, ④는 실패 4유형과 강의 사례 */
+/* 지금 연습의 예시 묶음 — ①은 네 장치 표, ②는 실패 4유형과 강의 사례, ③은 강의 사례 세 편, ④는 숨기기 예시 */
 function twistExamples(ex){
   if(ex.id==="devices") return {"네 장치":{setup:["기준","독자에게 얼마나 보이나 · 나중에 회수되나"],
     steps:TWIST_DEVICES.map(d=>[d.name, `${d.goal} — 보이는 정도: ${d.seen} · 회수: ${d.paid}`, d.seen]),
@@ -2829,7 +2829,7 @@ function renderTwistStep(body){
   body.appendChild(actions);
 }
 
-/* 감별 퀴즈 공용(①, ④) — cases [{id,title,text,answer,why}], opts [{id,name,title?}] */
+/* 감별 퀴즈 공용(①, ②) — cases [{id,title,text,answer,why}], opts [{id,name,title?}] */
 function twistQuiz(work, st, cases, opts, pillLabel, refreshChecks){
   if(!st.picks||typeof st.picks!=="object") st.picks={};
   const score=document.createElement("div"); score.className="pr-spot-score";
@@ -2865,7 +2865,7 @@ function buildTwistDevicesWork(work, st, rerender, refreshChecks){
     v=>{ st.reflect=v; save(); refreshChecks(); }));
 }
 
-/* ② 반전 해부 */
+/* ③ 반전 해부 */
 function buildTwistAnatomyWork(work, st, rerender, refreshChecks){
   if(!st.grades||typeof st.grades!=="object") st.grades={};
   const f=(key,label,guide,ph,cls)=>work.appendChild(practiceField(label,guide,st[key],ph,v=>{ st[key]=v; save(); refreshChecks(); },cls));
@@ -2902,7 +2902,7 @@ function buildTwistAnatomyWork(work, st, rerender, refreshChecks){
   work.appendChild(grade);
 }
 
-/* ③ 숨기기 다섯 가지 */
+/* ④ 숨기기 다섯 가지 */
 function buildTwistHideWork(work, st, rerender, refreshChecks){
   const list=TWIST_HIDE_PROMPTS;
   const d=document.createElement("div"); d.className="plan-block pr-prompt";
@@ -2944,7 +2944,7 @@ function buildTwistHideWork(work, st, rerender, refreshChecks){
   work.appendChild(best);
 }
 
-/* ④ 실패한 반전 진단 */
+/* ② 실패한 반전 진단 */
 function buildTwistFailWork(work, st, rerender, refreshChecks){
   twistQuiz(work, st, TWIST_FAIL_CASES, TWIST_FAILS.map(f=>({id:f.id, name:f.name, title:`${f.problem} — "${f.react}"`})), "진단", refreshChecks);
   const fix=document.createElement("div"); fix.className="plan-block";
@@ -11623,7 +11623,7 @@ const GUIDE_SECTIONS=[
       <li><b>빌드업 실습</b>(공포 · 코미디): <b>거꾸로 쌓기</b>(결말을 받고 앞의 비트만 쓰기, 긴장 곡선) · <b>3의 법칙</b>(확립 → 반복 → 깨기) · <b>순간 늘리기</b>(같은 순간을 1컷 · 3컷 · 7컷으로) · <b>장르 바꾸기</b>(같은 빌드업에 공포 · 코미디 결말) · <b>정보 통제 표</b>(독자와 인물이 아는 것 비교) 5가지 연습이 있습니다.</li>
       <li><b>클리셰 비틀기 실습</b>: <b>클리셰 지도</b>(장르의 인물 · 설정 · 전개 · 장면 · 대사, 단어/문법 구분) · <b>비틀기 감별</b>(실제 작품이 무엇을 · 누가 · 어떻게 · 그래서 중 어느 레버를 당겼는지 맞히기) · <b>네 레버 돌리기</b> · <b>비틀기 도구 6가지</b>(반전 · 역전 · 해체 · 재구성 · 대놓고 지적하기 · 장르 이식) · <b>비틀기 기획안</b>(쾌감 → 레버 하나 → 로그라인 → 3컷 콘티 → 스스로 점검) 5가지 연습이 있습니다.</li>
       <li><b>로맨스 글쓰기 실습</b>: 다섯 단계가 한 편으로 이어집니다. <b>장면 뽑기</b>(로맨스 클리셰 장면 30개 중 무작위) → <b>인물 · 사건 · 배경</b>(그 장면이 나올 수 있게 한 줄씩) → <b>장면 자리 정하기</b>(만남 · 끌림 · 흔들림 · 고백 · 맺음 5부 중) → <b>플롯 채우기</b>(장면과 붙은 칸부터 한 칸씩, 감정 온도 곡선) → <b>글쓰기</b>(A4 1~2장, 글자 수 표시). 스토리가이드의 설정 · 플롯 · 글쓰기를 실습용으로 줄인 것입니다.</li>
-      <li><b>복선과 반전 실습</b>: <b>장치 감별</b>(복선 · 체호프의 총 · 레드헤링 · 맥거핀 구분) · <b>반전 해부</b>(내가 본 작품의 반전을 심기 · 숨기기 · 거두기와 좋은 반전 체크리스트로) · <b>숨기기 다섯 가지</b>(같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로) · <b>실패한 반전 진단</b>(실패 4유형 감별 + 고쳐 쓰기) · <b>반전 설계표</b>(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검, 수업 과제 양식) · <b>반전 결말 이야기</b>(무작위로 뽑은 반전 결말에 맞춰 표면/진짜 두 겹 플롯을 짓고 복선 칸 표시, 설계표로 가져가기) 6가지 연습이 있습니다.</li>
+      <li><b>복선과 반전 실습</b>: <b>장치 감별</b>(복선 · 체호프의 총 · 레드헤링 · 맥거핀 구분) · <b>실패한 반전 진단</b>(실패 4유형 감별 + 고쳐 쓰기) · <b>반전 해부</b>(내가 본 작품의 반전을 심기 · 숨기기 · 거두기와 좋은 반전 체크리스트로) · <b>숨기기 다섯 가지</b>(같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로) · <b>반전 설계표</b>(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검, 수업 과제 양식) · <b>반전 결말 이야기</b>(무작위로 뽑은 반전 결말에 맞춰 표면/진짜 두 겹 플롯을 짓고 복선 칸 표시, 설계표로 가져가기) 6가지 연습이 있습니다.</li>
       <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다. 넓은 화면에서는 <b>오른쪽에 그 연습의 예시</b>(공포 · 코미디 탭)가 함께 보입니다.</li>
       <li><b>과제 제출</b>: 교수님이 "스토리텔링 실습" 종류로 낸 과제에, 연습 화면 위쪽의 <b>[제출]</b>로 <b>지금 열려 있는 연습 하나</b>를 냅니다. 첨삭은 [피드백 보기]에서 확인합니다(작품과 무관한 연습이라 [내 작업물에 반영]은 없습니다).</li>
     </ul>`},
