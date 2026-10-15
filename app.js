@@ -56,13 +56,13 @@ function refreshProfNavVisibility(){
 }
 /* 2026-10-15: RPG 게임(섬 탈출 MUD-TRPG) 연동 — 게임이 켜진 수업의 학생, 또는 RPG 게임 GM 교수에게만
    [RPG 게임] 메뉴가 보인다. /api/game 한 번으로 판단하고 결과는 rpgGameInfo에 둔다 */
-let rpgGameInfo={gm:false, classes:[]};
+let rpgGameInfo={gm:false, admin:false, classes:[]};
 async function refreshRpgNav(){
   const grp=document.getElementById("rpgNavGroup");
-  if(!currentUser){ rpgGameInfo={gm:false, classes:[]}; if(grp) grp.style.display="none"; return; }
+  if(!currentUser){ rpgGameInfo={gm:false, admin:false, classes:[]}; if(grp) grp.style.display="none"; return; }
   const res=await apiFetch("game");
-  rpgGameInfo=(res.ok && res.body) ? {gm:!!res.body.gm, classes:res.body.classes||[]} : {gm:false, classes:[]};
-  const show=rpgGameInfo.gm || rpgGameInfo.classes.length>0;
+  rpgGameInfo=(res.ok && res.body) ? {gm:!!res.body.gm, admin:!!res.body.admin, classes:res.body.classes||[]} : {gm:false, admin:false, classes:[]};
+  const show=rpgGameInfo.gm || rpgGameInfo.admin || rpgGameInfo.classes.length>0;
   if(grp) grp.style.display=show?"":"none";
   if(!show && activeTab==="rpgGame"){ forceTab("idea"); render(); }
   else if(activeTab==="rpgGame") render();
@@ -9434,8 +9434,21 @@ function rRpgGame(){
         <div class="assign-folder-controls"><button class="btn rpg-go" data-id="${cl.id}">${info.gm?"GM 화면":"게임 접속"}</button></div></div>
       <div class="hint">${meta(cl)}</div></div>`).join("")
       : `<p class="hint">${info.gm?"아직 게임을 켠 수업이 없습니다. [수업 관리]에서 수업 카드의 RPG 게임 스위치를 켜 주세요.":"게임이 열린 수업이 없습니다."}</p>`}</div>
+    ${info.admin?`<div class="assign-folder class-row"><div class="assign-folder-top"><span class="assign-folder-title">${ICONS.globe} 내 시험 서버 (운영자)</span>
+        <div class="assign-folder-controls"><button class="btn rpg-test">시험 서버 열기</button></div></div>
+      <div class="hint">수업·GM 지정 없이, 나만의 서버에서 오프닝부터 4페이즈까지 혼자 돌려 봅니다. 학생이 있는 월드와는 따로입니다.</div></div>`:""}
     <p class="hint" id="rpgMsg"></p></div>`;
   app.appendChild(c);
+  const tb=c.querySelector(".rpg-test");
+  if(tb) tb.onclick=async ()=>{
+    const msg=c.querySelector("#rpgMsg");
+    const w=window.open("about:blank","_blank");
+    tb.disabled=true; msg.textContent="입장권을 받는 중…";
+    const r=await apiFetch("game", {method:"POST", body:JSON.stringify({mode:"ticket", admin:true})});
+    tb.disabled=false;
+    if(r.ok && r.body && r.body.url){ msg.textContent=""; if(w) w.location.href=r.body.url; else location.href=r.body.url; }
+    else { if(w) w.close(); msg.textContent=(r.body&&r.body.error)||"시험 서버에 들어가지 못했습니다."; }
+  };
   c.querySelectorAll(".rpg-go").forEach(btn=>{
     btn.onclick=async ()=>{
       const msg=c.querySelector("#rpgMsg");

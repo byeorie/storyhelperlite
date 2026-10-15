@@ -2,6 +2,13 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-10-15 — 운영자 전용 "내 시험 서버" 입장권
+
+- 운영자(관리자 `byeorie`)는 학생 등급이라 [회원 관리]에 GM 체크박스가 없고 수업도 없어서 게임 GM 화면에 못 들어갔다. 등급·수업을 바꾸지 않고 들어가도록 [RPG 게임] 탭에 운영자 전용 [시험 서버 열기]를 추가했다.
+- `functions/api/game.js`: GET 응답에 `admin`, POST `{mode:"ticket", admin:true}` = 수업 없는(class_id 0) role "admin" 입장권. 운영자 아이디(ADMIN_USERNAME)만 받는다. 게임 Worker도 운영자 아이디를 다시 확인해, 운영자마다 따로 열리는 시험 서버로 바로 들어가게 한다.
+- `app.js`: rpgGameInfo.admin, rRpgGame 에 "내 시험 서버" 카드.
+- 게임 Worker 를 먼저 배포한 뒤에 스토리가이드를 배포할 것(게임이 role "admin" 입장권을 알아야 함).
+
 ## 2026-10-15 — RPG 게임 GM 화면 막힘의 진짜 원인: 게임이 옛 DB에 연결돼 있었음
 
 - 게임 Worker가 `storyhelperlite-db`(7월에 쓰던 옛 DB, 회원 4명)에 연결되어 있어 입장권(`game_tickets`)을 찾지 못했다. 운영 DB는 `storyguide-db`(f47fdcf0-…)다.
