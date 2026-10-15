@@ -882,7 +882,7 @@ const PRACTICE_TOPICS=[
   {id:"romance", num:"③", title:"로맨스 글쓰기 실습", tag:"로맨스 · 설정 → 플롯 → 글쓰기",
    summary:"무작위로 뽑은 로맨스 클리셰 장면 하나에서 출발해 → 인물 · 배경 → 5부 플롯 → A4 1~2장 글까지 한 편을 끝냅니다."},
   {id:"twist", num:"④", title:"복선과 반전 실습", tag:"복선 · 반전 · P‑H‑P",
-   summary:"장치를 구분하고 → 반전을 해부하고 → 단서를 숨기고 → 실패를 진단한 뒤, 반전 하나와 복선 3개를 P‑H‑P 표로 설계합니다."}
+   summary:"장치를 구분하고 → 반전을 해부하고 → 단서를 숨기고 → 실패를 진단한 뒤, 반전 하나와 복선 3개를 P‑H‑P 표로 설계합니다. 무작위 반전 결말로 이야기를 거꾸로 짓는 연습도 있습니다."}
 ];
 
 const BUILDUP_INTRO=`<b>빌드업</b>은 독자에게 기대를 만들고(셋업) → 그 기대를 늘리고 조이다가(지연·고조) → 터뜨리거나 비트는(페이오프) 과정입니다.
@@ -2595,7 +2595,7 @@ const TWIST_INTRO=`<b>복선</b>은 뒤에 올 사건을 미리 엎드려 깔아
     <li><b>반전 = 놀라움 × 필연성</b> — 뜻밖이면서도 인과로 이어질 때 효과가 가장 크다(아리스토텔레스 『시학』)</li>
     <li><b>좋은 반전은 독자를 속이되, 독자에게 공정하다</b> — 단서는 처음부터 독자 눈앞에 있었다</li>
   </ul>
-  아래 연습을 순서대로 해 보세요. 마지막 <b>⑤ 반전 설계표</b>가 수업 과제(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검) 양식입니다.`;
+  아래 연습을 순서대로 해 보세요. <b>⑤ 반전 설계표</b>가 수업 과제(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검) 양식이고, <b>⑥ 반전 결말 이야기</b>에서는 무작위로 뽑은 반전 결말에 맞춰 이야기를 거꾸로 지어 봅니다.`;
 
 /* 비슷하지만 다른 네 장치 — 독자에게 보이나 · 회수되나 · 목적 */
 const TWIST_DEVICES=[
@@ -2705,6 +2705,20 @@ const PRACTICE_TWIST_EXERCISES=[
               ["복선 3 · 대사","심기: 문자 \"넌 날 알아. 아주 잘.\" / 처음 볼 땐: 스토커의 협박 / 다시 볼 땐: 말 그대로의 사실","겹치기 → 깨달음의 얼굴"],
               ["숨길까 보여줄까","서프라이즈 — 독자도 하린처럼 문자의 주인을 끝까지 몰라야 '나를 가장 모르는 건 나'라는 주제가 산다"]],
        point:"세 복선이 모두 독자 눈앞에 있었다(공정성). 기억을 잃었다는 설정이 1화에 있어서 반전이 인과에서 자란다(필연성). 다시 보면 협박 문자가 자기 자신에게 쓴 편지로 읽힌다(재관람 가치)."}
+   }},
+  {id:"story", num:"⑥", title:"반전 결말 이야기", summary:"무작위로 뽑은 반전 결말을 위해 이야기를 거꾸로 짓는다",
+   concept:`[반전 결말 뽑기]를 누르면 반전 결말 하나가 나옵니다. 이번엔 결말이 먼저 정해져 있고, 여러분은 그 결말이 <b>"어? → 아…!"</b>가 되도록 이야기를 <b>거꾸로</b> 짓습니다.<br>
+     반전이 있는 이야기는 <b>두 겹</b>입니다. 독자가 처음 읽으며 믿는 <b>표면 이야기</b>와, 반전 뒤에 드러나는 <b>진짜 이야기</b>. 칸마다 두 겹을 함께 적고, 복선을 심을 칸에 ★을 표시해 숨기기 기법을 고르세요(3칸 이상).<br>
+     마지막 칸 <b>반전 직전</b>은 독자의 믿음이 가장 단단해지는 순간입니다 — 그래야 반전이 가장 세게 터집니다. 다 쓰면 [⑤ 반전 설계표로 가져가기]로 과제 양식에 옮길 수 있습니다.`,
+   examples:{
+     "수호신 나무":{setup:["뽑은 결말","마을을 지키던 수호신은 사실 마을 사람들을 가둬 두던 간수였다. (세계관 반전)"],
+       steps:[["표면 / 진짜","표면: 산골 소녀 단이가 시들어 가는 수호신 나무를 살리려 애쓴다. / 진짜: 나무가 시들수록 마을을 묶어 둔 속박이 풀리고 있다.","두 겹"],
+              ["1 시작 ★","표면: 마을 사람들은 '산을 넘으면 병에 걸린다'며 아무도 떠나지 않는다. 매일 아침 나무에 절을 한다. / 진짜: 떠나려는 사람에게 병을 내리는 것이 나무다.","익히기"],
+              ["2 전개 ★","표면: 나무가 시들자 단이가 약초를 구하러 산 중턱까지 간다. 웬일인지 그날 단이의 오랜 기침이 멎는다. / 진짜: 나무가 약해져 단이에게 걸린 병도 풀린 것.","덮기"],
+              ["3 위기 ★","표면: 할머니가 \"나무가 살아야 우리가 산다\"며 단이를 말린다. / 진짜: 할머니는 진실을 알고, 나무를 건드린 단이가 벌받을까 봐 막는 것.","겹치기"],
+              ["4 반전 직전","표면: 단이가 마지막 약초를 들고 나무 앞에 선다. 마을 사람들이 모두 나와 응원한다. / 진짜: 응원하는 얼굴들이 모두 겁에 질려 있다.",""],
+              ["반전 장면","약초를 묻으려 뿌리를 파던 단이가 마을 사람들의 이름이 새겨진 쇠사슬을 발견한다. 기침이 멎던 날, 할머니의 말, 아침마다의 절이 한꺼번에 스친다.","플래시백 몽타주"]],
+       point:"결말이 먼저 정해져 있으니 '진짜 이야기'부터 적고, 그것을 독자에게 어떻게 다르게 보이게 할지(표면)를 정했다. 복선 세 칸이 각각 다른 숨기기 기법을 쓴다."}
    }}
 ];
 
@@ -2719,6 +2733,7 @@ function blankTwistState(id){
   if(id==="anatomy") return {work:"", twist:"", type:"", plant:"", hide:"", payoff:"", rewatch:"", grades:{}, note:""};
   if(id==="hide")    return {prompt:0, customTwist:"", customClue:"", bury:"", cover:"", divert:"", double:"", habit:"", best:"", fair:""};
   if(id==="fail")    return {picks:{}, fixCase:"", fix:""};
+  if(id==="story")   return {idx:null, custom:"", customType:"", surface:"", truth:"", hero:"", key:"", world:"", beats:TWIST_STORY_BEATS.map(blankTwistBeat), pay:"", reveal:"", after:""};
   if(id==="design")  return {twist:"", type:"", surprise:"", necessity:"", mode:"", modeWhy:"", clues:[blankTwistClue(),blankTwistClue(),blankTwistClue()], theme:"", self:{}};
   return {};
 }
@@ -2788,7 +2803,7 @@ function renderTwistStep(body){
   const checksBox=document.createElement("div"); checksBox.className="pr-checks";
   const refreshChecks=()=>renderBuildupChecks(checksBox, twistChecks(ex.id, st));
 
-  const builders={devices:buildTwistDevicesWork, anatomy:buildTwistAnatomyWork, hide:buildTwistHideWork, fail:buildTwistFailWork, design:buildTwistDesignWork};
+  const builders={devices:buildTwistDevicesWork, anatomy:buildTwistAnatomyWork, hide:buildTwistHideWork, fail:buildTwistFailWork, design:buildTwistDesignWork, story:buildTwistStoryWork};
   builders[ex.id](work, st, rerender, refreshChecks);
 
   body.appendChild(checksBox);
@@ -3004,6 +3019,145 @@ function buildTwistDesignWork(work, st, rerender, refreshChecks){
   work.appendChild(self);
 }
 
+/* ⑥ 반전 결말 이야기 — 두 겹 플롯의 네 칸 */
+const TWIST_STORY_BEATS=[
+  {name:"시작", guide:"인물과 세계, 독자가 믿게 될 '표면 이야기'를 세운다. 첫 복선은 일상 속에."},
+  {name:"전개", guide:"사건이 굴러가며 표면 이야기가 그럴듯해진다. 진짜 이야기의 흔적이 슬쩍 비친다."},
+  {name:"위기", guide:"갈등이 커진다. 두 가지로 읽히는 대사 · 행동을 넣기 좋은 자리."},
+  {name:"반전 직전", guide:"독자의 믿음이 가장 단단해지는 순간 — 그래야 반전이 가장 세게 터진다."}
+];
+function blankTwistBeat(){ return {surface:"", truth:"", clue:false, hide:""}; }
+/* 지금 뽑은 반전 결말 — {t, type, need[], custom?} 또는 null */
+function twistEnding(st){
+  if(st.idx===-1){ const t=(st.custom||"").trim(); return t?{t, type:st.customType||"", need:[], custom:true}:null; }
+  if(typeof st.idx==="number" && TWIST_ENDINGS[st.idx]) return TWIST_ENDINGS[st.idx];
+  return null;
+}
+function twistStoryHasWriting(st){
+  return [st.surface,st.truth,st.hero,st.key,st.world,st.reveal,st.after].some(v=>String(v||"").trim())
+    || (st.beats||[]).some(b=>String(b.surface||"").trim()||String(b.truth||"").trim());
+}
+
+/* ⑥ 반전 결말 이야기 */
+function buildTwistStoryWork(work, st, rerender, refreshChecks){
+  if(!Array.isArray(st.beats)) st.beats=[];
+  while(st.beats.length<TWIST_STORY_BEATS.length) st.beats.push(blankTwistBeat());
+  const end=twistEnding(st);
+  const okToChange=()=>!twistStoryHasWriting(st)
+    || confirm("이미 이 결말로 쓴 이야기가 있습니다.\n결말을 바꿔도 쓴 내용은 지워지지 않지만, 새 결말에 맞게 고쳐야 합니다. 바꿀까요?");
+  const draw=()=>{
+    if(!okToChange()) return;
+    let n; do{ n=Math.floor(Math.random()*TWIST_ENDINGS.length); }while(TWIST_ENDINGS.length>1 && n===st.idx);
+    st.idx=n; save(); rerender();
+  };
+
+  /* 뽑은 결말 카드 (로맨스 실습의 장면 카드와 같은 모양) */
+  const card=document.createElement("div"); card.className="pr-ro-card"+(end?"":" empty");
+  if(!end){
+    card.innerHTML=`<div class="pr-ro-card-q">?</div><p>반전 결말 ${TWIST_ENDINGS.length}개 중 하나가 무작위로 나옵니다.</p>`;
+    const b=document.createElement("button"); b.type="button"; b.className="btn"; b.textContent="반전 결말 뽑기";
+    b.onclick=draw;
+    card.appendChild(b);
+  }else{
+    card.innerHTML=`<div class="pr-ro-card-label">${end.custom?"직접 정한 반전 결말":`반전 결말 · ${st.idx+1} / ${TWIST_ENDINGS.length}`}</div>
+      <div class="pr-ro-card-t">${esc(end.t)}</div>
+      ${end.type?`<div class="pr-ro-card-row"><span class="pr-case-tag">유형</span>${esc(twistName(TWIST_TYPES,end.type))} — ${esc((TWIST_TYPES.find(t=>t.id===end.type)||{}).q||"")}</div>`:""}
+      ${end.need&&end.need.length?`<div class="pr-ro-card-row"><span class="pr-case-tag">이 반전이 서려면</span>${end.need.map(n=>esc(n)).join(" · ")}</div>`:""}`;
+    const again=document.createElement("button"); again.type="button"; again.className="btn ghost sm pr-ro-again"; again.textContent="다시 뽑기";
+    again.onclick=draw;
+    card.appendChild(again);
+  }
+  work.appendChild(card);
+
+  /* 목록에서 고르기 · 직접 입력 */
+  const pick=document.createElement("details"); pick.className="pr-ro-pick";
+  pick.open=st.idx===-1;
+  pick.innerHTML=`<summary>목록에서 고르거나 직접 쓰기</summary>
+    <select class="pr-prompt-sel"><option value="">— 반전 결말 고르기 —</option>${TWIST_ENDINGS.map((e,i)=>`<option value="${i}">${esc(e.t)}</option>`).join("")}<option value="-1">직접 입력…</option></select>
+    <div class="pr-tw-custom" ${st.idx===-1?"":"hidden"}><textarea class="ta-line pr-custom" placeholder="직접 정한 반전 결말 (예: 주인공을 구해 준 은인이 사실 주인공을 위험에 빠뜨린 장본인이었다)"></textarea></div>`;
+  const sel=pick.querySelector("select"), custom=pick.querySelector(".pr-custom");
+  const showCur=()=>{ sel.value=st.idx===null||st.idx===undefined?"":String(st.idx); };
+  showCur();
+  custom.value=st.custom||"";
+  sel.onchange=()=>{
+    if(sel.value==="" || !okToChange()){ showCur(); return; }
+    st.idx=Number(sel.value); save(); rerender();
+  };
+  custom.oninput=()=>{ st.custom=custom.value; save(); refreshChecks(); };
+  if(st.idx===-1) pick.querySelector(".pr-tw-custom").appendChild(practicePills("유형", TWIST_TYPES.map(t=>({id:t.id, label:t.name, title:t.q})), st.customType, v=>{ st.customType=v; save(); refreshChecks(); }, true));
+  work.appendChild(pick);
+  if(!end) return;
+
+  const set=key=>v=>{ st[key]=v; save(); refreshChecks(); };
+  const row=document.createElement("div"); row.className="plan-row";
+  row.appendChild(practiceField("표면 이야기 <span class=\"pr-sub\">처음 읽을 때</span>","반전 전까지 독자가 믿는 이야기를 한 줄로.",
+    st.surface,"예: 산골 소녀 단이가 시들어 가는 수호신 나무를 살리려 애쓴다.",set("surface"),"pr-expect"));
+  row.appendChild(practiceField("진짜 이야기 <span class=\"pr-sub\">반전 뒤</span>","같은 사건이 사실은 무엇이었나를 한 줄로. 결말에서 거꾸로 생각하세요.",
+    st.truth,"예: 나무가 시들수록 마을을 묶어 둔 속박이 풀리고 있다.",set("truth")));
+  work.appendChild(row);
+
+  const who=document.createElement("div"); who.className="plan-block";
+  who.innerHTML=`<label>인물 · 배경</label><p class="plan-guide">한 줄씩. 위의 <b>"이 반전이 서려면"</b>을 여기서 미리 깔아 두세요.</p>`;
+  who.appendChild(romanceLine("주인공", st.hero, "누가 이 이야기를 겪나 — 예: 기침을 달고 사는 산골 소녀 단이", set("hero")));
+  who.appendChild(romanceLine("반전의 열쇠를 쥔 인물 · 존재", st.key, "반전으로 정체 · 의미가 뒤집히는 것 — 예: 마을의 수호신 나무, 진실을 아는 할머니", set("key")));
+  who.appendChild(romanceLine("배경 · 세계의 규칙", st.world, "언제 · 어디서 · 어떤 규칙 — 예: 산을 넘으면 병에 걸린다고 믿는 외딴 마을", set("world")));
+  work.appendChild(who);
+
+  const plot=document.createElement("div"); plot.className="plan-block";
+  plot.innerHTML=`<label>두 겹 플롯</label><p class="plan-guide">칸마다 독자가 보는 것(표면)과 사실은 무엇인지(진짜)를 함께 적고, 복선을 심을 칸에 ★을 켜세요. 복선은 3칸 이상.</p>`;
+  st.beats.slice(0,TWIST_STORY_BEATS.length).forEach((b,i)=>{
+    const B=TWIST_STORY_BEATS[i];
+    const box=document.createElement("div"); box.className="pr-tw-clue pr-tw-beat"+(b.clue?" on":"");
+    box.innerHTML=`<div class="pr-beat-head"><span class="pr-beat-num">${i+1} ${esc(B.name)}</span><span class="pr-beat-role">${esc(B.guide)}</span></div>
+      <div class="pr-tw-cols pr-tw-cols2">
+        <div class="pr-tw-col"><div class="pr-tw-col-h">표면 <span class="pr-sub">처음 읽을 때</span></div><textarea class="pr-tw-s" placeholder="독자가 보고 믿는 것"></textarea></div>
+        <div class="pr-tw-col"><div class="pr-tw-col-h">진짜 <span class="pr-sub">다시 읽을 때</span></div><textarea class="pr-tw-t" placeholder="사실은 무엇이었나"></textarea></div>
+      </div>
+      <div class="pr-tw-beat-clue"></div>`;
+    const ts=box.querySelector(".pr-tw-s"), tt=box.querySelector(".pr-tw-t");
+    ts.value=b.surface||""; tt.value=b.truth||"";
+    ts.oninput=()=>{ b.surface=ts.value; save(); refreshChecks(); };
+    tt.oninput=()=>{ b.truth=tt.value; save(); refreshChecks(); };
+    const clueRow=box.querySelector(".pr-tw-beat-clue");
+    const drawClue=()=>{
+      clueRow.innerHTML="";
+      clueRow.appendChild(practicePills("", [{id:"on", label:"★ 여기에 복선 심기"}], b.clue?"on":"", v=>{ b.clue=v==="on"; box.classList.toggle("on", b.clue); save(); drawClue(); refreshChecks(); }, true));
+      if(b.clue) clueRow.appendChild(practicePills("숨기기", TWIST_HIDES.map(h=>({id:h.id, label:h.name, title:h.desc})), b.hide, v=>{ b.hide=v; save(); refreshChecks(); }, true));
+    };
+    drawClue();
+    plot.appendChild(box);
+  });
+  work.appendChild(plot);
+
+  const rev=document.createElement("div"); rev.className="plan-block pr-tw-reveal";
+  rev.innerHTML=`<label>반전 장면</label><p class="plan-guide">뽑은 결말이 드러나는 순간. 심어 둔 복선을 어떻게 거둘지 고르고, 장면을 적으세요.</p>
+    <div class="pr-case-row"><span class="pr-case-tag twist">결말</span>${esc(end.t)}</div>`;
+  rev.appendChild(practicePills("거두기", TWIST_PAYOFFS.map(p=>({id:p.id, label:p.name, title:p.desc})), st.pay, set("pay"), true));
+  const rt=document.createElement("textarea"); rt.placeholder="예: 약초를 묻으려 뿌리를 파던 단이가 마을 사람들의 이름이 새겨진 쇠사슬을 발견한다. 기침이 멎던 날, 할머니의 말이 한꺼번에 스친다.";
+  rt.value=st.reveal||""; rt.oninput=()=>{ st.reveal=rt.value; save(); refreshChecks(); };
+  rev.appendChild(rt);
+  work.appendChild(rev);
+  work.appendChild(practiceField("반전 뒤 <span class=\"pr-sub\">(선택)</span>","진실을 안 주인공은 무엇을 선택하나? 반전이 놀라움으로 끝나지 않고 이야기의 질문으로 이어지게.",
+    st.after,"예: 단이는 나무를 살릴지, 그대로 시들게 둘지 선택해야 한다.",set("after")));
+
+  /* ⑤ 반전 설계표로 — 반전 · 유형 · 놀라움/필연성 · 복선 칸을 옮긴다 */
+  const go=document.createElement("button"); go.type="button"; go.className="btn sm pr-tw-to-design";
+  go.textContent="이 반전을 ⑤ 반전 설계표로 가져가기 →";
+  go.onclick=()=>{
+    const d=twistState("design");
+    const filled=[d.twist,d.surprise,d.necessity].some(v=>String(v||"").trim()) || (d.clues||[]).some(c=>String(c.plant||"").trim()||String(c.first||"").trim());
+    if(filled && !confirm("⑤ 반전 설계표에 이미 쓴 내용이 있습니다. 반전 · 놀라움 · 필연성 · 복선 칸을 이 이야기로 덮어쓸까요?")) return;
+    d.twist=end.t; d.type=end.type||"";
+    d.surprise=String(st.surface||"").trim(); d.necessity=String(st.truth||"").trim();
+    const clues=st.beats.filter(b=>b.clue).slice(0,3);
+    if(!Array.isArray(d.clues)) d.clues=[];
+    while(d.clues.length<3) d.clues.push(blankTwistClue());
+    clues.forEach((b,i)=>{ d.clues[i]=Object.assign(blankTwistClue(), {hide:b.hide||"", first:String(b.surface||"").trim(), second:String(b.truth||"").trim(), pay:st.pay||""}); });
+    save(); twistStep="design"; practiceAsideGenre=null; render(); window.scrollTo(0,0);
+  };
+  work.appendChild(go);
+}
+
 /* 자가 점검 — [{ok, label, tip, optional}] (renderBuildupChecks로 그린다) */
 function twistChecks(id, st){
   const has=s=>!!(s&&String(s).trim());
@@ -3049,6 +3203,19 @@ function twistChecks(id, st){
     if(new Set(clues.map(c=>c.hide).filter(Boolean)).size>=2) out.push({ok:true, label:"숨기기 기법을 두 가지 이상 섞었다", tip:"", optional:true});
     else out.push({ok:false, label:"숨기기 기법을 두 가지 이상 섞었다", tip:"같은 기법만 쓰면 독자가 패턴을 알아챕니다.", optional:true});
     if(selfN) out.push({ok:!TWIST_SELF_CHECKS.some(c=>(st.self||{})[c.id]==="x"), label:"스스로 점검에 X가 없다", tip:"X가 나온 항목의 설명을 읽고 설계표를 고쳐 보세요.", optional:true});
+  }else if(id==="story"){
+    const beats=(st.beats||[]).slice(0,TWIST_STORY_BEATS.length), clues=beats.filter(b=>b.clue);
+    const sN=beats.filter(b=>has(b.surface)).length, diff=beats.filter(b=>has(b.truth)&&String(b.truth).trim()!==String(b.surface||"").trim()).length;
+    out.push({ok:!!twistEnding(st), label:"반전 결말을 뽑았다", tip:"[반전 결말 뽑기]를 누르거나, 목록에서 고르거나, 직접 써 주세요."});
+    out.push({ok:has(st.surface)&&has(st.truth), label:"표면 이야기와 진짜 이야기를 모두 적었다", tip:"반전이 있는 이야기는 두 겹입니다. 결말에서 거꾸로 '진짜 이야기'부터 적어 보세요."});
+    out.push({ok:has(st.hero)&&has(st.world), label:"주인공과 배경을 정했다", tip:""});
+    out.push({ok:sN===TWIST_STORY_BEATS.length, label:`네 칸의 표면을 모두 채웠다 (${sN} / ${TWIST_STORY_BEATS.length})`, tip:""});
+    out.push({ok:clues.length>=3, label:`복선을 3칸 이상 심었다 (지금 ${clues.length}칸)`, tip:"★ 여기에 복선 심기를 켜세요. 단서가 없으면 '심지 않은 반전'이 됩니다."});
+    out.push({ok:clues.length>0&&clues.every(b=>b.hide&&has(b.truth)), label:"복선 칸마다 숨기기 기법과 '진짜'를 적었다", tip:"진짜 칸이 비어 있으면 다시 볼 때 무엇이 보이는지 알 수 없습니다."});
+    out.push({ok:!!st.pay&&has(st.reveal), label:"반전 장면과 거두기 방식을 정했다", tip:""});
+    out.push({ok:diff>=3, label:"표면과 진짜가 다른 칸이 3칸 이상이다", tip:"같은 사건이 두 번 다르게 읽혀야 재관람 가치가 생깁니다.", optional:true});
+    if(clues.length>=2) out.push({ok:new Set(clues.map(b=>b.hide).filter(Boolean)).size>=2, label:"숨기기 기법을 두 가지 이상 섞었다", tip:"같은 기법만 쓰면 독자가 패턴을 알아챕니다.", optional:true});
+    out.push({ok:has(st.after), label:"반전 뒤 주인공의 선택을 적었다", tip:"", optional:true});
   }
   return out;
 }
@@ -3094,6 +3261,18 @@ function twistItems(ex, st){
     });
     add("theme","⑤ 주제 강화",st.theme);
     add("self","⑥ 스스로 점검", TWIST_SELF_CHECKS.filter(c=>(st.self||{})[c.id]).map(c=>`${st.self[c.id]==="o"?"O":"X"}  ${c.q}`).join("\n"));
+  }else if(ex.id==="story"){
+    const end=twistEnding(st);
+    add("ending","반전 결말"+(end&&end.type?` · ${twistName(TWIST_TYPES,end.type)}`:""), end?end.t:"");
+    add("layers","표면 / 진짜 이야기", [T(st.surface)?`표면: ${T(st.surface)}`:"", T(st.truth)?`진짜: ${T(st.truth)}`:""].filter(Boolean).join("\n"));
+    add("setting","인물 · 배경", [["주인공",st.hero],["열쇠",st.key],["배경",st.world]].filter(x=>T(x[1])).map(x=>`${x[0]}: ${T(x[1])}`).join("\n"));
+    (st.beats||[]).slice(0,TWIST_STORY_BEATS.length).forEach((b,i)=>{
+      const hide=twistName(TWIST_HIDES,b.hide);
+      add("beat:"+i, `${i+1} ${TWIST_STORY_BEATS[i].name}${b.clue?` ★ 복선${hide?" · "+hide:""}`:""}`,
+        [T(b.surface)?`표면: ${T(b.surface)}`:"", T(b.truth)?`진짜: ${T(b.truth)}`:""].filter(Boolean).join("\n"));
+    });
+    add("reveal","반전 장면"+(st.pay?` · ${twistName(TWIST_PAYOFFS,st.pay)}`:""), st.reveal);
+    add("after","반전 뒤",st.after);
   }
   return items;
 }
@@ -11444,7 +11623,7 @@ const GUIDE_SECTIONS=[
       <li><b>빌드업 실습</b>(공포 · 코미디): <b>거꾸로 쌓기</b>(결말을 받고 앞의 비트만 쓰기, 긴장 곡선) · <b>3의 법칙</b>(확립 → 반복 → 깨기) · <b>순간 늘리기</b>(같은 순간을 1컷 · 3컷 · 7컷으로) · <b>장르 바꾸기</b>(같은 빌드업에 공포 · 코미디 결말) · <b>정보 통제 표</b>(독자와 인물이 아는 것 비교) 5가지 연습이 있습니다.</li>
       <li><b>클리셰 비틀기 실습</b>: <b>클리셰 지도</b>(장르의 인물 · 설정 · 전개 · 장면 · 대사, 단어/문법 구분) · <b>비틀기 감별</b>(실제 작품이 무엇을 · 누가 · 어떻게 · 그래서 중 어느 레버를 당겼는지 맞히기) · <b>네 레버 돌리기</b> · <b>비틀기 도구 6가지</b>(반전 · 역전 · 해체 · 재구성 · 대놓고 지적하기 · 장르 이식) · <b>비틀기 기획안</b>(쾌감 → 레버 하나 → 로그라인 → 3컷 콘티 → 스스로 점검) 5가지 연습이 있습니다.</li>
       <li><b>로맨스 글쓰기 실습</b>: 다섯 단계가 한 편으로 이어집니다. <b>장면 뽑기</b>(로맨스 클리셰 장면 30개 중 무작위) → <b>인물 · 사건 · 배경</b>(그 장면이 나올 수 있게 한 줄씩) → <b>장면 자리 정하기</b>(만남 · 끌림 · 흔들림 · 고백 · 맺음 5부 중) → <b>플롯 채우기</b>(장면과 붙은 칸부터 한 칸씩, 감정 온도 곡선) → <b>글쓰기</b>(A4 1~2장, 글자 수 표시). 스토리가이드의 설정 · 플롯 · 글쓰기를 실습용으로 줄인 것입니다.</li>
-      <li><b>복선과 반전 실습</b>: <b>장치 감별</b>(복선 · 체호프의 총 · 레드헤링 · 맥거핀 구분) · <b>반전 해부</b>(내가 본 작품의 반전을 심기 · 숨기기 · 거두기와 좋은 반전 체크리스트로) · <b>숨기기 다섯 가지</b>(같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로) · <b>실패한 반전 진단</b>(실패 4유형 감별 + 고쳐 쓰기) · <b>반전 설계표</b>(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검, 수업 과제 양식) 5가지 연습이 있습니다.</li>
+      <li><b>복선과 반전 실습</b>: <b>장치 감별</b>(복선 · 체호프의 총 · 레드헤링 · 맥거핀 구분) · <b>반전 해부</b>(내가 본 작품의 반전을 심기 · 숨기기 · 거두기와 좋은 반전 체크리스트로) · <b>숨기기 다섯 가지</b>(같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로) · <b>실패한 반전 진단</b>(실패 4유형 감별 + 고쳐 쓰기) · <b>반전 설계표</b>(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검, 수업 과제 양식) · <b>반전 결말 이야기</b>(무작위로 뽑은 반전 결말에 맞춰 표면/진짜 두 겹 플롯을 짓고 복선 칸 표시, 설계표로 가져가기) 6가지 연습이 있습니다.</li>
       <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다. 넓은 화면에서는 <b>오른쪽에 그 연습의 예시</b>(공포 · 코미디 탭)가 함께 보입니다.</li>
       <li><b>과제 제출</b>: 교수님이 "스토리텔링 실습" 종류로 낸 과제에, 연습 화면 위쪽의 <b>[제출]</b>로 <b>지금 열려 있는 연습 하나</b>를 냅니다. 첨삭은 [피드백 보기]에서 확인합니다(작품과 무관한 연습이라 [내 작업물에 반영]은 없습니다).</li>
     </ul>`},

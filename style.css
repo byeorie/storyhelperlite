@@ -1579,3 +1579,11 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .pr-tw-col .opt-btn{font-size:11.5px;padding:3px 8px}
 .pr-tw-col textarea{min-height:70px}
 @media(max-width:860px){ .pr-tw-php,.pr-tw-cols{grid-template-columns:1fr} }
+.pr-tw-cols.pr-tw-cols2{grid-template-columns:1fr 1fr}
+.pr-tw-beat.on{border-color:var(--accent);background:#fff7f3}
+.pr-tw-beat .pr-beat-role{font-size:11.5px;color:var(--muted)}
+.pr-tw-beat-clue{margin-top:8px;display:flex;flex-direction:column;gap:4px}
+.pr-tw-beat-clue .pr-genre{margin:0}
+.pr-tw-reveal .pr-genre{margin:8px 0}
+.pr-tw-to-design{margin-top:4px}
+@media(max-width:860px){ .pr-tw-cols.pr-tw-cols2{grid-template-columns:1fr} }
