@@ -766,7 +766,7 @@ function render(){
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
     app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
-      ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
+      ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
@@ -878,7 +878,9 @@ const PRACTICE_TOPICS=[
   {id:"buildup", num:"①", title:"빌드업 실습", tag:"공포 · 코미디",
    summary:"기대를 만들고 → 늘리고 → 터뜨리거나 비트는 연습 5가지. 결말부터 쓰는 습관을 고칩니다."},
   {id:"cliche", num:"②", title:"클리셰 비틀기 실습", tag:"장르 · 클리셰",
-   summary:"클리셰를 정확히 짚고 → 쾌감을 찾고 → 레버 하나로 비트는 연습 5가지. 클리셰를 피할 적이 아니라 재료로 씁니다."}
+   summary:"클리셰를 정확히 짚고 → 쾌감을 찾고 → 레버 하나로 비트는 연습 5가지. 클리셰를 피할 적이 아니라 재료로 씁니다."},
+  {id:"romance", num:"③", title:"로맨스 글쓰기 실습", tag:"로맨스 · 설정 → 플롯 → 글쓰기",
+   summary:"무작위로 뽑은 로맨스 클리셰 장면 하나에서 출발해 → 인물 · 배경 → 5부 플롯 → A4 1~2장 글까지 한 편을 끝냅니다."}
 ];
 
 const BUILDUP_INTRO=`<b>빌드업</b>은 독자에게 기대를 만들고(셋업) → 그 기대를 늘리고 조이다가(지연·고조) → 터뜨리거나 비트는(페이오프) 과정입니다.
@@ -1047,6 +1049,7 @@ function rPractice(){
   if(feedbackPage && feedbackPage.type==="practice"){ rFeedbackPage(); return; }
   if(practiceFor==="buildup"){ rPracticeBuildup(); return; }
   if(practiceFor==="cliche"){ rPracticeCliche(); return; }
+  if(practiceFor==="romance"){ rPracticeRomance(); return; }
   practiceFor=null;
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.book} 스토리텔링 실습</h2>${submitBtnHtml()}</div>
@@ -1056,7 +1059,7 @@ function rPractice(){
   wireSubmitBtn(c, "practice");
   /* 목록 화면의 [제출]은 낼 연습을 고르는 화면이 없으니, 실습 안에서 내도록 안내만 한다 */
   const sb=c.querySelector(".submit-tab-btn");
-  if(sb) sb.onclick=()=>alert("제출할 연습 화면(예: 빌드업 실습 → ① 거꾸로 쌓기, 클리셰 비틀기 실습 → ⑤ 비틀기 기획안)을 연 뒤, 그 화면의 [제출]을 눌러 주세요.\n지금 열려 있는 연습 하나가 제출됩니다.");
+  if(sb) sb.onclick=()=>alert("제출할 연습 화면(예: 빌드업 실습 → ① 거꾸로 쌓기, 클리셰 비틀기 실습 → ⑤ 비틀기 기획안, 로맨스 글쓰기 실습 → ⑤ 글쓰기)을 연 뒤, 그 화면의 [제출]을 눌러 주세요.\n지금 열려 있는 연습 하나가 제출됩니다.");
   const grid=c.querySelector("#practiceGrid");
   PRACTICE_TOPICS.forEach(t=>{
     const d=document.createElement("div"); d.className="learn-card-mini";
@@ -1116,12 +1119,13 @@ function practicePageShell(o){
   return body;
 }
 
-/* 예시 → HTML. 긴장도가 있는 예시(거꾸로 쌓기)는 미니 곡선도 함께 */
+/* 예시 → HTML. 긴장도가 있는 예시(거꾸로 쌓기)는 미니 곡선도 함께. curveLabels가 있으면(로맨스 플롯) 결말 점 없이 그 라벨로 */
 function buildupExampleHtml(exm){
   if(!exm) return "";
   const steps=exm.steps||[];
   const withT=steps.filter(s=>typeof s[3]==="number");
-  const curve=withT.length ? `<div class="pr-ex-curve">${practiceCurveSvg(withT.map((s,i)=>({label:String(i+1), v:s[3]})).concat([{label:"결말", v:10, payoff:true}]))}</div>` : "";
+  const curve=withT.length ? `<div class="pr-ex-curve">${practiceCurveSvg(exm.curveLabels ? withT.map((s,i)=>({label:exm.curveLabels[i], v:s[3], payoff:s[2]==="클리셰 장면"}))
+    : withT.map((s,i)=>({label:String(i+1), v:s[3]})).concat([{label:"결말", v:10, payoff:true}]))}</div>` : "";
   return `<div class="pr-ex-setup"><span class="pr-ex-tag">${esc(exm.setup[0])}</span>${esc(exm.setup[1])}</div>
     <ol class="pr-ex-steps">${steps.map(s=>`<li><div class="pr-ex-label">${esc(s[0])}${typeof s[3]==="number"?` <span class="pr-ex-t">긴장 ${s[3]}</span>`:""}${s[2]?` <span class="pr-ex-note">${esc(s[2])}</span>`:""}</div><div class="pr-ex-text">${esc(s[1])}</div></li>`).join("")}</ol>
     ${curve}
@@ -1144,8 +1148,8 @@ function renderPracticeAside(title, examples, preferKey){
   aside.querySelectorAll(".pr-aside-tab").forEach(b=>b.onclick=()=>{ practiceAsideGenre=b.dataset.g; renderPracticeAside(title, examples, preferKey); });
 }
 
-/* 과제 제출용 — 지금 열려 있는 실습(빌드업/클리셰)의 연습 하나 */
-function practiceSubmissionData(){ return practiceFor==="cliche" ? clicheSubmissionData() : buildupSubmissionData(); }
+/* 과제 제출용 — 지금 열려 있는 실습(빌드업/클리셰/로맨스)의 연습 하나 */
+function practiceSubmissionData(){ return practiceFor==="cliche" ? clicheSubmissionData() : practiceFor==="romance" ? romanceSubmissionData() : buildupSubmissionData(); }
 /* 과제 제출용 — 지금 열려 있는 연습 하나를 [{id,label,text}] 항목으로 바꾼다(교수 첨삭 화면의 블럭 단위) */
 function buildupSubmissionData(){
   const ex=PRACTICE_BUILDUP_EXERCISES.find(e=>e.id===practiceStep)||PRACTICE_BUILDUP_EXERCISES[0];
@@ -2034,6 +2038,541 @@ function clicheSubmissionData(){
 function clichePlainText(ex, st){
   const L=[`[클리셰 비틀기 실습 ${ex.num} ${ex.title}]`];
   clicheItems(ex, st).forEach(it=>{
+    const t=it.text||"(비어 있음)";
+    L.push("", t.includes("\n") ? `■ ${it.label}\n${t}` : `■ ${it.label}: ${t}`);
+  });
+  return L.join("\n");
+}
+
+/* ===== 💌 로맨스 글쓰기 실습 (2026-10-15) =====
+   무작위로 뽑은 로맨스 클리셰 장면 하나에서 시작해 한 편을 끝까지 써 보는 연습.
+   장면 뽑기 → 인물 · 사건 · 배경(가볍게) → 장면 자리 정하기(5부 중) → 장면에 이어 플롯 채우기 → A4 1~2장 글쓰기.
+   스토리가이드의 설정 · 플롯 · 글쓰기를 실습용으로 줄인 것. 다섯 단계가 한 이야기를 이어 쓰므로 다른 실습과 달리
+   상태가 하나(DB.practice.romance)이고, 앞 단계에서 쓴 것이 뒤 단계 화면 위쪽에 따라온다. 장면 목록은 data.js ROMANCE_SCENES */
+let romanceStep="scene";
+
+const ROMANCE_INTRO=`로맨스 독자가 기다리는 것은 결국 <b>그 장면</b>입니다 — 우산을 같이 쓰는 순간, 고백이 끊기는 순간. 이 실습은 그 장면을 <b>무작위로 하나 뽑고</b>, 그 장면이 '진짜로 설레게' 일어나도록 이야기를 거꾸로 짓는 연습입니다.
+  <ul class="pr-intro-list">
+    <li>클리셰 장면은 그것만 떼어 놓으면 설레지 않는다 — 앞에서 쌓은 인물과 관계가 장면을 설레게 만든다</li>
+    <li>같은 장면이라도 <b>어디에 두느냐</b>(첫 만남인가, 고백인가)에 따라 전혀 다른 이야기가 된다</li>
+    <li>플롯은 장면에서 출발해 앞뒤로 한 칸씩 — "이 장면이 일어나려면?" · "이 장면 때문에 무엇이 바뀌나?"</li>
+  </ul>
+  다섯 단계는 한 이야기로 이어집니다. 앞 단계에서 쓴 내용은 다음 단계 화면 위에 따라옵니다.`;
+
+/* 짧은 5부 구성 — place: 클리셰 장면을 이 칸에 두면 어떤 장면이 되는가 */
+const ROMANCE_PARTS=[
+  {name:"만남", guide:"두 사람이 처음 엮인다. 첫인상과 관계의 출발점.",
+   place:"첫 만남으로 — 가장 흔한 자리. 이 장면이 두 사람 관계의 첫인상을 정한다."},
+  {name:"끌림", guide:"엮일 수밖에 없는 일이 생기고, 서로를 다르게 보기 시작한다.",
+   place:"가까워지는 계기로 — 이 장면 뒤로 두 사람의 거리가 눈에 띄게 좁혀진다."},
+  {name:"흔들림", guide:"오해 · 경쟁자 · 비밀 · 현실의 벽. 관계가 위태로워진다.",
+   place:"설레는 장면이 오히려 갈등의 불씨가 된다(누가 봤다 · 오해가 생겼다). 달콤함 바로 뒤의 쓴맛."},
+  {name:"고백", guide:"감정이 터지는 순간. 숨기던 것이 드러나고, 선택한다.",
+   place:"클라이맥스로 — 1~3부에서 쌓은 감정이 이 장면에서 터진다. 앞에 이 장면을 위한 복선이 필요하다."},
+  {name:"맺음", guide:"관계가 어떤 모습으로 자리 잡는가 (이어짐 · 이별 · 열린 결말).",
+   place:"결말로 — 1부의 무언가를 다시 불러오면 수미상관이 된다. 같은 장면이 처음과 다른 의미로 읽힌다."}
+];
+/* A4 한 장 ≈ 1,800자(공백 포함, 10pt 기준). 목표는 한 장~두 장 */
+const ROMANCE_A4=1800, ROMANCE_MIN=1600, ROMANCE_MAX=4000;
+
+/* 오른쪽 예시 패널 — 한 이야기("우산")를 다섯 단계 내내 이어서 보여준다 */
+const ROMANCE_EX_SCENE=["뽑은 장면","비 오는 날 우산 하나를 같이 쓴다."];
+const PRACTICE_ROMANCE_EXERCISES=[
+  {id:"scene", num:"①", title:"장면 뽑기", summary:"로맨스 클리셰 장면 하나를 무작위로 뽑는다",
+   concept:`[장면 뽑기]를 누르면 로맨스에서 너무 많이 본 장면 하나가 나옵니다. 이 장면이 이번 이야기의 <b>심장</b>입니다 — 나머지는 모두 이 장면을 설레게 만들기 위해 짓습니다.<br>
+     뽑은 장면이 왜 설레는지(<b>설렘 포인트</b>)를 내 말로 적어 보세요. 장면의 겉모습(우산)이 아니라 그 안의 감정(한쪽 어깨만 젖는 배려)을 찾는 것이 핵심입니다.
+     도저히 쓰고 싶지 않은 장면이면 다시 뽑아도 됩니다.`,
+   examples:{"예시":{setup:ROMANCE_EX_SCENE,
+     steps:[["설렘 포인트 (내 말로)","우산이 작아서 한 사람 어깨만 젖는다. 누가 젖는 쪽을 고르는지를 보면, 말하지 않은 마음이 보인다."],
+            ["이 장면이 나오려면","우산이 하나뿐인 이유 · 같은 방향으로 가야 하는 이유","다음 단계 재료"],
+            ["보통 놓이는 자리","2부 끌림 — 가까워지는 계기"]],
+     point:"'비 오는 날 우산'은 겉모습일 뿐이다. 설렘 포인트를 '젖는 어깨'로 잡아 두면, 다음 단계에서 누구의 어깨가 왜 젖는지를 설계할 수 있다."}}},
+  {id:"setup", num:"②", title:"인물 · 사건 · 배경", summary:"그 장면이 나올 수 있게 가볍게 설정한다",
+   concept:`뽑은 장면이 <b>자연스럽게 일어날 수 있는</b> 두 사람과 세계를 가볍게 정합니다. 칸마다 한 줄이면 충분합니다.<br>
+     인물은 <b>원하는 것</b>과 <b>숨기는 것</b>만 있어도 움직이기 시작합니다. 장애물(왜 쉽게 이어지지 못하나)이 없으면 로맨스는 1부에서 끝나 버립니다.<br>
+     위쪽의 <b>"이 장면이 나오려면"</b> 목록을 설정 안에 하나씩 녹여 보세요.`,
+   examples:{"예시":{setup:ROMANCE_EX_SCENE,
+     steps:[["인물 A","한서윤 — 대학가 편의점 야간 알바생, 미대 휴학 중. 원하는 것: 학자금을 갚고 조용히 졸업하기. 숨기는 것: 그림을 그만둔 이유(공모전 표절 누명)."],
+            ["인물 B","강도현 — 매일 새벽 2시 삼각김밥을 사 가는 손님, 웹툰 작가 지망생. 원하는 것: 연재 데뷔. 숨기는 것: 서윤의 옛 그림을 보고 그림을 시작했다."],
+            ["처음 관계","이름도 모르는 점원과 단골손님"],
+            ["배경","장마철, 대학가 24시 편의점","우산이 필요한 계절"],
+            ["사건","도현이 계산대에 스케치북을 두고 간다"],
+            ["장애물","서윤은 그림 이야기만 나오면 마음을 닫는다"]],
+     point:"배경을 장마철 편의점으로 정하자 '우산이 하나뿐인 이유'와 '같은 방향'이 저절로 생겼다. 장면에 필요한 것을 설정이 미리 깔아 준다."}}},
+  {id:"place", num:"③", title:"장면 자리 정하기", summary:"5부 중 어디에 그 장면을 둘지 고른다",
+   concept:`플롯을 쓰기 전에 <b>뽑은 장면을 어디에 둘지</b>부터 정합니다. 짧은 5부 구성은 <b>만남 → 끌림 → 흔들림 → 고백 → 맺음</b>입니다.<br>
+     같은 장면이라도 자리에 따라 역할이 바뀝니다. 1부에 두면 첫 만남, 3부에 두면 갈등의 불씨, 4부에 두면 감정이 터지는 클라이맥스가 됩니다.<br>
+     장면마다 <b>보통 놓이는 자리</b>가 있습니다. 일부러 다른 자리에 두면 그것만으로도 작은 비틀기가 됩니다.`,
+   examples:{"예시":{setup:ROMANCE_EX_SCENE,
+     steps:[["고른 자리","4부 고백","보통은 2부"],
+            ["이유","장마철이라 1부부터 비를 계속 깔 수 있다. 그동안 우산을 '빌려주기만' 하던 두 사람이 처음으로 같은 우산 아래 서는 순간을 고백으로 쓰고 싶다."]],
+     point:"보통 2부에 오는 장면을 4부로 미뤘다. 그만큼 1~3부에서 '우산'을 여러 번 보여주며 기대를 쌓아야 한다."}}},
+  {id:"plot", num:"④", title:"플롯 채우기", summary:"장면에서 출발해 앞뒤 칸을 하나씩 채운다",
+   concept:`고른 칸에는 이미 클리셰 장면이 들어 있습니다. 이제 <b>장면과 붙어 있는 칸부터</b> 한 칸씩 채웁니다('다음에 채울 칸' 표시를 따라가면 됩니다).<br>
+     장면 <b>앞</b> 칸은 "이 장면이 일어나려면 무엇이 먼저 있어야 하나?", 장면 <b>뒤</b> 칸은 "이 장면 때문에 무엇이 바뀌었나?"를 묻습니다. 칸마다 한두 문장이면 충분합니다.<br>
+     칸마다 <b>감정 온도</b>(두 사람의 마음이 얼마나 가까운가)를 매기면 곡선이 그려집니다. 로맨스의 곡선은 한 번 <b>내려갔다가</b>(흔들림) 올라갈 때 가장 설렙니다.`,
+   examples:{"예시":{setup:["장면 자리","4부 고백 — 비 오는 날 우산 하나를 같이 쓴다."],
+     steps:[["1부 만남","새벽 2시, 비에 젖은 도현이 삼각김밥과 우산을 산다. 다음 날도, 그다음 날도 우산을 산다. 서윤: \"우산 모으세요?\"","",2],
+            ["2부 끌림","도현이 두고 간 스케치북. 서윤은 자기 옛 그림을 닮은 그림을 발견하고, 몰래 한 장에 코멘트를 남긴다.","",5],
+            ["3부 흔들림","코멘트의 주인을 알게 된 도현이 같이 그려 달라고 한다. 서윤은 표절 누명 이야기를 꺼내며 거절하고 근무 시간을 바꿔 버린다.","",3],
+            ["4부 고백 ★","장마 마지막 날, 퇴근하는 서윤 앞에 도현이 우산 하나를 들고 서 있다. 같이 걷는 동안 도현의 어깨만 젖는다. \"당신 그림 보고 시작했어요. 그러니까 그 그림, 표절이라는 말 안 믿어요.\"","클리셰 장면",9],
+            ["5부 맺음","도현의 첫 연재 날 새벽 2시. 계산대 위 휴대폰에 열린 1화의 마지막 컷 — 우산 하나를 같이 쓰는 두 사람. 그림: 한서윤.","",7]],
+     curveLabels:["1부","2부","3부","4부","5부"],
+     point:"4부(장면)에서 출발해 5부(그래서 어떻게 됐나) → 3부(왜 멀어졌나) → 2부(어떻게 가까워졌나) → 1부(우산의 시작) 순서로 채웠다. 3부에서 온도를 내려 둔 덕분에 4부가 더 높게 느껴진다."}}},
+  {id:"write", num:"⑤", title:"글쓰기", summary:"플롯을 바탕으로 A4 1~2장 분량을 쓴다",
+   concept:`완성한 플롯을 따라 실제 글로 씁니다. 칸마다 위에 내 플롯이 따라오니, 그 내용을 장면으로 풀어 쓰면 됩니다. 목표 분량은 <b>A4 한 장~두 장</b>(공백 포함 약 ${ROMANCE_MIN.toLocaleString()}~${ROMANCE_MAX.toLocaleString()}자)입니다.<br>
+     분량을 고르게 나누지 않아도 됩니다. 오히려 <b>클리셰 장면이 들어간 부분은 넉넉히</b> — 손끝 · 소리 · 표정 같은 디테일로 그 순간을 늘려야 설렘이 생깁니다(빌드업 실습의 '순간 늘리기').
+     나머지 칸은 요약하듯 빠르게 지나가도 괜찮습니다.`,
+   examples:{"예시":{setup:["4부 고백 ★","비 오는 날 우산 하나를 같이 쓴다. (본문 일부)"],
+     steps:[["본문","비는 그칠 생각이 없었다. 셔터를 내리고 돌아섰을 때, 서윤은 우산을 하나만 든 사람을 봤다.\n\"또 우산 사러 왔어요?\"\n도현은 대답 대신 우산을 조금 기울였다. 둘이 쓰기엔 작은 우산이었다. 횡단보도 세 개를 건너는 동안 서윤은 한 번도 젖지 않았고, 도현의 왼쪽 어깨는 점점 짙은 색이 되어 갔다."]],
+     point:"우산 장면을 한 문장으로 지나치지 않고, 젖어 가는 어깨로 시간을 늘렸다. 고백 대사보다 행동이 마음을 먼저 말한다."}}}
+];
+
+function blankRomancePerson(){ return {name:"", desc:"", want:"", hide:""}; }
+function blankRomanceState(){
+  return {sceneIdx:null, sceneCustom:"", thrill:"",
+    a:blankRomancePerson(), b:blankRomancePerson(), relation:"", world:"", event:"", obstacle:"",
+    anchor:null, anchorWhy:"",
+    plot:[3,4,5,6,7].map(t=>({text:"", temp:t})),
+    title:"", parts:["","","","",""]};
+}
+function practiceRomanceStore(){
+  if(!DB.practice||typeof DB.practice!=="object") DB.practice={};
+  if(!DB.practice.romance||typeof DB.practice.romance!=="object") DB.practice.romance={};
+  const st=DB.practice.romance;
+  /* 빠진 칸만 채운다(예전 저장본 · 단계별 초기화 뒤에도 안전하게) */
+  const blank=blankRomanceState();
+  Object.keys(blank).forEach(k=>{ if(st[k]===undefined) st[k]=blank[k]; });
+  ["a","b"].forEach(k=>{ if(!st[k]||typeof st[k]!=="object") st[k]=blankRomancePerson(); });
+  if(!Array.isArray(st.plot)) st.plot=blank.plot;
+  while(st.plot.length<5) st.plot.push({text:"", temp:5});
+  if(!Array.isArray(st.parts)) st.parts=blank.parts;
+  while(st.parts.length<5) st.parts.push("");
+  return st;
+}
+/* 단계별 [처음부터 다시] — 그 단계에서 쓴 칸만 지운다 */
+const ROMANCE_STEP_KEYS={scene:["sceneIdx","sceneCustom","thrill"], setup:["a","b","relation","world","event","obstacle"],
+  place:["anchor","anchorWhy"], plot:["plot"], write:["title","parts"]};
+function romanceResetStep(id){
+  const st=practiceRomanceStore(), blank=blankRomanceState();
+  (ROMANCE_STEP_KEYS[id]||[]).forEach(k=>{ st[k]=blank[k]; });
+}
+/* 지금 장면 — {t, thrill?, need?, part?, custom?} 또는 null */
+function romanceScene(st){
+  if(st.sceneIdx===-1){ const t=(st.sceneCustom||"").trim(); return t?{t, custom:true, need:[], part:null}:null; }
+  if(typeof st.sceneIdx==="number" && ROMANCE_SCENES[st.sceneIdx]) return ROMANCE_SCENES[st.sceneIdx];
+  return null;
+}
+const romancePartLabel=i=>`${i+1}부 ${ROMANCE_PARTS[i].name}`;
+function romanceWriteCount(st){ return (st.parts||[]).reduce((n,p)=>n+String(p||"").trim().length, 0); }
+/* 앞 단계에 쓴 게 있는지 — 장면을 바꿀 때 확인 · 요약 표시에 쓴다 */
+function romanceHasSetup(st){ return [st.a.name,st.a.desc,st.b.name,st.b.desc,st.relation,st.world,st.event,st.obstacle].some(v=>String(v||"").trim()); }
+function romanceHasPlot(st){ return st.plot.some(p=>String(p.text||"").trim()); }
+function romanceGoStep(id){ romanceStep=id; practiceAsideGenre=null; render(); window.scrollTo(0,0); }
+
+function rPracticeRomance(){
+  if(!PRACTICE_ROMANCE_EXERCISES.some(e=>e.id===romanceStep)) romanceStep="scene";
+  const st=practiceRomanceStore();
+  const body=practicePageShell({title:"로맨스 글쓰기 실습", introSummary:"로맨스 글쓰기 실습이란? (클리셰 장면 하나에서 한 편까지)", introHtml:ROMANCE_INTRO,
+    introOpen:st.sceneIdx===null, exercises:PRACTICE_ROMANCE_EXERCISES, current:romanceStep,
+    onPick:id=>{ romanceStep=id; }});
+  renderRomanceStep(body);
+}
+
+function renderRomanceStep(body){
+  const ex=PRACTICE_ROMANCE_EXERCISES.find(e=>e.id===romanceStep);
+  const st=practiceRomanceStore();
+  body.innerHTML="";
+  const rerender=()=>{ renderRomanceStep(body); body.querySelectorAll("textarea").forEach(autoGrowTextarea); };
+
+  const concept=document.createElement("div"); concept.className="pr-concept";
+  concept.innerHTML=`<h3 class="pr-h3">${esc(ex.num)} ${esc(ex.title)}</h3>
+    <div class="pr-concept-text">${ex.concept}</div>
+    <details class="pr-example"><summary>예시 보기</summary><div class="pr-example-body">${buildupExampleHtml(ex.examples["예시"])}</div></details>`;
+  body.appendChild(concept);
+  renderPracticeAside(ex.title, ex.examples, null);
+
+  const work=document.createElement("div"); work.className="pr-work";
+  body.appendChild(work);
+
+  /* ① 이후 단계: 뽑은 장면이 없으면 먼저 뽑도록 */
+  if(ex.id!=="scene" && !romanceScene(st)){
+    work.appendChild(romanceEmptyNote(`아직 뽑은 장면이 없습니다. <b>① 장면 뽑기</b>에서 장면부터 뽑아 주세요.`, "① 장면 뽑기로 가기", "scene"));
+    return;
+  }
+  const checksBox=document.createElement("div"); checksBox.className="pr-checks";
+  const refreshChecks=()=>renderBuildupChecks(checksBox, romanceChecks(ex.id, st));
+  const builders={scene:buildRomanceSceneWork, setup:buildRomanceSetupWork, place:buildRomancePlaceWork, plot:buildRomancePlotWork, write:buildRomanceWriteWork};
+  builders[ex.id](work, st, rerender, refreshChecks);
+
+  body.appendChild(checksBox);
+  refreshChecks();
+
+  const actions=document.createElement("div"); actions.className="pr-actions";
+  const copyBtn=document.createElement("button"); copyBtn.type="button"; copyBtn.className="btn ghost sm";
+  copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`;
+  copyBtn.title="작성한 내용을 글로 복사합니다 (과제 제출 · 메모에 붙여넣기용)";
+  copyBtn.onclick=()=>{
+    const txt=romancePlainText(ex, st);
+    const done=()=>{ copyBtn.textContent="복사됨"; setTimeout(()=>{ copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`; },1200); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, ()=>prompt("아래 내용을 복사하세요", txt));
+    else prompt("아래 내용을 복사하세요", txt);
+  };
+  const resetBtn=document.createElement("button"); resetBtn.type="button"; resetBtn.className="btn danger sm";
+  resetBtn.textContent="처음부터 다시";
+  resetBtn.title="이 단계에서 쓴 내용만 지웁니다";
+  resetBtn.onclick=()=>{
+    if(!confirm(`'${ex.title}' 단계에 작성한 내용을 모두 지울까요?\n(다른 단계의 내용은 그대로 남습니다)`)) return;
+    romanceResetStep(ex.id); save(); rerender();
+  };
+  actions.append(copyBtn, resetBtn);
+  const next=PRACTICE_ROMANCE_EXERCISES[PRACTICE_ROMANCE_EXERCISES.indexOf(ex)+1];
+  if(next){
+    const nb=document.createElement("button"); nb.type="button"; nb.className="btn sm";
+    nb.textContent=`다음: ${next.num} ${next.title} →`;
+    nb.onclick=()=>romanceGoStep(next.id);
+    actions.appendChild(nb);
+  }
+  body.appendChild(actions);
+}
+
+/* 앞 단계가 비어 있을 때의 안내 + 그 단계로 가는 버튼 */
+function romanceEmptyNote(html, btnLabel, stepId){
+  const d=document.createElement("div"); d.className="pr-ro-empty";
+  d.innerHTML=`<div>${html}</div>`;
+  if(btnLabel){
+    const go=document.createElement("button"); go.type="button"; go.className="btn sm"; go.textContent=btnLabel;
+    go.onclick=()=>romanceGoStep(stepId);
+    d.appendChild(go);
+  }
+  return d;
+}
+/* 화면 위쪽에 따라오는 "내 장면" 띠 — 자리를 정했으면 그것도 */
+function romanceSceneBanner(st, extra){
+  const sc=romanceScene(st);
+  const d=document.createElement("div"); d.className="pr-ro-banner";
+  d.innerHTML=`<div><span class="pr-ex-tag">내 장면</span><b>${esc(sc?sc.t:"")}</b>`
+    +(typeof st.anchor==="number"?` <span class="pr-ro-at">${esc(romancePartLabel(st.anchor))}</span>`:"")+`</div>`
+    +(extra||"");
+  return d;
+}
+/* 라벨 + 한 줄짜리 입력 */
+function romanceLine(label, value, placeholder, onInput){
+  const d=document.createElement("div"); d.className="pr-ro-line";
+  d.innerHTML=`<label>${label}</label><textarea class="ta-line" placeholder="${esc(placeholder||"")}"></textarea>`;
+  const ta=d.querySelector("textarea"); ta.value=value||"";
+  ta.oninput=()=>onInput(ta.value);
+  return d;
+}
+/* 설정 요약 (접어 두는 참고용) */
+function romanceSetupRef(st){
+  const s=document.createElement("details"); s.className="pr-ro-ref";
+  const T=v=>esc(String(v||"").trim()||"—");
+  const person=(p,l)=>`<div><b>${l}</b> ${T(p.name)} — ${T(p.desc)}<br><span class="pr-sub">원하는 것: ${T(p.want)} · 숨기는 것: ${T(p.hide)}</span></div>`;
+  s.innerHTML=`<summary>내 설정 보기</summary><div class="pr-ro-ref-body">${person(st.a,"A")}${person(st.b,"B")}
+    <div><b>관계</b> ${T(st.relation)} · <b>배경</b> ${T(st.world)}</div><div><b>사건</b> ${T(st.event)} · <b>장애물</b> ${T(st.obstacle)}</div></div>`;
+  return s;
+}
+
+/* ① 장면 뽑기 */
+function buildRomanceSceneWork(work, st, rerender, refreshChecks){
+  const sc=romanceScene(st);
+  /* 장면을 바꾸면 뒤 단계가 어긋날 수 있으니, 이미 쓴 게 있으면 한 번 묻는다 */
+  const okToChange=()=>!(romanceHasSetup(st)||romanceHasPlot(st)||romanceWriteCount(st))
+    || confirm("이미 이 장면으로 설정 · 플롯 · 글을 쓴 내용이 있습니다.\n장면을 바꿔도 쓴 내용은 지워지지 않지만, 새 장면에 맞게 고쳐야 합니다. 바꿀까요?");
+  const draw=()=>{
+    if(!okToChange()) return;
+    let n; do{ n=Math.floor(Math.random()*ROMANCE_SCENES.length); }while(ROMANCE_SCENES.length>1 && n===st.sceneIdx);
+    st.sceneIdx=n; save(); rerender();
+  };
+
+  const card=document.createElement("div"); card.className="pr-ro-card"+(sc?"":" empty");
+  if(!sc){
+    card.innerHTML=`<div class="pr-ro-card-q">?</div><p>로맨스 클리셰 장면 ${ROMANCE_SCENES.length}개 중 하나가 무작위로 나옵니다.</p>`;
+    const b=document.createElement("button"); b.type="button"; b.className="btn"; b.textContent="장면 뽑기";
+    b.onclick=draw;
+    card.appendChild(b);
+  }else{
+    card.innerHTML=`<div class="pr-ro-card-label">${sc.custom?"직접 정한 장면":`로맨스 클리셰 장면 · ${st.sceneIdx+1} / ${ROMANCE_SCENES.length}`}</div>
+      <div class="pr-ro-card-t">${esc(sc.t)}</div>
+      ${sc.thrill?`<div class="pr-ro-card-row"><span class="pr-case-tag">흔히 말하는 설렘</span>${esc(sc.thrill)}</div>`:""}
+      ${sc.need&&sc.need.length?`<div class="pr-ro-card-row"><span class="pr-case-tag">이 장면이 나오려면</span>${sc.need.map(n=>esc(n)).join(" · ")}</div>`:""}
+      ${sc.part?`<div class="pr-ro-card-row"><span class="pr-case-tag">보통 놓이는 자리</span>${esc(romancePartLabel(sc.part-1))}</div>`:""}`;
+    const again=document.createElement("button"); again.type="button"; again.className="btn ghost sm pr-ro-again"; again.textContent="다시 뽑기";
+    again.onclick=draw;
+    card.appendChild(again);
+  }
+  work.appendChild(card);
+
+  /* 목록에서 직접 고르기 · 직접 입력 */
+  const pick=document.createElement("details"); pick.className="pr-ro-pick";
+  pick.open=st.sceneIdx===-1;
+  pick.innerHTML=`<summary>목록에서 고르거나 직접 쓰기</summary>
+    <select class="pr-prompt-sel"><option value="">— 장면 고르기 —</option>${ROMANCE_SCENES.map((s,i)=>`<option value="${i}">${esc(s.t)}</option>`).join("")}<option value="-1">직접 입력…</option></select>
+    <textarea class="ta-line pr-custom" placeholder="직접 정한 로맨스 클리셰 장면 (예: 시험 기간 도서관에서 같은 책을 동시에 잡는다)" ${st.sceneIdx===-1?"":"hidden"}></textarea>`;
+  const sel=pick.querySelector("select"), custom=pick.querySelector(".pr-custom");
+  const showCur=()=>{ sel.value=st.sceneIdx===null?"":String(st.sceneIdx); };
+  showCur();
+  custom.value=st.sceneCustom||"";
+  sel.onchange=()=>{
+    if(sel.value==="" || !okToChange()){ showCur(); return; }
+    st.sceneIdx=Number(sel.value); save(); rerender();
+  };
+  custom.oninput=()=>{ st.sceneCustom=custom.value; save(); refreshChecks(); };
+  work.appendChild(pick);
+
+  if(sc || st.sceneIdx===-1){
+    work.appendChild(practiceField("설렘 포인트 — 내 말로","이 장면은 왜 설렐까? 겉모습(우산 · 벽 · 엘리베이터)이 아니라 그 안에서 오가는 감정을 한두 문장으로.",
+      st.thrill, "예: 우산이 작아서 한 사람 어깨만 젖는다. 누가 젖는 쪽을 고르는지를 보면 말하지 않은 마음이 보인다.",
+      v=>{ st.thrill=v; save(); refreshChecks(); }, "pr-expect"));
+  }
+}
+
+/* ② 인물 · 사건 · 배경 */
+function buildRomanceSetupWork(work, st, rerender, refreshChecks){
+  const sc=romanceScene(st);
+  work.appendChild(romanceSceneBanner(st, sc.need&&sc.need.length
+    ? `<div class="pr-ro-need"><span class="pr-label">이 장면이 나오려면</span>${sc.need.map(n=>`<span class="pr-ro-need-item">${esc(n)}</span>`).join("")}</div>` : ""));
+  const persons=document.createElement("div"); persons.className="pr-ro-persons";
+  [["a","인물 A","주인공"],["b","인물 B","상대"]].forEach(([k,label,role])=>{
+    const p=st[k];
+    const box=document.createElement("div"); box.className="plan-block pr-ro-person";
+    box.innerHTML=`<label>${label} <span class="pr-sub">${role}</span></label>`;
+    const set=key=>v=>{ p[key]=v; save(); refreshChecks(); };
+    box.appendChild(romanceLine("이름", p.name, k==="a"?"예: 한서윤":"예: 강도현", set("name")));
+    box.appendChild(romanceLine("한 줄 소개", p.desc, k==="a"?"예: 대학가 편의점 야간 알바생, 미대 휴학 중":"예: 매일 새벽 2시 삼각김밥을 사 가는 웹툰 작가 지망생", set("desc")));
+    box.appendChild(romanceLine("원하는 것", p.want, k==="a"?"예: 학자금을 갚고 조용히 졸업하기":"예: 연재 데뷔", set("want")));
+    box.appendChild(romanceLine("숨기는 것 · 약점", p.hide, k==="a"?"예: 그림을 그만둔 이유(공모전 표절 누명)":"예: 서윤의 옛 그림을 보고 그림을 시작했다", set("hide")));
+    persons.appendChild(box);
+  });
+  work.appendChild(persons);
+  const world=document.createElement("div"); world.className="plan-block";
+  world.innerHTML=`<label>관계 · 배경 · 사건</label><p class="plan-guide">한 줄씩. 장면에 필요한 것을 여기서 미리 깔아 두세요.</p>`;
+  const set=key=>v=>{ st[key]=v; save(); refreshChecks(); };
+  world.appendChild(romanceLine("처음 관계", st.relation, "처음 두 사람은 어떤 사이인가 — 예: 이름도 모르는 점원과 단골손님", set("relation")));
+  world.appendChild(romanceLine("배경", st.world, "언제 · 어디서 — 예: 장마철, 대학가 24시 편의점", set("world")));
+  world.appendChild(romanceLine("사건", st.event, "두 사람을 엮는 일 — 예: 도현이 계산대에 스케치북을 두고 간다", set("event")));
+  world.appendChild(romanceLine("장애물", st.obstacle, "왜 쉽게 이어지지 못하나 — 예: 서윤은 그림 이야기만 나오면 마음을 닫는다", set("obstacle")));
+  work.appendChild(world);
+}
+
+/* ③ 장면 자리 정하기 */
+function buildRomancePlaceWork(work, st, rerender, refreshChecks){
+  const sc=romanceScene(st);
+  work.appendChild(romanceSceneBanner(st));
+  const grid=document.createElement("div"); grid.className="pr-ro-parts";
+  ROMANCE_PARTS.forEach((p,i)=>{
+    const b=document.createElement("button"); b.type="button";
+    b.className="pr-ro-part"+(st.anchor===i?" on":"");
+    b.innerHTML=`<span class="pr-ro-part-n">${i+1}부</span><span class="pr-ro-part-name">${esc(p.name)}</span>
+      <span class="pr-ro-part-g">${esc(p.guide)}</span>${sc.part===i+1?`<span class="pr-ro-usual">보통 이 자리</span>`:""}`;
+    b.onclick=()=>{
+      if(st.anchor===i) return;
+      /* 플롯을 쓴 뒤 자리를 옮기면, 장면 칸에 쓴 내용도 새 자리로 함께 옮긴다(두 칸을 맞바꿈) */
+      if(typeof st.anchor==="number" && romanceHasPlot(st)){
+        if(!confirm(`장면 자리를 ${romancePartLabel(st.anchor)} → ${romancePartLabel(i)}(으)로 옮길까요?\n④ 플롯에서 두 칸에 쓴 내용이 서로 자리를 바꿉니다.`)) return;
+        const t=st.plot[st.anchor]; st.plot[st.anchor]=st.plot[i]; st.plot[i]=t;
+      }
+      st.anchor=i; save(); rerender();
+    };
+    grid.appendChild(b);
+  });
+  work.appendChild(grid);
+  if(typeof st.anchor==="number"){
+    const info=document.createElement("div"); info.className="pr-ro-place-info";
+    const off=sc.part && sc.part-1!==st.anchor;
+    info.innerHTML=`<b>${esc(romancePartLabel(st.anchor))}에 두면</b> — ${esc(ROMANCE_PARTS[st.anchor].place)}`
+      +(off?`<div class="pr-ro-off">이 장면은 보통 <b>${esc(romancePartLabel(sc.part-1))}</b>에 나옵니다. 다른 자리에 둔 것 자체가 작은 비틀기 — 독자가 익숙한 장면을 낯선 자리에서 만나게 됩니다.</div>`:"");
+    work.appendChild(info);
+  }
+  work.appendChild(practiceField("왜 그 자리인가","이 장면을 거기에 두면 이야기에서 어떤 역할을 하나? 앞뒤에 무엇이 필요해지나?",
+    st.anchorWhy, "예: 장마철이라 1부부터 비를 계속 깔 수 있다. 우산을 빌려주기만 하던 두 사람이 처음 같은 우산 아래 서는 순간을 고백으로 쓰고 싶다.",
+    v=>{ st.anchorWhy=v; save(); refreshChecks(); }));
+}
+
+/* 장면에서 가장 가까운 빈 칸 — '다음에 채울 칸' 표시 (같은 거리면 뒤 칸 먼저: 장면의 결과) */
+function romanceNextPart(st){
+  if(typeof st.anchor!=="number") return -1;
+  const empty=i=>!String(st.plot[i].text||"").trim();
+  if(empty(st.anchor)) return st.anchor;
+  for(let d=1; d<5; d++){
+    if(st.anchor+d<5 && empty(st.anchor+d)) return st.anchor+d;
+    if(st.anchor-d>=0 && empty(st.anchor-d)) return st.anchor-d;
+  }
+  return -1;
+}
+/* 칸마다 붙는 연결 질문 — 장면 앞인지 뒤인지에 따라 */
+function romanceLinkQuestion(i, a){
+  if(i===a) return "클리셰 장면이 이 이야기에서는 어떻게 벌어지나? 누가 · 어디서 · 어떻게 — 설렘 포인트가 보이게.";
+  if(i===a-1) return "바로 다음이 클리셰 장면입니다. 그 장면이 일어날 수밖에 없게 만드는 일은?";
+  if(i===a+1) return "클리셰 장면 직후 — 그 장면 때문에 두 사람 사이에 무엇이 바뀌었나?";
+  if(i<a) return `다음 칸으로 이어지려면 여기서 무엇이 준비돼야 하나? (${ROMANCE_PARTS[i].guide})`;
+  return `앞 칸의 결과로 이어지는 일은? (${ROMANCE_PARTS[i].guide})`;
+}
+
+/* ④ 플롯 채우기 */
+function buildRomancePlotWork(work, st, rerender, refreshChecks){
+  const sc=romanceScene(st);
+  work.appendChild(romanceSceneBanner(st));
+  if(typeof st.anchor!=="number"){
+    work.appendChild(romanceEmptyNote(`먼저 <b>③ 장면 자리 정하기</b>에서 장면을 몇 부에 둘지 골라 주세요.`, "③ 장면 자리 정하기로 가기", "place"));
+    return;
+  }
+  if(romanceHasSetup(st)) work.appendChild(romanceSetupRef(st));
+  const boxes=[];
+  /* '다음에 채울 칸' 표시 — 칸이 비었다↔찼다가 바뀔 때마다 제자리에서 옮긴다(다시 그리지 않아 입력 포커스 유지) */
+  const markNext=()=>{ const n=romanceNextPart(st); boxes.forEach((b,i)=>b.classList.toggle("next", i===n)); };
+  const curve=document.createElement("div"); curve.className="pr-curve";
+  const drawCurve=()=>{
+    curve.innerHTML=`<div class="pr-label">감정 온도 — 두 사람의 마음이 얼마나 가까운가</div>`
+      +practiceCurveSvg(st.plot.map((p,i)=>({label:`${i+1}부`, v:p.temp, payoff:i===st.anchor})));
+  };
+  st.plot.forEach((p,i)=>{
+    const isA=i===st.anchor;
+    const box=document.createElement("div");
+    box.className="plan-block pr-ro-plot-part"+(isA?" anchor":"");
+    box.innerHTML=`<div class="pr-beat-head"><span class="pr-beat-num">${esc(romancePartLabel(i))}</span>
+        ${isA?`<span class="pr-ro-at">★ 클리셰 장면</span>`:""}<span class="pr-ro-next">다음에 채울 칸</span></div>
+      ${isA?`<div class="pr-ro-plot-scene">${esc(sc.t)}</div>`:""}
+      <p class="plan-guide">${esc(romanceLinkQuestion(i, st.anchor))}</p>
+      <textarea placeholder="${isA?"이 이야기에서 장면이 벌어지는 모습":"한두 문장"}"></textarea>
+      <div class="pr-tension"><span>감정 온도</span><input type="range" min="1" max="10" step="1"><b class="pr-tension-val"></b></div>`;
+    const ta=box.querySelector("textarea"); ta.value=p.text||"";
+    ta.oninput=()=>{ p.text=ta.value; save(); refreshChecks(); markNext(); };
+    const rng=box.querySelector("input[type=range]"), val=box.querySelector(".pr-tension-val");
+    rng.value=String(p.temp); val.textContent=p.temp;
+    rng.oninput=()=>{ p.temp=Number(rng.value); val.textContent=p.temp; save(); drawCurve(); refreshChecks(); };
+    boxes.push(box);
+    work.appendChild(box);
+  });
+  markNext();
+  drawCurve();
+  work.appendChild(curve);
+}
+
+/* ⑤ 글쓰기 */
+function buildRomanceWriteWork(work, st, rerender, refreshChecks){
+  const a=typeof st.anchor==="number"?st.anchor:-1;
+  work.appendChild(romanceSceneBanner(st));
+  if(!romanceHasPlot(st)) work.appendChild(romanceEmptyNote(`<b>④ 플롯 채우기</b>를 먼저 하면 칸마다 내 플롯이 따라와서 훨씬 쓰기 쉽습니다. 플롯 없이 바로 써도 괜찮습니다.`, "④ 플롯 채우기로 가기", "plot"));
+  if(romanceHasSetup(st)) work.appendChild(romanceSetupRef(st));
+  const title=romanceLine("제목", st.title, "이 이야기의 제목", v=>{ st.title=v; save(); refreshChecks(); });
+  title.classList.add("pr-ro-title");
+  work.appendChild(title);
+  const meter=document.createElement("div");
+  const drawMeter=()=>{
+    const n=romanceWriteCount(st);
+    meter.className="pr-ro-meter "+(n<ROMANCE_MIN?"low":n>ROMANCE_MAX?"over":"ok");
+    meter.innerHTML=`<div class="pr-ro-meter-top"><span><b>${n.toLocaleString()}자</b> <span class="pr-sub">공백 포함 · A4 약 ${(n/ROMANCE_A4).toFixed(1)}장</span></span>
+        <span class="pr-sub">목표 ${ROMANCE_MIN.toLocaleString()}~${ROMANCE_MAX.toLocaleString()}자 (A4 1~2장)</span></div>
+      <div class="pr-ro-bar"><span class="pr-ro-bar-fill" style="width:${Math.min(100, n/ROMANCE_MAX*100)}%"></span><span class="pr-ro-bar-min" style="left:${ROMANCE_MIN/ROMANCE_MAX*100}%"></span></div>`;
+  };
+  drawMeter();
+  work.appendChild(meter);
+  st.parts.forEach((txt,i)=>{
+    const isA=i===a;
+    const plot=String(st.plot[i].text||"").trim();
+    const box=document.createElement("div"); box.className="plan-block pr-ro-write"+(isA?" anchor":"");
+    box.innerHTML=`<div class="pr-beat-head"><span class="pr-beat-num">${esc(romancePartLabel(i))}</span>
+        ${isA?`<span class="pr-ro-at">★ 클리셰 장면 — 넉넉히</span>`:""}<span class="pr-ro-count"></span></div>
+      ${plot?`<div class="pr-ro-plotline"><span class="pr-case-tag">플롯</span>${esc(plot)}</div>`:""}
+      <textarea class="pr-ro-text" placeholder="${isA?"장면의 순간을 늘려 쓰세요 — 손끝 · 소리 · 표정 · 침묵":"플롯을 장면으로 풀어 쓰세요"}"></textarea>`;
+    const ta=box.querySelector("textarea"), cnt=box.querySelector(".pr-ro-count");
+    const drawCnt=()=>{ cnt.textContent=`${String(st.parts[i]||"").trim().length.toLocaleString()}자`; };
+    ta.value=txt||""; drawCnt();
+    ta.oninput=()=>{ st.parts[i]=ta.value; save(); drawCnt(); drawMeter(); refreshChecks(); };
+    work.appendChild(box);
+  });
+}
+
+/* 자가 점검 — [{ok, label, tip, optional}] (renderBuildupChecks로 그린다) */
+function romanceChecks(id, st){
+  const has=s=>!!(s&&String(s).trim());
+  const out=[];
+  const sc=romanceScene(st);
+  if(id==="scene"){
+    out.push({ok:!!sc, label:"장면을 하나 뽑았다", tip:"[장면 뽑기]를 누르거나, 목록에서 고르거나, 직접 써 주세요."});
+    out.push({ok:has(st.thrill), label:"설렘 포인트를 내 말로 적었다", tip:"장면의 겉모습이 아니라, 그 순간 두 사람 사이에 오가는 감정을 찾아보세요."});
+  }else if(id==="setup"){
+    const pOk=p=>has(p.name)&&has(p.desc);
+    out.push({ok:pOk(st.a)&&pOk(st.b), label:"두 인물의 이름과 한 줄 소개를 썼다", tip:""});
+    out.push({ok:[st.a,st.b].some(p=>has(p.want)), label:"적어도 한 사람의 '원하는 것'이 있다", tip:"원하는 것이 있어야 인물이 움직입니다."});
+    out.push({ok:has(st.world)&&has(st.event), label:"배경과 사건을 정했다", tip:""});
+    out.push({ok:has(st.obstacle), label:"장애물을 정했다", tip:"쉽게 이어지면 로맨스는 1부에서 끝납니다. 두 사람 사이를 막는 것을 하나 두세요."});
+    out.push({ok:[st.a,st.b].some(p=>has(p.hide)), label:"숨기는 것 · 약점이 있다", tip:"숨긴 것이 드러나는 순간이 3~4부의 재료가 됩니다.", optional:true});
+  }else if(id==="place"){
+    out.push({ok:typeof st.anchor==="number", label:"장면을 둘 자리를 골랐다", tip:""});
+    out.push({ok:has(st.anchorWhy), label:"그 자리를 고른 이유를 적었다", tip:""});
+    if(typeof st.anchor==="number" && sc && sc.part) out.push({ok:sc.part-1!==st.anchor, label:"보통과 다른 자리에 두어 봤다", tip:"익숙한 장면을 낯선 자리에 두면 그것만으로도 새로워집니다. 꼭 그럴 필요는 없습니다.", optional:true});
+  }else if(id==="plot"){
+    const a=st.anchor, filled=st.plot.filter(p=>has(p.text)).length, ts=st.plot.map(p=>p.temp);
+    out.push({ok:typeof a==="number", label:"장면 자리가 정해져 있다", tip:"③에서 골라 주세요."});
+    out.push({ok:typeof a==="number"&&has(st.plot[a].text), label:"클리셰 장면이 이 이야기에서 어떻게 벌어지는지 썼다", tip:""});
+    out.push({ok:filled===5, label:`5부를 모두 채웠다 (${filled} / 5)`, tip:"'다음에 채울 칸' 표시를 따라 장면과 붙은 칸부터 채워 보세요."});
+    out.push({ok:ts[2]<ts[1], label:"3부(흔들림)에서 감정 온도가 한 번 내려간다", tip:"한 번 멀어졌다가 다시 가까워질 때 가장 설렙니다.", optional:true});
+    out.push({ok:ts[3]===Math.max(...ts), label:"4부(고백)가 가장 뜨겁다", tip:"", optional:true});
+  }else if(id==="write"){
+    const n=romanceWriteCount(st), a=st.anchor;
+    const partsN=st.parts.filter(has).length;
+    out.push({ok:has(st.title), label:"제목을 붙였다", tip:""});
+    out.push({ok:partsN===5, label:`5부를 모두 썼다 (${partsN} / 5)`, tip:"짧게 요약하듯 지나가는 칸이 있어도 괜찮습니다."});
+    out.push({ok:n>=ROMANCE_MIN, label:`A4 한 장 이상 썼다 (지금 ${n.toLocaleString()}자 / ${ROMANCE_MIN.toLocaleString()}자 이상)`, tip:""});
+    out.push({ok:n<=ROMANCE_MAX, label:`A4 두 장을 넘지 않았다 (${ROMANCE_MAX.toLocaleString()}자 이하)`, tip:"덜어낼 칸을 찾아보세요. 클리셰 장면이 아닌 칸부터 줄이는 것이 좋습니다."});
+    if(typeof a==="number" && n) out.push({ok:String(st.parts[a]||"").trim().length>=n*0.25, label:"클리셰 장면 부분을 넉넉히 썼다 (전체의 25% 이상)", tip:"설렘은 시간에서 나옵니다. 그 순간의 손끝 · 소리 · 표정을 더해 늘려 보세요.", optional:true});
+  }
+  return out;
+}
+
+/* 작성 내용 → [{id,label,text}] — 과제 제출(교수 첨삭 블럭)과 텍스트 복사에 같이 쓴다.
+   ⑤ 글쓰기는 앞 단계 요약(장면 · 설정 · 플롯)을 함께 낸다 — 첨삭할 때 근거가 필요하므로 */
+function romanceItems(ex, st){
+  const items=[];
+  const T=s=>String(s||"").trim();
+  const add=(id,label,text)=>items.push({id, label, text:T(text)});
+  const sc=romanceScene(st);
+  const sceneLine=(sc?sc.t:"")+(typeof st.anchor==="number"&&(ex.id==="plot"||ex.id==="write")?` (${romancePartLabel(st.anchor)})`:"");
+  const person=p=>[p.name,p.desc,p.want,p.hide].some(v=>T(v))
+    ? [`${T(p.name)} — ${T(p.desc)}`, T(p.want)?`원하는 것: ${T(p.want)}`:"", T(p.hide)?`숨기는 것: ${T(p.hide)}`:""].filter(Boolean).join("\n") : "";
+  if(ex.id==="scene"){
+    add("prompt","뽑은 장면",sc?sc.t:"");
+    add("thrill","설렘 포인트",st.thrill);
+  }else if(ex.id==="setup"){
+    add("prompt","장면",sceneLine);
+    add("a","인물 A",person(st.a)); add("b","인물 B",person(st.b));
+    add("relation","처음 관계",st.relation); add("world","배경",st.world); add("event","사건",st.event); add("obstacle","장애물",st.obstacle);
+  }else if(ex.id==="place"){
+    add("prompt","장면",sceneLine);
+    add("anchor","놓을 자리", typeof st.anchor==="number" ? romancePartLabel(st.anchor) : "");
+    add("anchorWhy","이유",st.anchorWhy);
+  }else if(ex.id==="plot"){
+    add("prompt","장면",sceneLine);
+    st.plot.forEach((p,i)=>add("plot:"+i, `${romancePartLabel(i)}${i===st.anchor?" ★ 클리셰 장면":""} · 온도 ${p.temp}`, p.text));
+  }else if(ex.id==="write"){
+    const world=[["처음 관계",st.relation],["배경",st.world],["사건",st.event],["장애물",st.obstacle]].filter(x=>T(x[1])).map(x=>`${x[0]}: ${T(x[1])}`).join("\n");
+    add("prompt","장면",sceneLine);
+    add("setup","설정 요약",[person(st.a),person(st.b),world].filter(Boolean).join("\n\n"));
+    add("plot","플롯", romanceHasPlot(st) ? st.plot.map((p,i)=>`${romancePartLabel(i)}${i===st.anchor?" ★":""} — ${T(p.text)}`).join("\n") : "");
+    add("title","제목",st.title);
+    st.parts.forEach((t,i)=>add("part:"+i, `본문 · ${romancePartLabel(i)}${i===st.anchor?" ★":""}`, t));
+  }
+  return items;
+}
+function romanceSubmissionData(){
+  const ex=PRACTICE_ROMANCE_EXERCISES.find(e=>e.id===romanceStep)||PRACTICE_ROMANCE_EXERCISES[0];
+  const st=practiceRomanceStore();
+  const ttl=ex.id==="write"&&String(st.title||"").trim() ? ` — ${String(st.title).trim()}` : "";
+  return {topic:"romance", exercise:ex.id, genre:"", title:`로맨스 글쓰기 실습 ${ex.num} ${ex.title}${ttl}`, items:romanceItems(ex, st)};
+}
+function romancePlainText(ex, st){
+  const L=[`[로맨스 글쓰기 실습 ${ex.num} ${ex.title}]`];
+  if(ex.id==="write"){
+    /* 글쓰기는 원고처럼 — 제목 + 본문을 이어 붙이고, 앞 단계 요약은 아래에 */
+    const body=st.parts.map(t=>String(t||"").trim()).filter(Boolean).join("\n\n");
+    L.push("", String(st.title||"").trim()||"(제목 없음)", "", body||"(비어 있음)", "", `— ${romanceWriteCount(st).toLocaleString()}자 (공백 포함)`);
+    romanceItems(ex, st).filter(it=>["prompt","setup","plot"].includes(it.id)).forEach(it=>L.push("", `■ ${it.label}\n${it.text||"(비어 있음)"}`));
+    return L.join("\n");
+  }
+  romanceItems(ex, st).forEach(it=>{
     const t=it.text||"(비어 있음)";
     L.push("", t.includes("\n") ? `■ ${it.label}\n${t}` : `■ ${it.label}: ${t}`);
   });
@@ -7496,7 +8035,7 @@ let feedbackPage=null;
 let navRestoring=false;
 function navSnapshot(){
   try{
-    return {activeTab, learnDetailFor, practiceFor, practiceStep, clicheStep, charDetailFor, charViewMode, sideViewMode,
+    return {activeTab, learnDetailFor, practiceFor, practiceStep, clicheStep, romanceStep, charDetailFor, charViewMode, sideViewMode,
       profClassId, profClassTab, profAssignFolderId, profReviewId, profReviewVersion,
       feedbackPage: feedbackPage ? {type:feedbackPage.type, mode:feedbackPage.mode, id:feedbackPage.id||null} : null};
   }catch(e){ return null; }
@@ -7521,7 +8060,7 @@ window.addEventListener("popstate", e=>{
     return;
   }
   activeTab=st.activeTab; learnDetailFor=st.learnDetailFor; charDetailFor=st.charDetailFor;
-  practiceFor=st.practiceFor||null; practiceStep=st.practiceStep||"reverse"; clicheStep=st.clicheStep||"map";
+  practiceFor=st.practiceFor||null; practiceStep=st.practiceStep||"reverse"; clicheStep=st.clicheStep||"map"; romanceStep=st.romanceStep||"scene";
   charViewMode=st.charViewMode; sideViewMode=st.sideViewMode;
   profClassId=st.profClassId; profClassTab=st.profClassTab; profAssignFolderId=st.profAssignFolderId;
   profReviewId=st.profReviewId; profReviewVersion=st.profReviewVersion; feedbackPage=st.feedbackPage;
@@ -10373,6 +10912,7 @@ const GUIDE_SECTIONS=[
       <li>이론을 직접 써 보며 익히는 연습장입니다. 작성한 내용은 작품과 상관없이 내 계정에 자동 저장됩니다.</li>
       <li><b>빌드업 실습</b>(공포 · 코미디): <b>거꾸로 쌓기</b>(결말을 받고 앞의 비트만 쓰기, 긴장 곡선) · <b>3의 법칙</b>(확립 → 반복 → 깨기) · <b>순간 늘리기</b>(같은 순간을 1컷 · 3컷 · 7컷으로) · <b>장르 바꾸기</b>(같은 빌드업에 공포 · 코미디 결말) · <b>정보 통제 표</b>(독자와 인물이 아는 것 비교) 5가지 연습이 있습니다.</li>
       <li><b>클리셰 비틀기 실습</b>: <b>클리셰 지도</b>(장르의 인물 · 설정 · 전개 · 장면 · 대사, 단어/문법 구분) · <b>비틀기 감별</b>(실제 작품이 무엇을 · 누가 · 어떻게 · 그래서 중 어느 레버를 당겼는지 맞히기) · <b>네 레버 돌리기</b> · <b>비틀기 도구 6가지</b>(반전 · 역전 · 해체 · 재구성 · 대놓고 지적하기 · 장르 이식) · <b>비틀기 기획안</b>(쾌감 → 레버 하나 → 로그라인 → 3컷 콘티 → 스스로 점검) 5가지 연습이 있습니다.</li>
+      <li><b>로맨스 글쓰기 실습</b>: 다섯 단계가 한 편으로 이어집니다. <b>장면 뽑기</b>(로맨스 클리셰 장면 30개 중 무작위) → <b>인물 · 사건 · 배경</b>(그 장면이 나올 수 있게 한 줄씩) → <b>장면 자리 정하기</b>(만남 · 끌림 · 흔들림 · 고백 · 맺음 5부 중) → <b>플롯 채우기</b>(장면과 붙은 칸부터 한 칸씩, 감정 온도 곡선) → <b>글쓰기</b>(A4 1~2장, 글자 수 표시). 스토리가이드의 설정 · 플롯 · 글쓰기를 실습용으로 줄인 것입니다.</li>
       <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다. 넓은 화면에서는 <b>오른쪽에 그 연습의 예시</b>(공포 · 코미디 탭)가 함께 보입니다.</li>
       <li><b>과제 제출</b>: 교수님이 "스토리텔링 실습" 종류로 낸 과제에, 연습 화면 위쪽의 <b>[제출]</b>로 <b>지금 열려 있는 연습 하나</b>를 냅니다. 첨삭은 [피드백 보기]에서 확인합니다(작품과 무관한 연습이라 [내 작업물에 반영]은 없습니다).</li>
     </ul>`},

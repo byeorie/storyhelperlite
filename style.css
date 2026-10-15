@@ -1511,3 +1511,58 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .pr-self-q .pr-check-tip{display:block;font-weight:400}
 .pr-self textarea{margin-top:8px}
 @media(max-width:860px){ .pr-lever-grid{grid-template-columns:1fr} }
+
+/* ===== 스토리텔링 실습 — 로맨스 글쓰기 실습 (2026-10-15) ===== */
+.pr-ro-empty{display:flex;flex-direction:column;align-items:flex-start;gap:10px;border:1px dashed var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13px;line-height:1.6;background:#fbfaf7}
+.pr-ro-card{position:relative;border:2px solid var(--accent);border-radius:14px;padding:18px 20px;margin-bottom:12px;background:linear-gradient(135deg,#fff7f3,#fdeef0)}
+.pr-ro-card.empty{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border-style:dashed;background:#fbf8f3}
+.pr-ro-card.empty p{margin:0;font-size:13px;color:var(--muted)}
+.pr-ro-card-q{font-size:40px;font-weight:800;color:var(--accent);line-height:1}
+.pr-ro-card-label{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.pr-ro-card-t{font-size:18px;font-weight:800;line-height:1.5;color:var(--ink);margin-bottom:10px;padding-right:80px}
+.pr-ro-card-row{font-size:13px;line-height:1.6;margin-top:4px}
+.pr-ro-again{position:absolute;top:14px;right:14px}
+.pr-ro-pick{margin-bottom:14px;font-size:13px}
+.pr-ro-pick summary{cursor:pointer;color:var(--accent);font-weight:700;width:max-content;margin-bottom:6px}
+.pr-ro-pick select{width:100%}
+.pr-ro-banner{border:1px solid #f0d8cd;background:#fff7f3;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13.5px;line-height:1.55}
+.pr-ro-at{display:inline-block;margin-left:4px;padding:0 8px;border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;vertical-align:1px}
+.pr-ro-need{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.pr-ro-need .pr-label{margin-right:2px}
+.pr-ro-need-item{padding:2px 9px;border-radius:999px;background:#fff;border:1px solid #f0d8cd;font-size:12px}
+.pr-ro-persons{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.pr-ro-line label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 2px}
+.pr-ro-person>label{margin-bottom:0}
+.pr-ro-parts{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}
+.pr-ro-part{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:10px 10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font:inherit;cursor:pointer;color:var(--ink)}
+.pr-ro-part:hover{border-color:var(--accent)}
+.pr-ro-part.on{border-color:var(--accent);background:#fff7f3;box-shadow:inset 0 0 0 1px var(--accent)}
+.pr-ro-part.on::after{content:"★";position:absolute;top:8px;right:10px;color:var(--accent);font-size:15px}
+.pr-ro-part-n{font-size:11px;font-weight:800;color:var(--accent)}
+.pr-ro-part-name{font-size:14px;font-weight:800}
+.pr-ro-part-g{font-size:11px;color:var(--muted);line-height:1.4}
+.pr-ro-usual{margin-top:4px;padding:0 7px;border-radius:999px;background:#eceae4;color:var(--muted);font-size:10.5px;font-weight:700}
+.pr-ro-place-info{border-left:3px solid var(--accent);background:#fbfaf7;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.6}
+.pr-ro-off{margin-top:6px;color:#7a4a32}
+.pr-ro-ref{margin-bottom:12px;font-size:13px}
+.pr-ro-ref summary{cursor:pointer;color:var(--accent);font-weight:700;width:max-content}
+.pr-ro-ref-body{margin-top:6px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fbfaf7;line-height:1.6;display:flex;flex-direction:column;gap:6px}
+.pr-ro-plot-part.anchor,.pr-ro-write.anchor{border:2px solid var(--accent);background:#fff7f3}
+.pr-ro-plot-scene{font-size:13.5px;font-weight:700;margin-bottom:4px}
+.pr-ro-next{display:none;padding:0 8px;border-radius:999px;background:#e7f0e9;color:var(--ok);font-size:11px;font-weight:700}
+.pr-ro-plot-part.next{box-shadow:0 0 0 2px #cfe3d4}
+.pr-ro-plot-part.next .pr-ro-next{display:inline-block}
+.pr-ro-title textarea{font-size:15px;font-weight:700}
+.pr-ro-meter{position:sticky;top:calc(var(--topbar-h) + 6px);z-index:2;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:10px 0 12px;background:var(--card)}
+.pr-ro-meter-top{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;font-size:13px;margin-bottom:6px}
+.pr-ro-bar{position:relative;height:8px;border-radius:999px;background:#eceae4;overflow:hidden}
+.pr-ro-bar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--muted)}
+.pr-ro-bar-min{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);opacity:.35}
+.pr-ro-meter.ok .pr-ro-bar-fill{background:var(--ok)}
+.pr-ro-meter.ok b{color:var(--ok)}
+.pr-ro-meter.over .pr-ro-bar-fill{background:#c0533a}
+.pr-ro-meter.over b{color:#c0533a}
+.pr-ro-count{margin-left:auto;font-size:11.5px;color:var(--muted)}
+.pr-ro-plotline{font-size:12.5px;line-height:1.55;color:var(--muted);margin-bottom:6px}
+.pr-ro-text{min-height:110px;line-height:1.75}
+@media(max-width:860px){ .pr-ro-persons{grid-template-columns:1fr} .pr-ro-parts{grid-template-columns:repeat(2,1fr)} .pr-ro-card-t{padding-right:0} .pr-ro-again{position:static;margin-top:8px} }
