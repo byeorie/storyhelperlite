@@ -2,6 +2,12 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-10-15 — RPG 게임 GM 화면 막힘의 진짜 원인: 게임이 옛 DB에 연결돼 있었음
+
+- 게임 Worker가 `storyhelperlite-db`(7월에 쓰던 옛 DB, 회원 4명)에 연결되어 있어 입장권(`game_tickets`)을 찾지 못했다. 운영 DB는 `storyguide-db`(f47fdcf0-…)다.
+- 게임 쪽 설정을 `storyguide-db`로 바꿔 다시 배포했다. 스토리가이드 코드는 바꾸지 않았다.
+- 같은 계정에 D1이 둘 있으니 헷갈리지 말 것: 운영 = **storyguide-db**, `storyhelperlite-db`는 쓰지 않음.
+
 ## 2026-10-15 — RPG 게임 주소 기본값 (GM 화면 막힘 수정)
 
 **증상**: [RPG 게임] → [GM 화면]을 누르면 "게임 주소(GAME_URL)가 아직 설정되지 않았습니다"가 나왔다.
@@ -31,7 +37,7 @@
 - `index.html` — 메뉴 그룹 `rpgNavGroup` 추가. `style.css` — GM 체크 칸 · 수업 카드 스위치 모양.
 - `.gitignore` — `.wrangler/` 추가(로컬 연동 시험에서 wrangler가 만드는 폴더가 커밋되지 않게).
 - **배포 전에 할 일**: Pages 프로젝트 환경 변수 `GAME_URL`에 게임 주소를 넣는다(없으면 [게임 접속]이 "게임 주소가 아직 설정되지 않았습니다"). 표·컬럼은 처음 호출 때 자동 생성.
-- 게임 쪽(별도 저장소)은 같은 D1(`storyhelperlite-db`)을 바인딩해 `game_tickets`를 확인하고 `used=1`로 바꾼다.
+- 게임 쪽(별도 저장소)은 같은 D1(`storyguide-db`)을 바인딩해 `game_tickets`를 확인하고 `used=1`로 바꾼다.
 
 ## 2026-10-15 — 복선과 반전 실습: 반전 결말 이야기 ↔ 반전 설계표 순서 교체
 
