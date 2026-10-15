@@ -2,6 +2,12 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-10-15 — RPG 게임 주소 연결 (GAME_URL)
+
+- 게임 서버를 배포했다: https://island-mud-world.byeorie.workers.dev (별도 저장소 byeorie/island-mud, Cloudflare Worker)
+- Pages 프로젝트 storyhelperlite 운영 환경에 `GAME_URL`을 넣었다(암호화된 환경 변수). 이번 배포부터 [게임 접속]·[GM 화면]이 실제 게임으로 이어진다.
+- `functions/api/game.js` — GM 화면 주소를 `/gm.html` → `/gm` 으로 (게임 쪽이 깔끔한 주소로 307 리다이렉트하던 것을 건너뛴다)
+
 ## 2026-10-15 — RPG 게임(섬 탈출 MUD-TRPG) 연동: [RPG 게임] 메뉴 · GM 지정 · 수업별 게임 켜기
 
 **요청**: 같은 Cloudflare 계정에서 도는 수업용 RPG 게임에 스토리가이드 계정으로 들어가게. 운영자가 GM 교수를 고르고,

@@ -81,7 +81,7 @@ export async function onRequestPost({ request, env }) {
       "INSERT INTO game_tickets (ticket, user_id, class_id, role, created_at, expires_at, used) VALUES (?, ?, ?, ?, ?, ?, 0)"
     ).bind(ticket, u.id, classId, role, now, now + TICKET_SEC).run();
     const base = String(env.GAME_URL).replace(/\/+$/, "");
-    return jsonResponse({ ok: true, url: base + (role === "gm" ? "/gm.html" : "/") + "#ticket=" + ticket });
+    return jsonResponse({ ok: true, url: base + (role === "gm" ? "/gm" : "/") + "#ticket=" + ticket });
   }
 
   return jsonResponse({ error: "mode는 'toggleClass' 또는 'ticket'이어야 합니다." }, 400);
