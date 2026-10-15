@@ -766,7 +766,7 @@ function render(){
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
     app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
-      ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
+      ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance"||practiceFor==="twist") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
@@ -880,7 +880,9 @@ const PRACTICE_TOPICS=[
   {id:"cliche", num:"②", title:"클리셰 비틀기 실습", tag:"장르 · 클리셰",
    summary:"클리셰를 정확히 짚고 → 쾌감을 찾고 → 레버 하나로 비트는 연습 5가지. 클리셰를 피할 적이 아니라 재료로 씁니다."},
   {id:"romance", num:"③", title:"로맨스 글쓰기 실습", tag:"로맨스 · 설정 → 플롯 → 글쓰기",
-   summary:"무작위로 뽑은 로맨스 클리셰 장면 하나에서 출발해 → 인물 · 배경 → 5부 플롯 → A4 1~2장 글까지 한 편을 끝냅니다."}
+   summary:"무작위로 뽑은 로맨스 클리셰 장면 하나에서 출발해 → 인물 · 배경 → 5부 플롯 → A4 1~2장 글까지 한 편을 끝냅니다."},
+  {id:"twist", num:"④", title:"복선과 반전 실습", tag:"복선 · 반전 · P‑H‑P",
+   summary:"장치를 구분하고 → 반전을 해부하고 → 단서를 숨기고 → 실패를 진단한 뒤, 반전 하나와 복선 3개를 P‑H‑P 표로 설계합니다."}
 ];
 
 const BUILDUP_INTRO=`<b>빌드업</b>은 독자에게 기대를 만들고(셋업) → 그 기대를 늘리고 조이다가(지연·고조) → 터뜨리거나 비트는(페이오프) 과정입니다.
@@ -1050,6 +1052,7 @@ function rPractice(){
   if(practiceFor==="buildup"){ rPracticeBuildup(); return; }
   if(practiceFor==="cliche"){ rPracticeCliche(); return; }
   if(practiceFor==="romance"){ rPracticeRomance(); return; }
+  if(practiceFor==="twist"){ rPracticeTwist(); return; }
   practiceFor=null;
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><div class="card-h2-row"><h2>${ICONS.book} 스토리텔링 실습</h2>${submitBtnHtml()}</div>
@@ -1059,7 +1062,7 @@ function rPractice(){
   wireSubmitBtn(c, "practice");
   /* 목록 화면의 [제출]은 낼 연습을 고르는 화면이 없으니, 실습 안에서 내도록 안내만 한다 */
   const sb=c.querySelector(".submit-tab-btn");
-  if(sb) sb.onclick=()=>alert("제출할 연습 화면(예: 빌드업 실습 → ① 거꾸로 쌓기, 클리셰 비틀기 실습 → ⑤ 비틀기 기획안, 로맨스 글쓰기 실습 → ⑤ 글쓰기)을 연 뒤, 그 화면의 [제출]을 눌러 주세요.\n지금 열려 있는 연습 하나가 제출됩니다.");
+  if(sb) sb.onclick=()=>alert("제출할 연습 화면(예: 빌드업 실습 → ① 거꾸로 쌓기, 클리셰 비틀기 실습 → ⑤ 비틀기 기획안, 로맨스 글쓰기 실습 → ⑤ 글쓰기, 복선과 반전 실습 → ⑤ 반전 설계표)을 연 뒤, 그 화면의 [제출]을 눌러 주세요.\n지금 열려 있는 연습 하나가 제출됩니다.");
   const grid=c.querySelector("#practiceGrid");
   PRACTICE_TOPICS.forEach(t=>{
     const d=document.createElement("div"); d.className="learn-card-mini";
@@ -1148,8 +1151,8 @@ function renderPracticeAside(title, examples, preferKey){
   aside.querySelectorAll(".pr-aside-tab").forEach(b=>b.onclick=()=>{ practiceAsideGenre=b.dataset.g; renderPracticeAside(title, examples, preferKey); });
 }
 
-/* 과제 제출용 — 지금 열려 있는 실습(빌드업/클리셰/로맨스)의 연습 하나 */
-function practiceSubmissionData(){ return practiceFor==="cliche" ? clicheSubmissionData() : practiceFor==="romance" ? romanceSubmissionData() : buildupSubmissionData(); }
+/* 과제 제출용 — 지금 열려 있는 실습(빌드업/클리셰/로맨스/복선과 반전)의 연습 하나 */
+function practiceSubmissionData(){ return practiceFor==="cliche" ? clicheSubmissionData() : practiceFor==="romance" ? romanceSubmissionData() : practiceFor==="twist" ? twistSubmissionData() : buildupSubmissionData(); }
 /* 과제 제출용 — 지금 열려 있는 연습 하나를 [{id,label,text}] 항목으로 바꾼다(교수 첨삭 화면의 블럭 단위) */
 function buildupSubmissionData(){
   const ex=PRACTICE_BUILDUP_EXERCISES.find(e=>e.id===practiceStep)||PRACTICE_BUILDUP_EXERCISES[0];
@@ -2573,6 +2576,534 @@ function romancePlainText(ex, st){
     return L.join("\n");
   }
   romanceItems(ex, st).forEach(it=>{
+    const t=it.text||"(비어 있음)";
+    L.push("", t.includes("\n") ? `■ ${it.label}\n${t}` : `■ ${it.label}: ${t}`);
+  });
+  return L.join("\n");
+}
+
+/* ===== 🔍 복선과 반전 실습 (2026-10-15) =====
+   「스토리 연출론 — 복선과 반전」 강의를 직접 해 보며 익히는 연습 5가지:
+   장치 감별(복선 · 체호프의 총 · 레드헤링 · 맥거핀) → 반전 해부(P‑H‑P) → 숨기기 다섯 가지 → 실패한 반전 진단 → 반전 설계표(수업 과제 양식).
+   화면 틀 · 예시 패널 · 자가 점검은 다른 실습과 같은 것을 쓴다(practicePageShell, renderPracticeAside, renderBuildupChecks).
+   작성 내용은 계정 단위(DB.practice.twist)에 연습별로 저장. 감별 사례 · 숨기기 제시문은 data.js TWIST_DEVICE_CASES / TWIST_FAIL_CASES / TWIST_HIDE_PROMPTS */
+let twistStep="devices";
+
+const TWIST_INTRO=`<b>복선</b>은 뒤에 올 사건을 미리 엎드려 깔아 둔 정보이고, <b>반전</b>은 사건이 아니라 사건의 <b>의미</b>를 뒤집는 기술입니다. 좋은 반전 앞에서 독자는 "어? → 아…!" 하고 반응합니다 — <b>몰랐지만, 알 수 있었다.</b>
+  <ul class="pr-intro-list">
+    <li><b>복선의 3단계 P‑H‑P</b> — 심기(Plant) → 숨기기(Hide) → 거두기(Payoff). 심기만 하면 '설명', 숨기기만 하면 '반칙', 거두기만 하면 '우연'</li>
+    <li><b>반전 = 놀라움 × 필연성</b> — 뜻밖이면서도 인과로 이어질 때 효과가 가장 크다(아리스토텔레스 『시학』)</li>
+    <li><b>좋은 반전은 독자를 속이되, 독자에게 공정하다</b> — 단서는 처음부터 독자 눈앞에 있었다</li>
+  </ul>
+  아래 연습을 순서대로 해 보세요. 마지막 <b>⑤ 반전 설계표</b>가 수업 과제(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검) 양식입니다.`;
+
+/* 비슷하지만 다른 네 장치 — 독자에게 보이나 · 회수되나 · 목적 */
+const TWIST_DEVICES=[
+  {id:"fore", name:"복선", seen:"은근히", paid:"회수된다", goal:"결말을 필연으로"},
+  {id:"gun", name:"체호프의 총", seen:"분명히", paid:"회수된다", goal:"기대를 만들고 충족"},
+  {id:"herring", name:"레드헤링", seen:"분명히", paid:"회수되지 않는다 (가짜 단서)", goal:"시선을 엉뚱한 곳으로"},
+  {id:"macguffin", name:"맥거핀", seen:"분명히", paid:"정체는 의미 없음", goal:"인물을 움직이는 핑계"}
+];
+/* 반전의 5유형 — 무엇이 뒤집히나 */
+const TWIST_TYPES=[
+  {id:"identity", name:"정체 반전", q:"그 인물이 누구인가"},
+  {id:"narrator", name:"서술자 반전", q:"지금까지 들은 이야기를 믿을 수 있나"},
+  {id:"cause", name:"인과 반전", q:"그 사건이 왜 일어났나"},
+  {id:"time", name:"시간 반전", q:"언제 일어난 일인가"},
+  {id:"world", name:"세계관 반전", q:"이 세계는 어떤 곳인가"}
+];
+const TWIST_PLANT_KINDS=["사물","대사","습관 · 행동","공간","색 · 모티프","제목"];
+/* 숨기기 다섯 가지 */
+const TWIST_HIDES=[
+  {id:"bury", name:"묻기", desc:"더 큰 정보 사이에 끼워 넣는다 — 긴 설명 · 목록 · 소동 속의 한 줄.", ph:"단서를 어떤 큰 정보 사이에 끼워 넣나"},
+  {id:"cover", name:"덮기", desc:"웃음 · 감정의 순간에 흘린다 — 독자가 다른 데 마음을 뺏긴 사이에.", ph:"어떤 웃긴(뭉클한) 순간에 단서를 흘리나"},
+  {id:"divert", name:"돌리기", desc:"레드헤링으로 시선을 다른 곳에 유도한다.", ph:"같은 장면에서 독자의 의심을 누구(무엇)에게 몰아주나"},
+  {id:"double", name:"겹치기", desc:"두 가지로 읽히는 대사 · 행동 — 처음엔 A로, 반전 뒤엔 B로 읽힌다.", ph:"처음과 반전 뒤에 다르게 읽히는 대사 · 행동"},
+  {id:"habit", name:"익히기", desc:"반복해서 '일상'으로 만든다 — 매번 나오니 아무도 의심하지 않는다.", ph:"단서를 매번 어떤 일상 장면으로 반복하나"}
+];
+/* 거두기 세 가지 */
+const TWIST_PAYOFFS=[
+  {id:"montage", name:"플래시백 몽타주", desc:"흩어진 단서를 한 번에 재생한다"},
+  {id:"mirror", name:"미러링", desc:"같은 구도 · 대사를 반대 의미로 반복한다"},
+  {id:"face", name:"깨달음의 얼굴", desc:"인물이 알아차리는 순간에 머문다"}
+];
+/* 실패의 4유형 (+ 감별용 '성공') */
+const TWIST_FAILS=[
+  {id:"unplanted", name:"① 심지 않은 반전", problem:"단서가 없다 (공정성 ✕)", react:"누구?"},
+  {id:"void", name:"② 무효화 반전", problem:"앞의 이야기를 지운다", react:"그럼 지금까지 뭘 본 거지?"},
+  {id:"logic", name:"③ 논리 충돌 반전", problem:"세계관 규칙과 어긋난다", react:"말이 안 되잖아"},
+  {id:"obvious", name:"④ 다 보이는 반전", problem:"숨기기에 실패", react:"알고 있었어"},
+  {id:"ok", name:"성공한 반전", problem:"공정하고 필연적이다", react:"어? → 아…!"}
+];
+/* 좋은 반전 체크리스트 (○ · △ · ✕로 매긴다) */
+const TWIST_CRITERIA=[
+  {id:"fair", name:"공정성", q:"독자도 단서를 볼 수 있었나"},
+  {id:"nec", name:"필연성", q:"이야기의 인과에서 자라났나"},
+  {id:"rewatch", name:"재관람 가치", q:"다시 보면 모든 장면이 다르게 읽히나"},
+  {id:"theme", name:"주제 강화", q:"반전이 작품의 질문을 더 깊게 만드나"}
+];
+const TWIST_GRADES=[{id:"o",label:"○"},{id:"t",label:"△"},{id:"x",label:"✕"}];
+const twistGradeLabel=id=>(TWIST_GRADES.find(g=>g.id===id)||{}).label||"";
+/* ⑤ 설계표 — 스스로 점검(O/X). 실패 4유형 + 재관람 가치 · 주제 강화 */
+const TWIST_SELF_CHECKS=[
+  {id:"fair", q:"독자도 단서를 볼 수 있다 — ① 심지 않은 반전이 아니다", tip:"복선 3개가 모두 독자 눈앞에 있는지 보세요. 인물만 알고 독자에게 보여주지 않은 정보는 단서가 아닙니다."},
+  {id:"void", q:"반전 뒤에도 앞 이야기의 감정이 살아 있다 — ② 무효화 반전이 아니다", tip:"\"모든 게 꿈이었다\"처럼 앞의 긴장을 가짜로 만들면 독자는 허무해집니다."},
+  {id:"logic", q:"세계의 규칙과 어긋나지 않는다 — ③ 논리 충돌 반전이 아니다", tip:"복선이 완벽해도 세계의 논리가 무너지면 실패합니다(『싸인』의 물)."},
+  {id:"hidden", q:"단서가 너무 드러나 미리 들키지 않는다 — ④ 다 보이는 반전이 아니다", tip:"단서마다 숨기기 기법이 있는지 보세요. 클로즈업 · 반복 강조는 오히려 '이게 단서'라고 알려 줍니다."},
+  {id:"rewatch", q:"다시 보면 장면이 다르게 읽힌다 (재관람 가치)", tip:"복선마다 '처음 볼 땐'과 '다시 볼 땐'이 달라야 합니다."},
+  {id:"theme", q:"반전이 이 이야기의 질문을 더 깊게 만든다 (주제 강화)", tip:"반전이 놀라움으로 끝나지 않고 주제와 이어지는지 보세요."}
+];
+const twistName=(list,id)=>(list.find(x=>x.id===id)||{}).name||"";
+
+/* 오른쪽 예시 — 성공한 반전 세 편(강의 사례)을 P‑H‑P로 */
+const TWIST_ANATOMY_EXAMPLES={
+  "식스 센스":{setup:["반전","말콤은 오프닝에서 이미 죽었다 (정체 + 서술 반전)"],
+    steps:[["심기","오프닝 총격 / 콜의 대사 \"죽은 사람들은 자기가 죽은 걸 몰라요\"","Plant"],
+           ["숨기기","아내와의 '냉랭한 저녁' — 관객은 부부 갈등으로 읽는다","Hide · 겹치기"],
+           ["거두기","떨어진 반지 → 플래시백 몽타주","Payoff"]],
+    point:"1999, M. 나이트 샤말란. 다시 보면 말콤이 콜 말고 누구와도 대화하지 않았다는 것이 보인다 — 재관람 가치의 교과서."},
+  "유주얼 서스펙트":{setup:["반전","진술하던 버벌이 바로 카이저 소제 (서술자 반전)"],
+    steps:[["심기","취조실 사무실의 게시판, 커피잔","Plant"],
+           ["숨기기","겁 많고 다리를 저는 '가장 약한 인물' — 아무도 의심하지 않는다","Hide · 돌리기"],
+           ["거두기","깨진 커피잔 바닥의 '코바야시' → 이야기 전체가 즉흥 창작이었다","Payoff · 플래시백 몽타주"]],
+    point:"1995, 브라이언 싱어. 단서가 공간(게시판)과 사물(커피잔)에 심겨 있었다. 서술자를 의심하게 만드는 반전이라 필연성은 △로 평가하기도 한다."},
+  "기생충":{setup:["반전","저택 지하에 또 한 가족이 산다 (세계관 반전)"],
+    steps:[["심기","\"지하실\" · 다송이의 '귀신' 트라우마 · 모스부호 · 수석","Plant"],
+           ["숨기기","귀신 이야기 = 부잣집 아이의 해프닝으로 소비된다","Hide · 덮기"],
+           ["거두기","귀신 = 근세 / 수석 = 흉기 / 모스부호 = 마지막 편지","Payoff · 미러링"]],
+    point:"2019, 봉준호. 복선 하나가 반전 하나에만 쓰이지 않고 여러 번 거둬진다. 반전(지하의 또 다른 가족)이 계급이라는 주제를 더 깊게 만든다."}
+};
+
+const PRACTICE_TWIST_EXERCISES=[
+  {id:"devices", num:"①", title:"장치 감별", summary:"복선 · 체호프의 총 · 레드헤링 · 맥거핀을 구분한다",
+   concept:`네 장치는 모두 '앞에 놓아 두는 것'이라 헷갈리기 쉽습니다. 구분 기준은 두 가지 — <b>독자에게 얼마나 보이나</b>, 그리고 <b>나중에 회수되나</b>.<br>
+     <b>복선</b>은 은근히 심어 두고 회수해 결말을 필연으로 만듭니다. <b>체호프의 총</b>은 분명히 보여 기대를 만들고 반드시 쏩니다 — 심고 거두지 않으면 '헛총'(실망), 심지 않고 거두면 '데우스 엑스 마키나'(불신).
+     <b>레드헤링</b>은 분명히 보이지만 가짜 단서이고, <b>맥거핀</b>은 인물을 움직이는 핑계일 뿐 그 정체는 중요하지 않습니다.<br>
+     아래 장면마다 어떤 장치인지 골라 보세요. 고르면 해설이 열립니다.`},
+  {id:"anatomy", num:"②", title:"반전 해부", summary:"내가 본 작품의 반전을 P‑H‑P로 뜯어본다",
+   concept:`두 번째 볼 때 완전히 다르게 보인 작품이 있나요? 그 작품의 반전을 <b>심기 → 숨기기 → 거두기</b>로 뜯어봅니다.<br>
+     먼저 반전이 <b>무엇을 뒤집었는지</b>(5유형) 고르세요. 반전은 사건이 아니라 사건의 <b>의미</b>를 바꿉니다.
+     그리고 단서가 처음엔 무엇으로 보였는지(숨기기), 어떻게 다시 불려 나왔는지(거두기)를 적습니다.<br>
+     마지막으로 <b>좋은 반전 체크리스트</b> 네 가지를 ○ · △ · ✕로 매겨 보세요. 반대로 "이건 반칙이지" 싶었던 작품을 해부해도 좋습니다 — ✕가 어디서 나오는지 보입니다.`},
+  {id:"hide", num:"③", title:"숨기기 다섯 가지", summary:"같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로 숨긴다",
+   concept:`단서는 <b>보이되 눈에 띄지 않아야</b> 합니다. 너무 숨기면 반칙(공정성 ✕), 너무 드러내면 다 보이는 반전이 됩니다.<br>
+     반전과 단서 하나를 받고, 그 단서를 <b>다섯 가지 숨기기 기법</b>으로 각각 한 장면씩 심어 보세요(세 가지 이상).
+     원칙은 <b>한 장면에 두 가지 일을 시키는 것</b> — 장면은 표면의 기능(웃음 · 감동 · 다른 사건)을 하면서, 몰래 단서를 실어 나릅니다.<br>
+     다 쓰면 가장 잘 숨긴 버전을 고르고, 그래도 독자가 <b>볼 수는 있는지</b>(공정한지) 따져 보세요.`},
+  {id:"fail", num:"④", title:"실패한 반전 진단", summary:"반전이 왜 실패했는지 4유형으로 진단하고 고쳐 쓴다",
+   concept:`독자가 "속았다"고 느끼는 반전에는 이유가 있습니다. <b>① 심지 않은 반전</b>("누구?") · <b>② 무효화 반전</b>("그럼 지금까지 뭘 본 거지?") · <b>③ 논리 충돌 반전</b>("말이 안 되잖아") · <b>④ 다 보이는 반전</b>("알고 있었어").<br>
+     아래 짧은 줄거리마다 어느 유형인지 진단해 보세요. 실패가 아닌 <b>성공한 반전</b>도 섞여 있습니다.<br>
+     마지막으로 실패한 반전 하나를 골라 <b>고쳐 쓰세요</b>. 무엇을 심고, 어떻게 숨기면 살아날까요?`},
+  {id:"design", num:"⑤", title:"반전 설계표", summary:"반전 하나 + 복선 3개를 P‑H‑P 표로 설계하고 점검한다",
+   concept:`수업 과제 '반전 설계표'의 워크시트입니다. 반전 하나를 정하고, 그 반전을 위한 <b>복선 3개</b>를 P‑H‑P 표로 설계한 뒤, <b>실패 4유형</b>으로 스스로 점검합니다.<br>
+     복선마다 <b>처음 볼 땐</b>(숨기기 — 독자가 무엇으로 받아들이나)과 <b>다시 볼 땐</b>(거두기 — 반전 뒤 무엇이 되나)을 나눠 적는 것이 핵심입니다. 처음 볼 땐 배경, 다시 볼 땐 증거.<br>
+     비밀을 끝까지 <b>숨길지</b>(서프라이즈 — 15초의 충격), 독자에게 먼저 <b>보여줄지</b>(서스펜스 — 15분의 긴장)도 정해 보세요. 히치콕의 '테이블 밑 폭탄'입니다.`,
+   examples:{
+     "예약 문자":{setup:["반전","매일 밤 11시, 하린에게 경고 문자를 보내던 '모르는 번호'는 기억을 잃기 전의 하린 자신이 예약해 둔 문자였다. (정체 + 시간 반전)"],
+       steps:[["복선 1 · 사물","심기: 문자마다 '됬어'라는 맞춤법 실수 / 처음 볼 땐: 친구가 하린의 카톡 오타를 놀리는 웃긴 장면에 섞여 지나간다 / 다시 볼 땐: 마지막에 하린이 새 예약 문자를 쓰며 똑같이 '됬어'라고 친다","덮기 → 미러링"],
+              ["복선 2 · 습관","심기: 하린은 휴대폰 알람을 늘 10시 59분에 맞춰 둔다 / 처음 볼 땐: 매 화 반복되는 하린의 일상 / 다시 볼 땐: 문자 1분 전에 휴대폰을 보게 하려던 과거의 자신","익히기 → 플래시백 몽타주"],
+              ["복선 3 · 대사","심기: 문자 \"넌 날 알아. 아주 잘.\" / 처음 볼 땐: 스토커의 협박 / 다시 볼 땐: 말 그대로의 사실","겹치기 → 깨달음의 얼굴"],
+              ["숨길까 보여줄까","서프라이즈 — 독자도 하린처럼 문자의 주인을 끝까지 몰라야 '나를 가장 모르는 건 나'라는 주제가 산다"]],
+       point:"세 복선이 모두 독자 눈앞에 있었다(공정성). 기억을 잃었다는 설정이 1화에 있어서 반전이 인과에서 자란다(필연성). 다시 보면 협박 문자가 자기 자신에게 쓴 편지로 읽힌다(재관람 가치)."}
+   }}
+];
+
+function practiceTwistStore(){
+  if(!DB.practice||typeof DB.practice!=="object") DB.practice={};
+  if(!DB.practice.twist||typeof DB.practice.twist!=="object") DB.practice.twist={};
+  return DB.practice.twist;
+}
+function blankTwistClue(){ return {kind:"", plant:"", hide:"", first:"", pay:"", second:""}; }
+function blankTwistState(id){
+  if(id==="devices") return {picks:{}, reflect:""};
+  if(id==="anatomy") return {work:"", twist:"", type:"", plant:"", hide:"", payoff:"", rewatch:"", grades:{}, note:""};
+  if(id==="hide")    return {prompt:0, customTwist:"", customClue:"", bury:"", cover:"", divert:"", double:"", habit:"", best:"", fair:""};
+  if(id==="fail")    return {picks:{}, fixCase:"", fix:""};
+  if(id==="design")  return {twist:"", type:"", surprise:"", necessity:"", mode:"", modeWhy:"", clues:[blankTwistClue(),blankTwistClue(),blankTwistClue()], theme:"", self:{}};
+  return {};
+}
+function twistState(id){
+  const store=practiceTwistStore();
+  if(!store[id]||typeof store[id]!=="object") store[id]=blankTwistState(id);
+  return store[id];
+}
+/* ③ 제시문 — {twist, clue} (prompt가 -1이면 직접 입력) */
+function twistHidePrompt(st){
+  if(st.prompt===-1) return {twist:(st.customTwist||"").trim(), clue:(st.customClue||"").trim()};
+  const list=typeof TWIST_HIDE_PROMPTS!=="undefined"?TWIST_HIDE_PROMPTS:[];
+  return list[st.prompt]||list[0]||{twist:"", clue:""};
+}
+
+function rPracticeTwist(){
+  if(!PRACTICE_TWIST_EXERCISES.some(e=>e.id===twistStep)) twistStep="devices";
+  const body=practicePageShell({title:"복선과 반전 실습", introSummary:"복선과 반전이란? (몰랐지만, 알 수 있었다)", introHtml:TWIST_INTRO,
+    introOpen:!Object.keys(practiceTwistStore()).length, exercises:PRACTICE_TWIST_EXERCISES, current:twistStep,
+    onPick:id=>{ twistStep=id; }});
+  renderTwistStep(body);
+}
+
+/* 지금 연습의 예시 묶음 — ①은 네 장치 표, ②는 강의 사례 세 편, ③은 숨기기 예시, ④는 실패 4유형과 강의 사례 */
+function twistExamples(ex){
+  if(ex.id==="devices") return {"네 장치":{setup:["기준","독자에게 얼마나 보이나 · 나중에 회수되나"],
+    steps:TWIST_DEVICES.map(d=>[d.name, `${d.goal} — 보이는 정도: ${d.seen} · 회수: ${d.paid}`, d.seen]),
+    point:"체호프의 총은 심고 거두지 않으면 '헛총', 심지 않고 거두면 '데우스 엑스 마키나'가 된다. 레드헤링과 맥거핀은 둘 다 분명히 보이지만, 레드헤링은 독자를 속이고 맥거핀은 인물을 움직인다."}};
+  if(ex.id==="anatomy") return TWIST_ANATOMY_EXAMPLES;
+  if(ex.id==="hide") return {"왼손잡이":{setup:["제시문","반전: 친절한 하숙집 주인이 범인이다 / 단서: 범인은 왼손잡이"],
+    steps:[["묻기","형사가 용의자 다섯 명의 알리바이를 길게 정리하는 장면. 그 사이 하숙집 주인이 왼손으로 찻잔을 내려놓는 한 줄."],
+           ["덮기","하숙집 주인이 주인공의 생일 케이크를 들고 나오는 뭉클한 장면 — 왼손으로 촛불을 붙인다."],
+           ["돌리기","같은 장면에서 오른손에 붕대를 감은 옆방 남자를 클로즈업해, 독자의 의심을 그쪽으로 몰아준다."],
+           ["겹치기","\"난 원래 손이 반대라서, 남들 하는 대로는 잘 안 돼요.\" — 처음엔 성격 이야기, 반전 뒤엔 자백."],
+           ["익히기","매 화 아침 식사 장면마다 왼손으로 국을 뜨는 모습을 배경처럼 반복한다."]],
+    point:"다섯 버전 모두 단서는 독자 눈앞에 있다(공정성). 다만 장면의 표면 기능(알리바이 정리 · 생일 · 아침 식사)이 독자의 주의를 가져간다 — 한 장면에 두 가지 일."}};
+  if(ex.id==="fail") return {
+    "실패 4유형":{setup:["질문","왜 독자는 \"속았다\"고 느끼는가"],
+      steps:TWIST_FAILS.filter(f=>f.id!=="ok").map(f=>[f.name, `${f.problem} — 독자: "${f.react}"`, ""]),
+      point:"①은 공정성, ②는 재관람 가치, ③은 필연성, ④는 숨기기의 실패다. 좋은 반전 체크리스트(공정성 · 필연성 · 재관람 가치 · 주제 강화)와 짝지어 보면 진단이 쉽다."},
+    "강의 사례":{setup:["사례","강의에서 다룬 실패(논쟁)한 반전 세 편"],
+      steps:[["20세기 소년","8년 연재를 끌고 온 '친구'의 정체 — 동창들조차 기억 못 하는 아이라 독자가 추리할 단서가 없다. 다만 '기억되지 못한 아이'라는 주제 자체가 의도였다는 해석도 있다.","유형 ①"],
+             ["빌리지","괴물은 장로들의 연극, 시대는 현대 — 반전이 앞의 공포를 '가짜'로 만들어 긴장을 소급해서 지운다. 재평가도 있다.","유형 ②"],
+             ["싸인","복선 회수는 모범적(아내의 유언 \"휘둘러\" · 물컵 · 천식). 그러나 외계인의 약점이 물 — 지구 표면의 70%가 물이다.","유형 ③"]],
+      point:"Q. 주제를 위한 반전이라면, 공정성은 포기해도 될까? 복선이 완벽해도 세계의 논리가 무너지면 실패한다."}};
+  return ex.examples||{};
+}
+
+/* 한 연습 화면(개념 → 작업 공간 → 자가 점검 → 버튼) */
+function renderTwistStep(body){
+  const ex=PRACTICE_TWIST_EXERCISES.find(e=>e.id===twistStep);
+  const st=twistState(ex.id);
+  body.innerHTML="";
+  const rerender=()=>{ renderTwistStep(body); body.querySelectorAll("textarea").forEach(autoGrowTextarea); };
+  const examples=twistExamples(ex);
+
+  const concept=document.createElement("div"); concept.className="pr-concept";
+  const firstEx=Object.values(examples)[0];
+  concept.innerHTML=`<h3 class="pr-h3">${esc(ex.num)} ${esc(ex.title)}</h3>
+    <div class="pr-concept-text">${ex.concept}</div>
+    ${firstEx?`<details class="pr-example"><summary>예시 보기</summary><div class="pr-example-body">${buildupExampleHtml(firstEx)}</div></details>`:""}`;
+  body.appendChild(concept);
+  renderPracticeAside(ex.title, examples, null);
+
+  const work=document.createElement("div"); work.className="pr-work";
+  body.appendChild(work);
+  const checksBox=document.createElement("div"); checksBox.className="pr-checks";
+  const refreshChecks=()=>renderBuildupChecks(checksBox, twistChecks(ex.id, st));
+
+  const builders={devices:buildTwistDevicesWork, anatomy:buildTwistAnatomyWork, hide:buildTwistHideWork, fail:buildTwistFailWork, design:buildTwistDesignWork};
+  builders[ex.id](work, st, rerender, refreshChecks);
+
+  body.appendChild(checksBox);
+  refreshChecks();
+
+  const actions=document.createElement("div"); actions.className="pr-actions";
+  const copyBtn=document.createElement("button"); copyBtn.type="button"; copyBtn.className="btn ghost sm";
+  copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`;
+  copyBtn.title="작성한 내용을 글로 복사합니다 (과제 제출 · 메모에 붙여넣기용)";
+  copyBtn.onclick=()=>{
+    const txt=twistPlainText(ex, st);
+    const done=()=>{ copyBtn.textContent="복사됨"; setTimeout(()=>{ copyBtn.innerHTML=`${ICONS.copy} 텍스트로 복사`; },1200); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, ()=>prompt("아래 내용을 복사하세요", txt));
+    else prompt("아래 내용을 복사하세요", txt);
+  };
+  const resetBtn=document.createElement("button"); resetBtn.type="button"; resetBtn.className="btn danger sm";
+  resetBtn.textContent="처음부터 다시";
+  resetBtn.onclick=()=>{
+    if(!confirm(`'${ex.title}'에 작성한 내용을 모두 지우고 처음부터 시작할까요?`)) return;
+    practiceTwistStore()[ex.id]=blankTwistState(ex.id); save(); rerender();
+  };
+  actions.append(copyBtn, resetBtn);
+  body.appendChild(actions);
+}
+
+/* 감별 퀴즈 공용(①, ④) — cases [{id,title,text,answer,why}], opts [{id,name,title?}] */
+function twistQuiz(work, st, cases, opts, pillLabel, refreshChecks){
+  if(!st.picks||typeof st.picks!=="object") st.picks={};
+  const score=document.createElement("div"); score.className="pr-spot-score";
+  const drawScore=()=>{
+    const picked=cases.filter(c=>st.picks[c.id]), ok=picked.filter(c=>st.picks[c.id]===c.answer).length;
+    score.innerHTML=`고른 장면 <b>${picked.length}</b> / ${cases.length} · 해설과 같은 답 <b>${ok}</b>`;
+  };
+  work.appendChild(score);
+  cases.forEach((c,i)=>{
+    const card=document.createElement("div"); card.className="plan-block pr-case";
+    const draw=()=>{
+      const pick=st.picks[c.id], ok=pick===c.answer;
+      card.innerHTML=`<div class="pr-case-head"><b>${i+1}. ${esc(c.title)}</b></div><div class="pr-case-row">${esc(c.text)}</div>`;
+      card.appendChild(practicePills(pillLabel, opts.map(o=>({id:o.id, label:o.name, title:o.title||""})), pick||"",
+        v=>{ if(v) st.picks[c.id]=v; else delete st.picks[c.id]; save(); draw(); drawScore(); refreshChecks(); }, true));
+      if(pick){
+        const r=document.createElement("div"); r.className="pr-case-result "+(ok?"ok":"no");
+        r.innerHTML=`<b>${ok?"✓ 해설과 같습니다":`해설에서는 '${esc(twistName(opts, c.answer))}'`}</b><br>${esc(c.why)}`;
+        card.appendChild(r);
+      }
+    };
+    draw();
+    work.appendChild(card);
+  });
+  drawScore();
+}
+
+/* ① 장치 감별 */
+function buildTwistDevicesWork(work, st, rerender, refreshChecks){
+  twistQuiz(work, st, TWIST_DEVICE_CASES, TWIST_DEVICES.map(d=>({id:d.id, name:d.name, title:`${d.goal} (보이는 정도: ${d.seen} · 회수: ${d.paid})`})), "어떤 장치?", refreshChecks);
+  work.appendChild(practiceField("돌아보기","가장 헷갈린 두 장치는? 둘을 가르는 기준을 내 말로 적어 보세요. 최근 본 작품에서 레드헤링이나 맥거핀을 찾았다면 함께.",
+    st.reflect,"예: 체호프의 총과 복선이 헷갈렸다. 둘 다 회수되지만, 총은 독자가 '저거 언젠가 쓰이겠다'고 기대하게 만들고 복선은 기대조차 못 하게 숨긴다.",
+    v=>{ st.reflect=v; save(); refreshChecks(); }));
+}
+
+/* ② 반전 해부 */
+function buildTwistAnatomyWork(work, st, rerender, refreshChecks){
+  if(!st.grades||typeof st.grades!=="object") st.grades={};
+  const f=(key,label,guide,ph,cls)=>work.appendChild(practiceField(label,guide,st[key],ph,v=>{ st[key]=v; save(); refreshChecks(); },cls));
+  const head=document.createElement("div"); head.className="plan-block";
+  head.innerHTML=`<label>작품</label><p class="plan-guide">두 번째 볼 때 완전히 다르게 보인 작품 — 또는 "이건 반칙이지" 싶었던 작품. 영화 · 웹툰 · 소설 · 드라마 무엇이든.</p>
+    <textarea class="ta-line" placeholder="작품 이름 (예: 식스 센스)"></textarea>`;
+  const wt=head.querySelector("textarea"); wt.value=st.work||"";
+  wt.oninput=()=>{ st.work=wt.value; save(); refreshChecks(); };
+  work.appendChild(head);
+  const tw=practiceField("반전 한 줄","무엇이 밝혀졌나? 사건이 아니라 사건의 '의미'가 어떻게 바뀌었나.",
+    st.twist,"예: 소년을 돕던 아동심리학자 말콤은 오프닝에서 이미 죽어 있었다.",v=>{ st.twist=v; save(); refreshChecks(); },"pr-expect");
+  tw.appendChild(practicePills("뒤집힌 것", TWIST_TYPES.map(t=>({id:t.id, label:t.name, title:t.q})), st.type, v=>{ st.type=v; save(); refreshChecks(); }, true));
+  work.appendChild(tw);
+  const php=document.createElement("div"); php.className="pr-tw-php";
+  php.appendChild(practiceField("심기 <span class=\"pr-sub\">Plant</span>","단서는 무엇이었고, 어디에 심겨 있었나? (사물 · 대사 · 습관 · 공간 · 색 · 제목)",
+    st.plant,"예: 오프닝 총격 / \"죽은 사람들은 자기가 죽은 걸 몰라요\"",v=>{ st.plant=v; save(); refreshChecks(); }));
+  php.appendChild(practiceField("숨기기 <span class=\"pr-sub\">Hide</span>","처음 볼 때 그 단서는 무엇으로 보였나? (묻기 · 덮기 · 돌리기 · 겹치기 · 익히기)",
+    st.hide,"예: 아내와의 냉랭한 저녁 — 부부 갈등으로 읽혔다",v=>{ st.hide=v; save(); refreshChecks(); }));
+  php.appendChild(practiceField("거두기 <span class=\"pr-sub\">Payoff</span>","단서는 어떻게 다시 불려 나왔나? (플래시백 몽타주 · 미러링 · 깨달음의 얼굴)",
+    st.payoff,"예: 떨어진 반지 → 플래시백 몽타주",v=>{ st.payoff=v; save(); refreshChecks(); }));
+  work.appendChild(php);
+  f("rewatch","다시 볼 때 달라지는 장면","반전을 알고 다시 보면 완전히 다르게 읽히는 장면 하나.","예: 식당에서 아내가 말콤 쪽을 한 번도 보지 않고 계산서를 집는다 — 냉랭한 게 아니라, 아내에겐 말콤이 보이지 않았다.");
+  const grade=document.createElement("div"); grade.className="plan-block pr-self";
+  grade.innerHTML=`<label>좋은 반전 체크리스트</label><p class="plan-guide">○ 잘 됐다 · △ 반쯤 · ✕ 안 됐다. 강의의 '성공과 실패 한눈에' 표처럼 매겨 보세요.</p>`;
+  TWIST_CRITERIA.forEach(c=>{
+    const r=document.createElement("div"); r.className="pr-self-row";
+    r.innerHTML=`<div class="pr-self-q">${esc(c.name)}<span class="pr-check-tip">${esc(c.q)}</span></div>`;
+    r.appendChild(practicePills("", TWIST_GRADES, st.grades[c.id]||"", v=>{ if(v) st.grades[c.id]=v; else delete st.grades[c.id]; save(); refreshChecks(); }, true));
+    grade.appendChild(r);
+  });
+  const note=document.createElement("textarea"); note.className="ta-line"; note.placeholder="△ · ✕를 준 이유 (있다면)";
+  note.value=st.note||""; note.oninput=()=>{ st.note=note.value; save(); refreshChecks(); };
+  grade.appendChild(note);
+  work.appendChild(grade);
+}
+
+/* ③ 숨기기 다섯 가지 */
+function buildTwistHideWork(work, st, rerender, refreshChecks){
+  const list=TWIST_HIDE_PROMPTS;
+  const d=document.createElement("div"); d.className="plan-block pr-prompt";
+  d.innerHTML=`<label>반전과 단서</label>
+    <div class="pr-prompt-row">
+      <select class="pr-prompt-sel">${list.map((p,i)=>`<option value="${i}">${esc(p.clue)} → ${esc(p.twist)}</option>`).join("")}<option value="-1">직접 입력…</option></select>
+      <button type="button" class="btn ghost sm pr-dice" title="다른 제시문을 무작위로 고릅니다">무작위</button>
+    </div>
+    <div class="pr-tw-given"></div>
+    <div class="pr-tw-custom" ${st.prompt===-1?"":"hidden"}>
+      <textarea class="ta-line pr-tw-ct" placeholder="반전 — 예: 친절한 하숙집 주인이 범인이다"></textarea>
+      <textarea class="ta-line pr-tw-cc" placeholder="심을 단서 — 예: 범인은 왼손잡이"></textarea>
+    </div>`;
+  const sel=d.querySelector(".pr-prompt-sel");
+  sel.value=String(st.prompt===-1?-1:Math.min(st.prompt, Math.max(list.length-1,0)));
+  sel.onchange=()=>{ st.prompt=Number(sel.value); save(); rerender(); };
+  d.querySelector(".pr-dice").onclick=()=>{
+    if(list.length<2) return;
+    let n; do{ n=Math.floor(Math.random()*list.length); }while(n===st.prompt);
+    st.prompt=n; save(); rerender();
+  };
+  const given=d.querySelector(".pr-tw-given");
+  if(st.prompt!==-1){ const p=twistHidePrompt(st);
+    given.innerHTML=`<div class="pr-case-row"><span class="pr-case-tag twist">반전</span>${esc(p.twist)}</div><div class="pr-case-row"><span class="pr-case-tag">단서</span>${esc(p.clue)}</div>`; }
+  const ct=d.querySelector(".pr-tw-ct"), cc=d.querySelector(".pr-tw-cc");
+  ct.value=st.customTwist||""; cc.value=st.customClue||"";
+  ct.oninput=()=>{ st.customTwist=ct.value; save(); refreshChecks(); };
+  cc.oninput=()=>{ st.customClue=cc.value; save(); refreshChecks(); };
+  work.appendChild(d);
+  TWIST_HIDES.forEach(h=>{
+    work.appendChild(practiceField(esc(h.name), esc(h.desc), st[h.id], h.ph, v=>{ st[h.id]=v; save(); refreshChecks(); }));
+  });
+  const best=document.createElement("div"); best.className="plan-block";
+  best.innerHTML=`<label>가장 잘 숨긴 버전</label><p class="plan-guide">하나를 고르고, 그 버전에서도 독자가 단서를 <b>볼 수는 있는지</b>(공정한지) 적으세요. 너무 숨기면 반칙, 너무 드러내면 다 보이는 반전입니다.</p>`;
+  best.appendChild(practicePills("", TWIST_HIDES.map(h=>({id:h.id, label:h.name})), st.best, v=>{ st.best=v; save(); refreshChecks(); }, true));
+  const fair=document.createElement("textarea"); fair.placeholder="고른 이유 · 공정한가 — 예: 덮기. 케이크 장면에 눈이 가지만, 다시 보면 왼손이 화면 한가운데 있다.";
+  fair.value=st.fair||""; fair.oninput=()=>{ st.fair=fair.value; save(); refreshChecks(); };
+  best.appendChild(fair);
+  work.appendChild(best);
+}
+
+/* ④ 실패한 반전 진단 */
+function buildTwistFailWork(work, st, rerender, refreshChecks){
+  twistQuiz(work, st, TWIST_FAIL_CASES, TWIST_FAILS.map(f=>({id:f.id, name:f.name, title:`${f.problem} — "${f.react}"`})), "진단", refreshChecks);
+  const fix=document.createElement("div"); fix.className="plan-block";
+  fix.innerHTML=`<label>고쳐 쓰기</label><p class="plan-guide">실패한 반전 하나를 골라 살려 보세요. 반전 자체는 그대로 두고 — 무엇을 심고(Plant), 어떻게 숨기고(Hide), 어떻게 거둘지(Payoff).</p>`;
+  const opts=TWIST_FAIL_CASES.filter(c=>c.answer!=="ok").map(c=>({id:c.id, label:c.title}));
+  fix.appendChild(practicePills("", opts, st.fixCase, v=>{ st.fixCase=v; save(); refreshChecks(); }, true));
+  const ta=document.createElement("textarea"); ta.placeholder="예: 쌍둥이 형을 1화 가족사진 속 '얼굴이 찢겨 나간 아이'로 심는다(사물). 형사의 사건 브리핑 속 한 줄로 묻고, 마지막에 찢긴 조각이 맞춰지는 미러링으로 거둔다.";
+  ta.value=st.fix||""; ta.oninput=()=>{ st.fix=ta.value; save(); refreshChecks(); };
+  fix.appendChild(ta);
+  work.appendChild(fix);
+}
+
+/* ⑤ 반전 설계표 */
+function buildTwistDesignWork(work, st, rerender, refreshChecks){
+  if(!Array.isArray(st.clues)) st.clues=[];
+  while(st.clues.length<3) st.clues.push(blankTwistClue());
+  if(!st.self||typeof st.self!=="object") st.self={};
+  const set=key=>v=>{ st[key]=v; save(); refreshChecks(); };
+
+  const tw=practiceField("① 반전 한 줄","무엇이 밝혀지나? 사건이 아니라 사건의 '의미'가 바뀌어야 합니다.",
+    st.twist,"예: 매일 밤 경고 문자를 보내던 '모르는 번호'는 기억을 잃기 전의 주인공 자신이 예약해 둔 문자였다.",set("twist"),"pr-expect");
+  tw.appendChild(practicePills("뒤집히는 것", TWIST_TYPES.map(t=>({id:t.id, label:t.name, title:t.q})), st.type, set("type"), true));
+  work.appendChild(tw);
+  const row=document.createElement("div"); row.className="plan-row";
+  row.appendChild(practiceField("② 놀라움 — \"어?\"","반전 전까지 독자는 무엇이라고 믿고 있나?",st.surprise,"예: 스토커가 주인공을 협박하고 있다",set("surprise")));
+  row.appendChild(practiceField("② 필연성 — \"아…!\"","왜 그럴 수밖에 없었나? 이야기의 어떤 인과에서 자라났나?",st.necessity,"예: 1화에서 주인공은 사고로 반년 치 기억을 잃었다",set("necessity")));
+  work.appendChild(row);
+
+  const mode=document.createElement("div"); mode.className="plan-block";
+  mode.innerHTML=`<label>③ 숨길까, 보여줄까</label><p class="plan-guide">히치콕의 '테이블 밑 폭탄' — 관객이 폭탄을 모르면 15초의 충격(서프라이즈), 알면 15분의 긴장(서스펜스).</p>`;
+  mode.appendChild(practicePills("", [{id:"surprise",label:"서프라이즈 — 끝까지 숨긴다"},{id:"suspense",label:"서스펜스 — 독자에게 먼저 보여준다"}], st.mode, set("mode"), true));
+  const mw=document.createElement("textarea"); mw.className="ta-line"; mw.placeholder="그렇게 고른 이유"; mw.value=st.modeWhy||"";
+  mw.oninput=()=>{ st.modeWhy=mw.value; save(); refreshChecks(); };
+  mode.appendChild(mw);
+  work.appendChild(mode);
+
+  const tbl=document.createElement("div"); tbl.className="plan-block";
+  tbl.innerHTML=`<label>④ 복선 3개 — P‑H‑P 표</label><p class="plan-guide">복선마다 무엇에 심을지 · 어떻게 숨길지 · 어떻게 거둘지. 처음 볼 땐 배경, 다시 볼 땐 증거.</p>`;
+  st.clues.slice(0,3).forEach((c,i)=>{
+    const card=document.createElement("div"); card.className="pr-tw-clue";
+    card.innerHTML=`<div class="pr-beat-head"><span class="pr-beat-num">복선 ${i+1}</span></div><div class="pr-tw-cols"></div>`;
+    const cols=card.querySelector(".pr-tw-cols");
+    const col=(title, pills, val, onPick, key, ph)=>{
+      const d=document.createElement("div"); d.className="pr-tw-col";
+      d.innerHTML=`<div class="pr-tw-col-h">${title}</div>`;
+      d.appendChild(practicePills("", pills, val, onPick, true));
+      const ta=document.createElement("textarea"); ta.placeholder=ph; ta.value=c[key]||"";
+      ta.oninput=()=>{ c[key]=ta.value; save(); refreshChecks(); };
+      d.appendChild(ta);
+      cols.appendChild(d);
+    };
+    col("심기 <span class=\"pr-sub\">무엇에</span>", TWIST_PLANT_KINDS.map(k=>({id:k, label:k})), c.kind, v=>{ c.kind=v; save(); refreshChecks(); },
+      "plant", "어디에 무엇을 심나 — 예: 문자마다 '됬어'라는 맞춤법 실수");
+    col("숨기기 <span class=\"pr-sub\">처음 볼 땐</span>", TWIST_HIDES.map(h=>({id:h.id, label:h.name, title:h.desc})), c.hide, v=>{ c.hide=v; save(); refreshChecks(); },
+      "first", "독자는 이걸 무엇으로 받아들이나 — 예: 친구가 오타를 놀리는 웃긴 장면");
+    col("거두기 <span class=\"pr-sub\">다시 볼 땐</span>", TWIST_PAYOFFS.map(p=>({id:p.id, label:p.name, title:p.desc})), c.pay, v=>{ c.pay=v; save(); refreshChecks(); },
+      "second", "반전 뒤 이 단서는 무엇이 되나 — 예: 새 예약 문자에도 똑같이 '됬어'");
+    tbl.appendChild(card);
+  });
+  work.appendChild(tbl);
+  work.appendChild(practiceField("⑤ 주제 강화","이 반전은 이야기가 던지는 질문을 어떻게 더 깊게 만드나?",
+    st.theme,"예: 나를 위협하던 목소리가 사실 나를 지키려던 나 자신 — '나를 가장 모르는 건 나'라는 질문",set("theme")));
+
+  const self=document.createElement("div"); self.className="plan-block pr-self";
+  self.innerHTML=`<label>⑥ 실패 4유형으로 스스로 점검</label><p class="plan-guide">옆 사람과 바꿔 읽고 서로 매겨 봐도 좋습니다. X가 나온 항목은 고쳐 보세요.</p>`;
+  TWIST_SELF_CHECKS.forEach(c=>{
+    const r=document.createElement("div"); r.className="pr-self-row";
+    r.innerHTML=`<div class="pr-self-q">${esc(c.q)}<span class="pr-check-tip">${esc(c.tip)}</span></div>`;
+    r.appendChild(practicePills("", [{id:"o",label:"O"},{id:"x",label:"X"}], st.self[c.id]||"", v=>{ if(v) st.self[c.id]=v; else delete st.self[c.id]; save(); refreshChecks(); }, true));
+    self.appendChild(r);
+  });
+  work.appendChild(self);
+}
+
+/* 자가 점검 — [{ok, label, tip, optional}] (renderBuildupChecks로 그린다) */
+function twistChecks(id, st){
+  const has=s=>!!(s&&String(s).trim());
+  const out=[];
+  const quiz=(cases, unit)=>{
+    const picks=st.picks||{}, picked=cases.filter(c=>picks[c.id]), ok=picked.filter(c=>picks[c.id]===c.answer).length;
+    out.push({ok:picked.length===cases.length, label:`모든 ${unit} 감별했다 (${picked.length} / ${cases.length})`, tip:""});
+    return {picked, ok};
+  };
+  if(id==="devices"){
+    const q=quiz(TWIST_DEVICE_CASES, "장면을");
+    out.push({ok:has(st.reflect), label:"돌아보기를 적었다", tip:""});
+    if(q.picked.length) out.push({ok:q.ok>=Math.ceil(TWIST_DEVICE_CASES.length*3/4), label:`해설과 같은 답 ${q.ok}개`, tip:"다르게 고른 장면은 두 기준(얼마나 보이나 · 회수되나)으로 다시 보세요.", optional:true});
+  }else if(id==="anatomy"){
+    const gN=TWIST_CRITERIA.filter(c=>(st.grades||{})[c.id]).length;
+    out.push({ok:has(st.work)&&has(st.twist), label:"작품과 반전을 적었다", tip:""});
+    out.push({ok:!!st.type, label:"반전 유형을 골랐다", tip:"무엇이 뒤집혔나 — 정체 · 서술자 · 인과 · 시간 · 세계관"});
+    out.push({ok:has(st.plant)&&has(st.hide)&&has(st.payoff), label:"심기 · 숨기기 · 거두기를 모두 적었다", tip:"세 칸 중 비어 있는 칸이 있다면, 그 작품에서 그 단계가 약했던 것일 수도 있습니다."});
+    out.push({ok:has(st.rewatch), label:"다시 볼 때 달라지는 장면을 찾았다", tip:""});
+    out.push({ok:gN===TWIST_CRITERIA.length, label:`체크리스트 네 가지를 매겼다 (${gN} / ${TWIST_CRITERIA.length})`, tip:""});
+    if(TWIST_CRITERIA.some(c=>["t","x"].includes((st.grades||{})[c.id]))) out.push({ok:has(st.note), label:"△ · ✕를 준 이유를 적었다", tip:"", optional:true});
+  }else if(id==="hide"){
+    const p=twistHidePrompt(st), n=TWIST_HIDES.filter(h=>has(st[h.id])).length;
+    out.push({ok:has(p.twist)&&has(p.clue), label:"반전과 단서가 정해져 있다", tip:"직접 입력을 골랐다면 반전과 단서를 모두 써 주세요."});
+    out.push({ok:n>=3, label:`숨기기 기법을 3가지 이상 써 봤다 (지금 ${n}가지)`, tip:""});
+    out.push({ok:!!st.best&&has(st.fair), label:"가장 잘 숨긴 버전을 고르고 공정한지 적었다", tip:""});
+    out.push({ok:n===TWIST_HIDES.length, label:"다섯 가지를 모두 써 봤다", tip:"", optional:true});
+  }else if(id==="fail"){
+    const q=quiz(TWIST_FAIL_CASES, "줄거리를");
+    out.push({ok:!!st.fixCase&&has(st.fix), label:"실패한 반전 하나를 골라 고쳐 썼다", tip:"고쳐 쓸 때는 반전은 그대로 두고 심기 · 숨기기 · 거두기를 바꿔 보세요."});
+    if(q.picked.length) out.push({ok:q.ok>=Math.ceil(TWIST_FAIL_CASES.length*2/3), label:`해설과 같은 답 ${q.ok}개`, tip:"독자의 반응(\"누구?\" · \"그럼 지금까지 뭘 본 거지?\" · \"말이 안 되잖아\" · \"알고 있었어\")을 떠올려 보세요.", optional:true});
+  }else if(id==="design"){
+    const clues=(st.clues||[]).slice(0,3);
+    const full=clues.filter(c=>has(c.plant)&&has(c.first)&&has(c.second)).length;
+    const selfN=TWIST_SELF_CHECKS.filter(c=>(st.self||{})[c.id]).length;
+    out.push({ok:has(st.twist)&&!!st.type, label:"① 반전을 쓰고 유형을 골랐다", tip:""});
+    out.push({ok:has(st.surprise)&&has(st.necessity), label:"② 놀라움과 필연성을 모두 적었다", tip:"반전 = 놀라움 × 필연성. 하나가 0이면 반전도 0입니다."});
+    out.push({ok:!!st.mode, label:"③ 숨길지 보여줄지 정했다", tip:""});
+    out.push({ok:full===3, label:`④ 복선 3개의 심기 · 처음 볼 땐 · 다시 볼 땐을 채웠다 (${full} / 3)`, tip:""});
+    out.push({ok:clues.every(c=>c.kind&&c.hide&&c.pay), label:"④ 복선마다 심을 곳 · 숨기기 · 거두기 방식을 골랐다", tip:""});
+    out.push({ok:selfN===TWIST_SELF_CHECKS.length, label:`⑥ 스스로 점검에 모두 답했다 (${selfN} / ${TWIST_SELF_CHECKS.length})`, tip:""});
+    out.push({ok:has(st.theme), label:"⑤ 주제 강화를 적었다", tip:"", optional:true});
+    if(new Set(clues.map(c=>c.hide).filter(Boolean)).size>=2) out.push({ok:true, label:"숨기기 기법을 두 가지 이상 섞었다", tip:"", optional:true});
+    else out.push({ok:false, label:"숨기기 기법을 두 가지 이상 섞었다", tip:"같은 기법만 쓰면 독자가 패턴을 알아챕니다.", optional:true});
+    if(selfN) out.push({ok:!TWIST_SELF_CHECKS.some(c=>(st.self||{})[c.id]==="x"), label:"스스로 점검에 X가 없다", tip:"X가 나온 항목의 설명을 읽고 설계표를 고쳐 보세요.", optional:true});
+  }
+  return out;
+}
+
+/* 작성 내용 → [{id,label,text}] — 과제 제출(교수 첨삭 블럭)과 텍스트 복사에 같이 쓴다 */
+function twistItems(ex, st){
+  const items=[];
+  const T=s=>String(s||"").trim();
+  const add=(id,label,text)=>items.push({id, label, text:T(text)});
+  const quizItems=(cases, opts)=>cases.forEach(c=>{
+    const p=(st.picks||{})[c.id];
+    add("case:"+c.id, c.title, p ? `내 답: ${twistName(opts,p)}${p===c.answer?" (해설과 같음)":` (해설: ${twistName(opts,c.answer)})`}` : "");
+  });
+  if(ex.id==="devices"){
+    quizItems(TWIST_DEVICE_CASES, TWIST_DEVICES);
+    add("reflect","돌아보기",st.reflect);
+  }else if(ex.id==="anatomy"){
+    add("work","작품",st.work);
+    add("twist","반전"+(st.type?` · ${twistName(TWIST_TYPES,st.type)}`:""),st.twist);
+    add("plant","심기 (Plant)",st.plant); add("hide","숨기기 (Hide)",st.hide); add("payoff","거두기 (Payoff)",st.payoff);
+    add("rewatch","다시 볼 때 달라지는 장면",st.rewatch);
+    const g=TWIST_CRITERIA.filter(c=>(st.grades||{})[c.id]).map(c=>`${c.name} ${twistGradeLabel(st.grades[c.id])}`).join(" · ");
+    add("grades","체크리스트", [g, T(st.note)?`이유: ${T(st.note)}`:""].filter(Boolean).join("\n"));
+  }else if(ex.id==="hide"){
+    const p=twistHidePrompt(st);
+    add("prompt","반전과 단서", (p.twist||p.clue) ? `반전: ${p.twist}\n단서: ${p.clue}` : "");
+    TWIST_HIDES.forEach(h=>{ if(T(st[h.id])) add(h.id, h.name, st[h.id]); });
+    add("best","가장 잘 숨긴 버전", [twistName(TWIST_HIDES,st.best), T(st.fair)].filter(Boolean).join("\n"));
+  }else if(ex.id==="fail"){
+    quizItems(TWIST_FAIL_CASES, TWIST_FAILS);
+    const fc=TWIST_FAIL_CASES.find(c=>c.id===st.fixCase);
+    add("fix","고쳐 쓰기"+(fc?` · ${fc.title}`:""), st.fix);
+  }else if(ex.id==="design"){
+    add("twist","① 반전"+(st.type?` · ${twistName(TWIST_TYPES,st.type)}`:""),st.twist);
+    add("arc","② 놀라움 × 필연성", [T(st.surprise)?`놀라움(반전 전 독자의 믿음): ${T(st.surprise)}`:"", T(st.necessity)?`필연성: ${T(st.necessity)}`:""].filter(Boolean).join("\n"));
+    add("mode","③ 숨길까 보여줄까", [{surprise:"서프라이즈",suspense:"서스펜스"}[st.mode]||"", T(st.modeWhy)].filter(Boolean).join(" — "));
+    (st.clues||[]).slice(0,3).forEach((c,i)=>{
+      const hide=twistName(TWIST_HIDES,c.hide), pay=twistName(TWIST_PAYOFFS,c.pay);
+      const lines=[(c.kind||T(c.plant))?`심기${c.kind?` (${c.kind})`:""}: ${T(c.plant)}`:"",
+        (hide||T(c.first))?`숨기기${hide?` (${hide})`:""} — 처음 볼 땐: ${T(c.first)}`:"",
+        (pay||T(c.second))?`거두기${pay?` (${pay})`:""} — 다시 볼 땐: ${T(c.second)}`:""].filter(Boolean);
+      add("clue:"+i, `④ 복선 ${i+1}`, lines.join("\n"));
+    });
+    add("theme","⑤ 주제 강화",st.theme);
+    add("self","⑥ 스스로 점검", TWIST_SELF_CHECKS.filter(c=>(st.self||{})[c.id]).map(c=>`${st.self[c.id]==="o"?"O":"X"}  ${c.q}`).join("\n"));
+  }
+  return items;
+}
+function twistSubmissionData(){
+  const ex=PRACTICE_TWIST_EXERCISES.find(e=>e.id===twistStep)||PRACTICE_TWIST_EXERCISES[0];
+  return {topic:"twist", exercise:ex.id, genre:"", title:`복선과 반전 실습 ${ex.num} ${ex.title}`, items:twistItems(ex, twistState(ex.id))};
+}
+function twistPlainText(ex, st){
+  const L=[`[복선과 반전 실습 ${ex.num} ${ex.title}]`];
+  twistItems(ex, st).forEach(it=>{
     const t=it.text||"(비어 있음)";
     L.push("", t.includes("\n") ? `■ ${it.label}\n${t}` : `■ ${it.label}: ${t}`);
   });
@@ -8035,7 +8566,7 @@ let feedbackPage=null;
 let navRestoring=false;
 function navSnapshot(){
   try{
-    return {activeTab, learnDetailFor, practiceFor, practiceStep, clicheStep, romanceStep, charDetailFor, charViewMode, sideViewMode,
+    return {activeTab, learnDetailFor, practiceFor, practiceStep, clicheStep, romanceStep, twistStep, charDetailFor, charViewMode, sideViewMode,
       profClassId, profClassTab, profAssignFolderId, profReviewId, profReviewVersion,
       feedbackPage: feedbackPage ? {type:feedbackPage.type, mode:feedbackPage.mode, id:feedbackPage.id||null} : null};
   }catch(e){ return null; }
@@ -8060,7 +8591,7 @@ window.addEventListener("popstate", e=>{
     return;
   }
   activeTab=st.activeTab; learnDetailFor=st.learnDetailFor; charDetailFor=st.charDetailFor;
-  practiceFor=st.practiceFor||null; practiceStep=st.practiceStep||"reverse"; clicheStep=st.clicheStep||"map"; romanceStep=st.romanceStep||"scene";
+  practiceFor=st.practiceFor||null; practiceStep=st.practiceStep||"reverse"; clicheStep=st.clicheStep||"map"; romanceStep=st.romanceStep||"scene"; twistStep=st.twistStep||"devices";
   charViewMode=st.charViewMode; sideViewMode=st.sideViewMode;
   profClassId=st.profClassId; profClassTab=st.profClassTab; profAssignFolderId=st.profAssignFolderId;
   profReviewId=st.profReviewId; profReviewVersion=st.profReviewVersion; feedbackPage=st.feedbackPage;
@@ -10913,6 +11444,7 @@ const GUIDE_SECTIONS=[
       <li><b>빌드업 실습</b>(공포 · 코미디): <b>거꾸로 쌓기</b>(결말을 받고 앞의 비트만 쓰기, 긴장 곡선) · <b>3의 법칙</b>(확립 → 반복 → 깨기) · <b>순간 늘리기</b>(같은 순간을 1컷 · 3컷 · 7컷으로) · <b>장르 바꾸기</b>(같은 빌드업에 공포 · 코미디 결말) · <b>정보 통제 표</b>(독자와 인물이 아는 것 비교) 5가지 연습이 있습니다.</li>
       <li><b>클리셰 비틀기 실습</b>: <b>클리셰 지도</b>(장르의 인물 · 설정 · 전개 · 장면 · 대사, 단어/문법 구분) · <b>비틀기 감별</b>(실제 작품이 무엇을 · 누가 · 어떻게 · 그래서 중 어느 레버를 당겼는지 맞히기) · <b>네 레버 돌리기</b> · <b>비틀기 도구 6가지</b>(반전 · 역전 · 해체 · 재구성 · 대놓고 지적하기 · 장르 이식) · <b>비틀기 기획안</b>(쾌감 → 레버 하나 → 로그라인 → 3컷 콘티 → 스스로 점검) 5가지 연습이 있습니다.</li>
       <li><b>로맨스 글쓰기 실습</b>: 다섯 단계가 한 편으로 이어집니다. <b>장면 뽑기</b>(로맨스 클리셰 장면 30개 중 무작위) → <b>인물 · 사건 · 배경</b>(그 장면이 나올 수 있게 한 줄씩) → <b>장면 자리 정하기</b>(만남 · 끌림 · 흔들림 · 고백 · 맺음 5부 중) → <b>플롯 채우기</b>(장면과 붙은 칸부터 한 칸씩, 감정 온도 곡선) → <b>글쓰기</b>(A4 1~2장, 글자 수 표시). 스토리가이드의 설정 · 플롯 · 글쓰기를 실습용으로 줄인 것입니다.</li>
+      <li><b>복선과 반전 실습</b>: <b>장치 감별</b>(복선 · 체호프의 총 · 레드헤링 · 맥거핀 구분) · <b>반전 해부</b>(내가 본 작품의 반전을 심기 · 숨기기 · 거두기와 좋은 반전 체크리스트로) · <b>숨기기 다섯 가지</b>(같은 단서를 묻기 · 덮기 · 돌리기 · 겹치기 · 익히기로) · <b>실패한 반전 진단</b>(실패 4유형 감별 + 고쳐 쓰기) · <b>반전 설계표</b>(반전 하나 + 복선 3개 P‑H‑P 표 + 실패 4유형 점검, 수업 과제 양식) 5가지 연습이 있습니다.</li>
       <li>연습마다 <b>자가 점검</b>이 자동으로 표시되고, [텍스트로 복사]로 작성 내용을 글로 옮길 수 있습니다. 넓은 화면에서는 <b>오른쪽에 그 연습의 예시</b>(공포 · 코미디 탭)가 함께 보입니다.</li>
       <li><b>과제 제출</b>: 교수님이 "스토리텔링 실습" 종류로 낸 과제에, 연습 화면 위쪽의 <b>[제출]</b>로 <b>지금 열려 있는 연습 하나</b>를 냅니다. 첨삭은 [피드백 보기]에서 확인합니다(작품과 무관한 연습이라 [내 작업물에 반영]은 없습니다).</li>
     </ul>`},

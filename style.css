@@ -1566,3 +1566,16 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .pr-ro-plotline{font-size:12.5px;line-height:1.55;color:var(--muted);margin-bottom:6px}
 .pr-ro-text{min-height:110px;line-height:1.75}
 @media(max-width:860px){ .pr-ro-persons{grid-template-columns:1fr} .pr-ro-parts{grid-template-columns:repeat(2,1fr)} .pr-ro-card-t{padding-right:0} .pr-ro-again{position:static;margin-top:8px} }
+
+/* ===== 스토리텔링 실습 — 복선과 반전 실습 (2026-10-15) ===== */
+.pr-tw-given{margin-top:8px}
+.pr-tw-custom textarea{margin-top:6px}
+.pr-tw-php{display:grid;grid-template-columns:repeat(3,1fr);gap:0 10px}
+.pr-tw-clue{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px;background:#fbfaf7}
+.pr-tw-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pr-tw-col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pr-tw-col-h{font-size:12.5px;font-weight:800;color:var(--accent)}
+.pr-tw-col .pr-genre{margin:0;gap:4px}
+.pr-tw-col .opt-btn{font-size:11.5px;padding:3px 8px}
+.pr-tw-col textarea{min-height:70px}
+@media(max-width:860px){ .pr-tw-php,.pr-tw-cols{grid-template-columns:1fr} }
