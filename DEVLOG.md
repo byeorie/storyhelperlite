@@ -2,6 +2,24 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-10-15 — RPG 게임(섬 탈출 MUD-TRPG) 연동: [RPG 게임] 메뉴 · GM 지정 · 수업별 게임 켜기
+
+**요청**: 같은 Cloudflare 계정에서 도는 수업용 RPG 게임에 스토리가이드 계정으로 들어가게. 운영자가 GM 교수를 고르고,
+그 교수가 [수업 관리]에서 게임을 할 수업을 고르면, 그 수업 학생들에게 [RPG 게임] 메뉴가 보이고 거기서 접속.
+
+- `functions/api/_utils.js` — `ensureGameSchema()`: `users.game_gm`, `classes.game_on`, `game_tickets` 표를 자동으로 만든다(다른 ensure*와 같은 방식, 이미 있으면 무시).
+- `functions/api/game.js` (새 파일) — GET: 학생은 게임이 켜진 내 수업 목록, 교수는 GM 여부와 내 수업 전체(켜짐 표시).
+  POST `toggleClass`: GM 교수가 자기 수업의 게임을 켜고 끔. POST `ticket`: 게임 접속용 **1회용 입장권(60초)**을 만들고 게임 주소(`GAME_URL` + `#ticket=`)를 돌려줌.
+  학생은 그 수업 수강생 + 게임 켜짐일 때만, GM은 자기 수업 + 게임 켜짐일 때만. GM은 게임의 GM 화면(/gm.html)으로 간다.
+- `functions/api/admin.js` — 회원 명단에 `game_gm` 포함(컬럼 없는 DB면 예전 조회로), `setGameGm` 모드 추가(교수 계정만), 교수→학생으로 바꾸면 GM 해제.
+- `app.js` — [회원 관리] 표에 "RPG 게임 · GM" 체크 칸(교수만). [수업 관리] 수업 카드에 "RPG 게임" 스위치(GM 교수만).
+  왼쪽 메뉴 "게임 → RPG 게임"(`rpgNavGroup`)은 `refreshRpgNav()`가 /api/game 결과로 보이거나 숨김(로그인·로그아웃 때마다).
+  `rRpgGame()` 페이지: 수업마다 [게임 접속](학생) / [GM 화면](GM 교수). 팝업 차단을 피하려고 새 창을 먼저 열고 입장권을 받은 뒤 주소를 넣음.
+- `index.html` — 메뉴 그룹 `rpgNavGroup` 추가. `style.css` — GM 체크 칸 · 수업 카드 스위치 모양.
+- `.gitignore` — `.wrangler/` 추가(로컬 연동 시험에서 wrangler가 만드는 폴더가 커밋되지 않게).
+- **배포 전에 할 일**: Pages 프로젝트 환경 변수 `GAME_URL`에 게임 주소를 넣는다(없으면 [게임 접속]이 "게임 주소가 아직 설정되지 않았습니다"). 표·컬럼은 처음 호출 때 자동 생성.
+- 게임 쪽(별도 저장소)은 같은 D1(`storyhelperlite-db`)을 바인딩해 `game_tickets`를 확인하고 `used=1`로 바꾼다.
+
 ## 2026-10-15 — 복선과 반전 실습: 반전 결말 이야기 ↔ 반전 설계표 순서 교체
 
 **요청**: 반전 결말 이야기에서 반전 설계표로 이어지므로 두 연습의 순서를 바꿔 달라.

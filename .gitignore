@@ -6,3 +6,4 @@ smoketest.js
 node_modules/
 update-pat.bat
 reset-pat.bat
+.wrangler/

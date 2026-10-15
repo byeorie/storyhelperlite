@@ -247,3 +247,10 @@ ALTER TABLE submissions ADD COLUMN feedback_seen_at INTEGER;
 -- 무료 한도(하루 10만 행)를 두 배로 소모합니다. 아래 한 줄을 Cloudflare D1 Console에서
 -- 한 번만 실행하세요. (데이터는 전혀 지워지지 않습니다 — 인덱스만 없어집니다)
 DROP INDEX IF EXISTS idx_user_data_updated;
+
+-- ===== 2026-10-15: RPG 게임(섬 탈출 MUD-TRPG) 연동 =====
+-- functions/api/_utils.js 의 ensureGameSchema()가 처음 호출 때 자동으로 만든다. 직접 실행할 필요는 없다(참고용).
+-- ALTER TABLE users ADD COLUMN game_gm INTEGER;      -- 관리자가 지정한 RPG 게임 GM 교수
+-- ALTER TABLE classes ADD COLUMN game_on INTEGER;    -- GM 교수가 게임을 켠 수업
+-- CREATE TABLE IF NOT EXISTS game_tickets (ticket TEXT PRIMARY KEY, user_id INTEGER NOT NULL, class_id INTEGER NOT NULL,
+--   role TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);

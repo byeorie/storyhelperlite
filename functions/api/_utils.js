@@ -446,3 +446,25 @@ export async function readSubmitRounds(env, row) {
   const mine = rounds.find((x) => x.id === row.id);
   return { round: mine ? mine.round : rounds.length, rounds };
 }
+
+/* ===== (2026-10-15) RPG 게임(섬 탈출 MUD-TRPG) 연동 =====
+   게임은 같은 Cloudflare 계정의 별도 Worker이고, 이 D1을 함께 바인딩해 아래 표를 읽는다.
+   - users.game_gm   : 관리자가 [회원 관리]에서 지정한 "RPG 게임 GM" 교수 (1이면 GM)
+   - classes.game_on : GM 교수가 [수업 관리]에서 게임을 켠 수업 (1이면 그 수업 학생에게 [RPG 게임] 메뉴)
+   - game_tickets    : 게임 접속용 1회용 입장권(60초). 게임 Worker가 확인하고 used=1로 바꾼다
+   이미 있으면 실패 → 무시(다른 ensure* 와 같은 방식). */
+let gameSchemaEnsured = false;
+export async function ensureGameSchema(env) {
+  if (gameSchemaEnsured) return;
+  const stmts = [
+    "ALTER TABLE users ADD COLUMN game_gm INTEGER",
+    "ALTER TABLE classes ADD COLUMN game_on INTEGER",
+    "CREATE TABLE IF NOT EXISTS game_tickets (ticket TEXT PRIMARY KEY, user_id INTEGER NOT NULL, class_id INTEGER NOT NULL, " +
+      "role TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0)",
+    "CREATE INDEX IF NOT EXISTS idx_game_tickets_user ON game_tickets(user_id)",
+  ];
+  for (const sql of stmts) {
+    try { await env.DB.prepare(sql).run(); } catch (e) {}
+  }
+  gameSchemaEnsured = true;
+}

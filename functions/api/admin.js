@@ -1,13 +1,22 @@
-import { requireAdmin, jsonResponse, ADMIN_USERNAME } from "./_utils.js";
+import { requireAdmin, jsonResponse, ADMIN_USERNAME, ensureGameSchema } from "./_utils.js";
 
 /* GET /api/admin — 회원 명단 조회 (관리자 전용) */
 export async function onRequestGet({ request, env }) {
   const auth = await requireAdmin(request, env);
   if (!auth) return jsonResponse({ error: "관리자만 접근할 수 있습니다." }, 403);
 
-  const { results } = await env.DB.prepare(
-    "SELECT id, school, name, username, email, role, created_at FROM users ORDER BY created_at DESC"
-  ).all();
+  /* 2026-10-15: RPG 게임 GM 지정 여부(game_gm)도 함께 — 컬럼이 없는 DB에서도 명단은 나오게 예전 조회로 되돌린다 */
+  await ensureGameSchema(env);
+  let results;
+  try {
+    ({ results } = await env.DB.prepare(
+      "SELECT id, school, name, username, email, role, created_at, game_gm FROM users ORDER BY created_at DESC"
+    ).all());
+  } catch (e) {
+    ({ results } = await env.DB.prepare(
+      "SELECT id, school, name, username, email, role, created_at FROM users ORDER BY created_at DESC"
+    ).all());
+  }
 
   return jsonResponse({ users: results || [] });
 }
@@ -58,8 +67,22 @@ export async function onRequestPost({ request, env }) {
 
     await env.DB.prepare("UPDATE users SET role = ? WHERE id = ?")
       .bind(role, userId).run();
+    // 2026-10-15: 학생이 되면 RPG 게임 GM 지정도 해제
+    if (role === "student") { try { await env.DB.prepare("UPDATE users SET game_gm = 0 WHERE id = ?").bind(userId).run(); } catch (e) {} }
 
     return jsonResponse({ ok: true, mode: "setRole", userId, role });
+  }
+
+  /* 2026-10-15: RPG 게임 GM 지정 — { userId, on }. 교수 계정만 GM이 될 수 있다 */
+  if (mode === "setGameGm") {
+    const userId = Number(body.userId);
+    if (!userId) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+    await ensureGameSchema(env);
+    const target = await env.DB.prepare("SELECT id, role FROM users WHERE id = ?").bind(userId).first();
+    if (!target) return jsonResponse({ error: "회원을 찾을 수 없습니다." }, 404);
+    if (body.on && target.role !== "professor") return jsonResponse({ error: "교수 계정만 RPG 게임 GM으로 지정할 수 있습니다." }, 400);
+    await env.DB.prepare("UPDATE users SET game_gm = ? WHERE id = ?").bind(body.on ? 1 : 0, userId).run();
+    return jsonResponse({ ok: true, mode: "setGameGm", userId, on: !!body.on });
   }
 
   if (mode === "deleteUser") {
@@ -111,5 +134,5 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ ok: true, mode: "deleteUser", userId });
   }
 
-  return jsonResponse({ error: "mode는 'data', 'all', 'setRole', 'deleteUser' 중 하나여야 합니다." }, 400);
+  return jsonResponse({ error: "mode는 'data', 'all', 'setRole', 'setGameGm', 'deleteUser' 중 하나여야 합니다." }, 400);
 }

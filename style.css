@@ -1587,3 +1587,7 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .pr-tw-reveal .pr-genre{margin:8px 0}
 .pr-tw-to-design{margin-top:4px}
 @media(max-width:860px){ .pr-tw-cols.pr-tw-cols2{grid-template-columns:1fr} }
+
+/* 2026-10-15: RPG 게임 연동 — 관리자 GM 칸, 수업 카드의 게임 스위치 */
+.admin-gm-label{display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer}
+.class-game-switch{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;cursor:pointer}

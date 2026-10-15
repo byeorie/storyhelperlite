@@ -54,6 +54,19 @@ function refreshProfNavVisibility(){
   const grp=document.getElementById("profNavGroup");
   if(grp) grp.style.display=isProfessor()?"":"none";
 }
+/* 2026-10-15: RPG 게임(섬 탈출 MUD-TRPG) 연동 — 게임이 켜진 수업의 학생, 또는 RPG 게임 GM 교수에게만
+   [RPG 게임] 메뉴가 보인다. /api/game 한 번으로 판단하고 결과는 rpgGameInfo에 둔다 */
+let rpgGameInfo={gm:false, classes:[]};
+async function refreshRpgNav(){
+  const grp=document.getElementById("rpgNavGroup");
+  if(!currentUser){ rpgGameInfo={gm:false, classes:[]}; if(grp) grp.style.display="none"; return; }
+  const res=await apiFetch("game");
+  rpgGameInfo=(res.ok && res.body) ? {gm:!!res.body.gm, classes:res.body.classes||[]} : {gm:false, classes:[]};
+  const show=rpgGameInfo.gm || rpgGameInfo.classes.length>0;
+  if(grp) grp.style.display=show?"":"none";
+  if(!show && activeTab==="rpgGame"){ forceTab("idea"); render(); }
+  else if(activeTab==="rpgGame") render();
+}
 function forceTab(name){
   activeTab=name;
   localStorage.setItem(TAB_KEY, activeTab);
@@ -70,6 +83,7 @@ function onAuthChanged(){
   render();
   maybeShowWipeNotice();
   refreshNotifyPolling();  // 2026-09-11: 제출/첨삭 알림 폴링 시작·중단
+  refreshRpgNav();         // 2026-10-15: RPG 게임 메뉴
 }
 /* 2026-08-20(3): 서버 데이터 초기화(매년 3/1·9/1) 1주일 전부터, 로그인 시(또는 접속 유지 상태 확인 시)마다
    자동으로 안내 팝업을 띄운다. "다시 보지 않음"을 누르면 이번 기준일까지는 다시 뜨지 않고,
@@ -774,7 +788,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profClasses:rProfClasses, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
+      profClasses:rProfClasses, rpgGame:rRpgGame, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
     (renderers[activeTab]||rIdea)();
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
@@ -8455,11 +8469,12 @@ async function renderAdminUsers(){
       <option value="student" ${u.role==="professor"?"":"selected"}>학생</option>
       <option value="professor" ${u.role==="professor"?"selected":""}>교수</option>
     </select></td>
+    <td>${u.role==="professor"?`<label class="admin-gm-label"><input type="checkbox" class="admin-gm-chk" data-uid="${u.id}" ${u.game_gm?"checked":""}> GM</label>`:""}</td>
     <td>${esc(u.email)}</td><td>${fmtDate(u.created_at)}</td>
     <td>${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
   </tr>`).join("");
   wrap.innerHTML=`<table class="admin-table"><thead><tr>
-    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th>이메일</th><th>가입일</th><th></th>
+    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG 게임</th><th>이메일</th><th>가입일</th><th></th>
   </tr></thead><tbody>${rows}</tbody></table>
   <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.</p>`;
   wrap.querySelectorAll(".admin-role-select").forEach(sel=>{
@@ -8468,6 +8483,18 @@ async function renderAdminUsers(){
   wrap.querySelectorAll(".admin-user-del").forEach(btn=>{
     btn.onclick=()=>doAdminDeleteUser(btn);
   });
+  wrap.querySelectorAll(".admin-gm-chk").forEach(chk=>{
+    chk.onchange=()=>doAdminSetGameGm(chk);
+  });
+}
+/* 2026-10-15: RPG 게임 GM 지정 — 체크하면 그 교수의 [수업 관리]에 수업별 "RPG 게임" 스위치가 생긴다 */
+async function doAdminSetGameGm(chk){
+  const on=chk.checked;
+  chk.disabled=true;
+  const res=await apiFetch("admin", { method:"POST", body: JSON.stringify({mode:"setGameGm", userId:Number(chk.dataset.uid), on}) });
+  chk.disabled=false;
+  if(res.ok){ adminUsersCache=null; }
+  else { alert((res.body && res.body.error) || "변경에 실패했습니다."); chk.checked=!on; }
 }
 async function doAdminDeleteUser(btn){
   const uid=Number(btn.dataset.uid), name=btn.dataset.name;
@@ -9390,6 +9417,38 @@ function openSampleProject(sample){
   forceTab("idea"); render();
 }
 
+/* ===== 🎲 RPG 게임 (2026-10-15) =====
+   섬 탈출 MUD-TRPG로 들어가는 입구. 학생: 게임이 켜진 내 수업마다 [게임 접속].
+   GM 교수: 게임이 켜진 내 수업마다 [GM 화면]. 버튼을 누르면 서버가 1회용 입장권(60초)을 만들고
+   게임을 새 창으로 연다(팝업 차단을 피하려고 창을 먼저 열고 주소를 나중에 넣는다). */
+function rRpgGame(){
+  const c=document.createElement("div");
+  const info=rpgGameInfo, list=info.gm ? info.classes.filter(cl=>cl.game_on) : info.classes;
+  const meta=cl=>[cl.school_name, cl.section, cl.class_day, cl.class_time, cl.prof_name].filter(Boolean).map(esc).join(" · ");
+  c.innerHTML=`<div class="card"><h2>${ICONS.globe} RPG 게임</h2>
+    <p class="hint">${info.gm
+      ? "게임을 켠 수업의 GM 화면으로 들어갑니다. 수업에 게임을 켜고 끄는 것은 [수업 관리]의 수업 카드에서 합니다."
+      : "수업에서 함께 하는 텍스트 RPG입니다. 버튼을 누르면 새 창에서 게임이 열립니다."}</p>
+    <div class="prof-assign-grid class-rows">${list.length ? list.map(cl=>`<div class="assign-folder class-row">
+      <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.book} ${esc(cl.name)}</span>
+        <div class="assign-folder-controls"><button class="btn rpg-go" data-id="${cl.id}">${info.gm?"GM 화면":"게임 접속"}</button></div></div>
+      <div class="hint">${meta(cl)}</div></div>`).join("")
+      : `<p class="hint">${info.gm?"아직 게임을 켠 수업이 없습니다. [수업 관리]에서 수업 카드의 RPG 게임 스위치를 켜 주세요.":"게임이 열린 수업이 없습니다."}</p>`}</div>
+    <p class="hint" id="rpgMsg"></p></div>`;
+  app.appendChild(c);
+  c.querySelectorAll(".rpg-go").forEach(btn=>{
+    btn.onclick=async ()=>{
+      const msg=c.querySelector("#rpgMsg");
+      const w=window.open("about:blank","_blank");
+      btn.disabled=true; msg.textContent="입장권을 받는 중…";
+      const r=await apiFetch("game", {method:"POST", body:JSON.stringify({mode:"ticket", classId:Number(btn.dataset.id)})});
+      btn.disabled=false;
+      if(r.ok && r.body && r.body.url){ msg.textContent=""; if(w) w.location.href=r.body.url; else location.href=r.body.url; }
+      else { if(w) w.close(); msg.textContent=(r.body&&r.body.error)||"게임에 들어가지 못했습니다."; }
+    };
+  });
+}
+
 /* ===== 교수 — 수업 관리 (2026-08-24: 기존 "과제 관리" 페이지를 이 페이지가 흡수함) =====
    팝업이 아니라 이 탭 안에서 화면만 바뀐다:
    수업 목록 → (수업 클릭) 수업 상세(과제 관리/수강 학생 탭) → (과제 관리 탭에서 폴더 클릭) 제출함
@@ -9425,6 +9484,11 @@ async function renderProfClassList(){
   if(!wrap.isConnected) return;
   if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
   const classes=res.body.classes||[], unassignedCount=res.body.unassignedCount||0;
+  /* 2026-10-15: RPG 게임 GM 교수면 수업마다 게임 켜짐 여부를 함께 불러온다 */
+  const gameRes=await apiFetch("game");
+  if(!wrap.isConnected) return;
+  const gameGm=!!(gameRes.ok && gameRes.body && gameRes.body.gm);
+  const gameOn=new Set(gameGm ? (gameRes.body.classes||[]).filter(g=>g.game_on).map(g=>g.id) : []);
   /* 수업 미지정 과제 건수는 상단 버튼 라벨에 표시 (2026-09-14: 목록 카드에서 버튼으로 이동) */
   const unBtn=document.getElementById("profUnassignedBtn");
   if(unBtn) unBtn.innerHTML=`${ICONS.book} 수업 미지정 과제 (${unassignedCount})`;
@@ -9438,6 +9502,7 @@ async function renderProfClassList(){
       </div>
     </div>
     <div class="hint">${[classMetaLine(cl,true),`수강생 ${cl.student_count}명`,`과제 ${cl.assignment_count}건`].filter(Boolean).join(" · ")}${cl.code?` · 등록 코드 <b>${esc(cl.code)}</b>`:""}</div>
+    ${gameGm?`<label class="class-game-switch" title="켜면 이 수업 학생들에게 [RPG 게임] 메뉴가 보입니다"><input type="checkbox" class="class-game-chk" data-id="${cl.id}" ${gameOn.has(cl.id)?"checked":""}> RPG 게임</label>`:""}
   </div>`).join("");
   wrap.innerHTML=html||`<p class="hint">아직 만든 수업이 없습니다. [수업 만들기]로 첫 수업을 만들어 보세요.</p>`;
   wrap.querySelectorAll(".assign-folder-edit").forEach(btn=>{
@@ -9457,6 +9522,16 @@ async function renderProfClassList(){
       const r=await apiFetch("professor-class?id="+id, {method:"DELETE"});
       if(!r.ok){ alert((r.body&&r.body.error)||"삭제에 실패했습니다."); btn.disabled=false; return; }
       renderProfClassList();
+    };
+  });
+  wrap.querySelectorAll(".class-game-switch").forEach(lb=>{ lb.onclick=e=>e.stopPropagation(); });
+  wrap.querySelectorAll(".class-game-chk").forEach(chk=>{
+    chk.onchange=async ()=>{
+      const on=chk.checked; chk.disabled=true;
+      const r=await apiFetch("game", {method:"POST", body:JSON.stringify({mode:"toggleClass", classId:Number(chk.dataset.id), on})});
+      chk.disabled=false;
+      if(!r.ok){ alert((r.body&&r.body.error)||"변경에 실패했습니다."); chk.checked=!on; return; }
+      refreshRpgNav();
     };
   });
   wrap.querySelectorAll(".assign-folder").forEach(el=>{
