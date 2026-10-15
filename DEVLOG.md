@@ -2,6 +2,13 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-10-15 — RPG 게임 주소 기본값 (GM 화면 막힘 수정)
+
+**증상**: [RPG 게임] → [GM 화면]을 누르면 "게임 주소(GAME_URL)가 아직 설정되지 않았습니다"가 나왔다.
+**원인(추정)**: 명령줄로 Pages 비밀 변수 `GAME_URL`을 저장할 때 값이 빈 채로 들어간 것으로 보인다(암호화되어 다시 읽을 수 없음).
+- `GAME_URL`을 파일 입력으로 다시 저장했다.
+- `functions/api/game.js` — `GAME_URL`이 없거나 비어 있으면 기본 주소 `https://island-mud-world.byeorie.workers.dev`를 쓴다. 게임 주소가 바뀌면 `GAME_URL`만 바꾸면 된다.
+
 ## 2026-10-15 — RPG 게임 주소 연결 (GAME_URL)
 
 - 게임 서버를 배포했다: https://island-mud-world.byeorie.workers.dev (별도 저장소 byeorie/island-mud, Cloudflare Worker)

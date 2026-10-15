@@ -7,8 +7,11 @@ import { requireAuth, jsonResponse, nowSec, makeToken, ensureGameSchema } from "
    POST /api/game { mode:"toggleClass", classId, on }  — GM 교수가 자기 수업의 게임을 켜고 끈다
    POST /api/game { mode:"ticket", classId }           — 게임 접속용 1회용 입장권(60초)을 만들고 게임 주소를 돌려준다
         학생: 그 수업 수강생 + 수업에 게임이 켜져 있어야 함 / GM 교수: 자기 수업 + 게임이 켜져 있어야 함
-   게임 주소는 Pages 환경 변수 GAME_URL (예: https://island-mud-world.<계정>.workers.dev) */
+   게임 주소는 Pages 환경 변수 GAME_URL. 비어 있으면 아래 기본 주소를 쓴다 (2026-10-15: 환경 변수가 빈 값으로
+   저장되어 [GM 화면]이 막혔던 일이 있어, 설정이 빠져도 접속이 되도록 기본값을 둔다) */
 const TICKET_SEC = 60;
+const DEFAULT_GAME_URL = "https://island-mud-world.byeorie.workers.dev";
+const gameUrl = env => String(env.GAME_URL || "").trim() || DEFAULT_GAME_URL;
 
 async function isGm(env, userId) {
   try {
@@ -60,7 +63,6 @@ export async function onRequestPost({ request, env }) {
   }
 
   if (body.mode === "ticket") {
-    if (!env.GAME_URL) return jsonResponse({ error: "게임 주소(GAME_URL)가 아직 설정되지 않았습니다. 관리자에게 알려주세요." }, 503);
     let role;
     if (u.role === "professor") {
       if (!(await isGm(env, u.id))) return jsonResponse({ error: "RPG 게임 GM으로 지정된 교수만 들어갈 수 있습니다." }, 403);
@@ -80,7 +82,7 @@ export async function onRequestPost({ request, env }) {
     await env.DB.prepare(
       "INSERT INTO game_tickets (ticket, user_id, class_id, role, created_at, expires_at, used) VALUES (?, ?, ?, ?, ?, ?, 0)"
     ).bind(ticket, u.id, classId, role, now, now + TICKET_SEC).run();
-    const base = String(env.GAME_URL).replace(/\/+$/, "");
+    const base = gameUrl(env).replace(/\/+$/, "");
     return jsonResponse({ ok: true, url: base + (role === "gm" ? "/gm" : "/") + "#ticket=" + ticket });
   }
 
