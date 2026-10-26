@@ -9427,13 +9427,18 @@ function rRpgGame(){
   const meta=cl=>[cl.school_name, cl.section, cl.class_day, cl.class_time, cl.prof_name].filter(Boolean).map(esc).join(" · ");
   c.innerHTML=`<div class="card"><h2>${ICONS.globe} RPG 게임</h2>
     <p class="hint">${info.gm
-      ? "게임을 켠 수업의 GM 화면으로 들어갑니다. 수업에 게임을 켜고 끄는 것은 [수업 관리]의 수업 카드에서 합니다."
+      ? "게임을 켠 모든 수업이 한 월드를 씁니다. GM 화면 하나에서 월드 전체를 관리하고, 수업은 그 안의 탭으로 나뉩니다. 수업에 게임을 켜고 끄는 것은 [수업 관리]의 수업 카드에서 합니다."
       : "수업에서 함께 하는 텍스트 RPG입니다. 버튼을 누르면 새 창에서 게임이 열립니다."}</p>
-    <div class="prof-assign-grid class-rows">${list.length ? list.map(cl=>`<div class="assign-folder class-row">
+    <div class="prof-assign-grid class-rows">${info.gm ? (list.length ? `<div class="assign-folder class-row">
+      <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.globe} 월드 GM 화면</span>
+        <div class="assign-folder-controls"><button class="btn rpg-go">GM 화면</button></div></div>
+      <div class="hint">수업 ${list.length}개: ${list.map(cl=>esc(cl.name)+(cl.section?" "+esc(cl.section):"")).join(" · ")}</div></div>`
+      : `<p class="hint">아직 게임을 켠 수업이 없습니다. [수업 관리]에서 수업 카드의 RPG 게임 스위치를 켜 주세요.</p>`)
+      : list.length ? list.map(cl=>`<div class="assign-folder class-row">
       <div class="assign-folder-top"><span class="assign-folder-title">${ICONS.book} ${esc(cl.name)}</span>
-        <div class="assign-folder-controls"><button class="btn rpg-go" data-id="${cl.id}">${info.gm?"GM 화면":"게임 접속"}</button></div></div>
+        <div class="assign-folder-controls"><button class="btn rpg-go" data-id="${cl.id}">게임 접속</button></div></div>
       <div class="hint">${meta(cl)}</div></div>`).join("")
-      : `<p class="hint">${info.gm?"아직 게임을 켠 수업이 없습니다. [수업 관리]에서 수업 카드의 RPG 게임 스위치를 켜 주세요.":"게임이 열린 수업이 없습니다."}</p>`}</div>
+      : `<p class="hint">게임이 열린 수업이 없습니다.</p>`}</div>
     ${info.admin?`<div class="assign-folder class-row"><div class="assign-folder-top"><span class="assign-folder-title">${ICONS.globe} 내 시험 서버 (운영자)</span>
         <div class="assign-folder-controls"><button class="btn rpg-test">시험 서버 열기</button></div></div>
       <div class="hint">수업·GM 지정 없이, 나만의 서버에서 오프닝부터 4페이즈까지 혼자 돌려 봅니다. 학생이 있는 월드와는 따로입니다.</div></div>`:""}
@@ -9454,7 +9459,8 @@ function rRpgGame(){
       const msg=c.querySelector("#rpgMsg");
       const w=window.open("about:blank","_blank");
       btn.disabled=true; msg.textContent="입장권을 받는 중…";
-      const r=await apiFetch("game", {method:"POST", body:JSON.stringify({mode:"ticket", classId:Number(btn.dataset.id)})});
+      // GM 화면(월드 하나)은 수업을 고르지 않는다: 서버가 게임을 켠 내 수업 하나로 입장권을 만든다
+      const r=await apiFetch("game", {method:"POST", body:JSON.stringify(btn.dataset.id ? {mode:"ticket", classId:Number(btn.dataset.id)} : {mode:"ticket"})});
       btn.disabled=false;
       if(r.ok && r.body && r.body.url){ msg.textContent=""; if(w) w.location.href=r.body.url; else location.href=r.body.url; }
       else { if(w) w.close(); msg.textContent=(r.body&&r.body.error)||"게임에 들어가지 못했습니다."; }

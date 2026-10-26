@@ -53,7 +53,8 @@ export async function onRequestPost({ request, env }) {
   await ensureGameSchema(env);
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: "잘못된 요청입니다." }, 400); }
-  const u = auth.user, classId = Number(body && body.classId);
+  const u = auth.user;
+  let classId = Number(body && body.classId);
 
   if (body && body.mode === "ticket" && body.admin) {
     if (u.username !== ADMIN_USERNAME) return jsonResponse({ error: "운영자만 들어갈 수 있습니다." }, 403);
@@ -63,6 +64,13 @@ export async function onRequestPost({ request, env }) {
       "INSERT INTO game_tickets (ticket, user_id, class_id, role, created_at, expires_at, used) VALUES (?, ?, 0, 'admin', ?, ?, 0)"
     ).bind(ticket, u.id, now, now + TICKET_SEC).run();
     return jsonResponse({ ok: true, url: gameUrl(env).replace(/\/+$/, "") + "/#ticket=" + ticket });
+  }
+  // (2026-10-26) GM 화면은 월드 하나: 교수는 수업을 고르지 않고 들어온다. 게임을 켠 내 수업 하나로 입장권을 만들고,
+  // 게임 쪽이 그 교수의 게임 켠 수업 전부를 GM 화면의 탭으로 보여 준다
+  if (!classId && body && body.mode === "ticket" && u.role === "professor") {
+    const first = await env.DB.prepare("SELECT id FROM classes WHERE prof_id = ? AND game_on = 1 ORDER BY id LIMIT 1").bind(u.id).first();
+    if (!first) return jsonResponse({ error: "게임을 켠 수업이 없습니다. [수업 관리]에서 수업 카드의 RPG 게임 스위치를 켜 주세요." }, 404);
+    classId = first.id;
   }
   if (!classId) return jsonResponse({ error: "수업을 골라주세요." }, 400);
 
