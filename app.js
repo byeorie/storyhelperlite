@@ -633,16 +633,24 @@ document.getElementById("renameProjBtn").onclick=()=>{
   const name=prompt("작품 이름 변경:",P.name); if(name===null)return;
   P.name=name||P.name; forceSaveNow(); refreshProjSelect();
 };
-document.getElementById("delProjBtn").onclick=()=>{
-  if(DB.projects.length<=1){alert("최소 1개의 작품은 있어야 합니다.");return;}
-  if(!confirm(`'${P.name}'을(를) 삭제할까요? 되돌릴 수 없습니다.`))return;
-  const wasId=P.id;
-  DB.projects=DB.projects.filter(p=>p.id!==wasId);
-  DB.openIds=DB.openIds.filter(id=>id!==wasId);
-  if(DB.modTimes) delete DB.modTimes[wasId];
+/* 작품 삭제 — 상단 [삭제] 버튼(지금 작품)과 메인 화면 카드의 삭제 버튼이 함께 쓴다. 삭제했으면 true */
+function deleteProject(id){
+  const target=DB.projects.find(p=>p.id===id); if(!target) return false;
+  if(DB.projects.length<=1){alert("최소 1개의 작품은 있어야 합니다.");return false;}
+  if(!confirm(`'${target.name}'을(를) 삭제할까요? 되돌릴 수 없습니다.`))return false;
+  DB.projects=DB.projects.filter(p=>p.id!==id);
+  DB.openIds=DB.openIds.filter(x=>x!==id);
+  if(DB.modTimes) delete DB.modTimes[id];
   if(!DB.openIds.length) DB.openIds=[DB.projects[0].id];
-  DB.current=DB.openIds[0]; P=currentProject(); resetUndoHistory(); forceSaveNow(); refreshProjSelect(); render();
-};
+  /* 다른 작품을 지웠으면 보던 작품은 그대로 둔다 */
+  if(DB.current===id){ DB.current=DB.openIds[0]; P=currentProject(); resetUndoHistory(); }
+  /* 삭제는 지금 작품의 내용 수정이 아니므로 수정 시각을 건드리지 않는다 */
+  save({touch:false});
+  if(typeof forceSaveToServer==="function") forceSaveToServer();
+  refreshProjSelect(); render();
+  return true;
+}
+document.getElementById("delProjBtn").onclick=()=>deleteProject(P.id);
 
 /* ===== 실행취소/다시실행 버튼 + 단축키 (Ctrl/Cmd+S 즉시저장, +Z 실행취소, +Shift+Z 또는 +Y 다시실행) ===== */
 document.getElementById("undoBtn").onclick=doUndo;
@@ -869,6 +877,8 @@ function rHome(){
 
   const list=DB.projects.map(p=>({p, t:projModTime(p)})).sort((a,b)=>b.t-a.t);
   list.forEach(({p,t})=>{
+    /* 카드(버튼) 안에 버튼을 넣을 수 없으므로, 감싸는 칸에 카드와 삭제 버튼을 나란히 둔다 */
+    const wrap=document.createElement("div"); wrap.className="home-card-wrap";
     const card=document.createElement("button"); card.type="button";
     card.className="home-card"+(p.id===DB.current?" current":"");
     card.title=p.name;
@@ -886,7 +896,11 @@ function rHome(){
         <div class="home-card-meta"><span>${esc(homeTimeLabel(t))}</span>${stats?`<span>${esc(stats)}</span>`:""}</div>
       </div>`;
     card.onclick=()=>homeOpenProject(p.id);
-    grid.appendChild(card);
+    const del=document.createElement("button"); del.type="button"; del.className="home-card-del";
+    del.title="작품 삭제"; del.setAttribute("aria-label", `'${p.name}' 삭제`); del.innerHTML=ICONS.trash;
+    del.onclick=()=>deleteProject(p.id);
+    wrap.append(card, del);
+    grid.appendChild(wrap);
   });
 }
 
