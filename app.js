@@ -384,7 +384,21 @@ function showSaveToast(state){
   el.hidden=false;
   if(state!=="saving") saveToastTimer=setTimeout(()=>{ el.hidden=true; }, 1200);
 }
-function save(){
+/* 2026-10-28: 메인 화면(홈)의 "최근 수정순" 정렬용 — 작품별 마지막 수정 시각을 DB.modTimes{작품id: ms}에 둔다.
+   작품 객체(P) 안에 두지 않는 이유: 실행취소 스냅샷(JSON.stringify(P))이 저장할 때마다 달라져
+   다시실행 목록이 지워지기 때문. 예전 작품은 기록이 없으므로 id에 들어 있는 생성 시각을 대신 쓴다. */
+function projModTime(p){
+  const t=DB.modTimes && DB.modTimes[p.id];
+  if(t) return t;
+  const m=/^p(\d{13})/.exec(p.id||"");
+  return m ? Number(m[1]) : 0;
+}
+function save(opts){
+  /* 작품 전환·탭 닫기처럼 내용이 바뀌지 않는 저장은 {touch:false}로 불러 수정 시각을 건드리지 않는다 */
+  if(!(opts && opts.touch===false) && DB.current){
+    if(!DB.modTimes || typeof DB.modTimes!=="object") DB.modTimes={};
+    DB.modTimes[DB.current]=Date.now();
+  }
   /* (2026-09-08) 로컬 저장이 실패해도(브라우저 저장 공간 초과, 시크릿 모드 등) 그 뒤의 서버 저장까지
      함께 멈춰버리면 안 된다 — 예전에는 여기서 예외가 나면 아래 saveToServer()가 아예 호출되지 않아
      작품이 어디에도 저장되지 않았다. 이제 로컬 실패는 따로 알려주고 서버 저장은 계속 진행한다. */
@@ -589,7 +603,7 @@ function refreshProjSelect(){
   updateAllTabDots();
 }
 function switchProject(id){
-  DB.current=id; P=currentProject(); resetUndoHistory(); save(); refreshProjSelect(); render();
+  DB.current=id; P=currentProject(); resetUndoHistory(); save({touch:false}); refreshProjSelect(); render();
 }
 function openProjectTab(id){
   if(!DB.openIds.includes(id)) DB.openIds.push(id);
@@ -599,19 +613,22 @@ function closeProjTab(id){
   if(DB.openIds.length<=1){ alert("마지막 탭입니다. 다른 작품을 먼저 열어주세요."); return; }
   DB.openIds=DB.openIds.filter(x=>x!==id);
   if(DB.current===id){ DB.current=DB.openIds[DB.openIds.length-1]; P=currentProject(); resetUndoHistory(); }
-  save(); refreshProjSelect(); render();
+  save({touch:false}); refreshProjSelect(); render();
 }
 document.getElementById("projSelect").onchange=e=>{
   const id=e.target.value; e.target.value="";
   if(id) openProjectTab(id);
 };
-document.getElementById("newProjBtn").onclick=()=>{
-  const name=prompt("새 작품 이름:","제목 없음"); if(name===null)return;
+/* 새 작품 만들기 — 상단 [새 작품] 버튼과 메인 화면의 + 카드가 함께 쓴다. 만들었으면 true */
+function createNewProject(){
+  const name=prompt("새 작품 이름:","제목 없음"); if(name===null)return false;
   const id=uid(); DB.projects.push(blankProject(id,name||"제목 없음"));
   DB.openIds.push(id);
   /* (2026-09-08) 작품 생성은 디바운스 없이 즉시 서버 저장 — 만든 직후 창을 닫아도 서버에 남도록 */
   DB.current=id; P=currentProject(); resetUndoHistory(); forceSaveNow(); refreshProjSelect(); render();
-};
+  return true;
+}
+document.getElementById("newProjBtn").onclick=()=>createNewProject();
 document.getElementById("renameProjBtn").onclick=()=>{
   const name=prompt("작품 이름 변경:",P.name); if(name===null)return;
   P.name=name||P.name; forceSaveNow(); refreshProjSelect();
@@ -622,6 +639,7 @@ document.getElementById("delProjBtn").onclick=()=>{
   const wasId=P.id;
   DB.projects=DB.projects.filter(p=>p.id!==wasId);
   DB.openIds=DB.openIds.filter(id=>id!==wasId);
+  if(DB.modTimes) delete DB.modTimes[wasId];
   if(!DB.openIds.length) DB.openIds=[DB.projects[0].id];
   DB.current=DB.openIds[0]; P=currentProject(); resetUndoHistory(); forceSaveNow(); refreshProjSelect(); render();
 };
@@ -689,10 +707,15 @@ document.addEventListener("click", ()=>{ toggleExportMenu(true); document.body.c
 
 /* ===== 탭 ===== */
 const TAB_KEY = "storyhelper_activeTab";
+/* 2026-10-28: 새로 접속하면 메인 화면(홈)부터, 새로고침(또는 뒤로/앞으로 가기로 다시 불러온 경우)이면
+   TAB_KEY에 기억해 둔 마지막 탭을 보여준다 */
 const TAB_NAMES = [...document.querySelectorAll(".tab")].map(t=>t.dataset.tab);
 let activeTab = (function(){
+  let navType="";
+  try{ navType=(performance.getEntriesByType("navigation")[0]||{}).type||""; }catch(e){}
+  if(navType!=="reload" && navType!=="back_forward") return "home";
   const saved = localStorage.getItem(TAB_KEY);
-  return TAB_NAMES.includes(saved) ? saved : "idea";
+  return TAB_NAMES.includes(saved) ? saved : "home";
 })();
 document.querySelectorAll(".tab").forEach(t=>{
   t.classList.toggle("active", t.dataset.tab===activeTab);
@@ -703,6 +726,8 @@ document.querySelectorAll(".tab").forEach(t=>{
     document.body.classList.remove("mobile-nav-open"); /* 모바일: 메뉴 선택 시 서랍 자동 닫힘 */
   };
 });
+/* 상단 로고(스토리 가이드)를 누르면 메인 화면으로 */
+document.querySelector(".topbar h1").onclick=()=>{ forceTab("home"); render(); window.scrollTo(0,0); };
 
 /* 입력 바인딩 헬퍼 */
 function bind(el,obj,key){
@@ -779,14 +804,14 @@ function render(){
     // 2026-08-20: 캐릭터 탭은 상세 편집 화면(charDetailFor 있음)일 때만 넓게 표시됐는데,
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
-    app.classList.toggle("wide", activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
+    app.classList.toggle("wide", activeTab==="home"||activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
       ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance"||practiceFor==="twist") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
     if(!P.explore) P.explore=blankExplore();
     if(!P.planDoc) P.planDoc=blankPlanDoc();
-    const renderers={idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
+    const renderers={home:rHome, idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
       profClasses:rProfClasses, rpgGame:rRpgGame, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
     (renderers[activeTab]||rIdea)();
@@ -807,6 +832,62 @@ function render(){
       P=fresh; resetUndoHistory(); save(); render();
     };
   }
+}
+
+/* ===== 🏠 메인 화면 (2026-10-28) =====
+   내 작품을 카드로 보여준다. 맨 왼쪽은 [+ 새 작품] 카드, 그 뒤로 마지막 수정이 최근인 작품부터.
+   카드를 누르면 그 작품을 열고 아이디어 수집 화면으로 간다. */
+function homeTimeLabel(ms){
+  if(!ms) return "";
+  const diff=Date.now()-ms, min=Math.floor(diff/60000);
+  if(min<1) return "방금 수정";
+  if(min<60) return `${min}분 전 수정`;
+  const hr=Math.floor(min/60);
+  if(hr<24) return `${hr}시간 전 수정`;
+  const day=Math.floor(hr/24);
+  if(day<7) return `${day}일 전 수정`;
+  const d=new Date(ms);
+  return `${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}. 수정`;
+}
+function homeOpenProject(id){
+  openProjectTab(id);
+  forceTab("idea"); render(); window.scrollTo(0,0);
+}
+function rHome(){
+  const c=document.createElement("div");
+  c.innerHTML=`<div class="card"><h2>${ICONS.book} 내 작품</h2>
+    <p class="hint">최근에 수정한 작품부터 보여줍니다. 카드를 누르면 작품이 열립니다.</p>
+    <div class="home-grid"></div></div>`;
+  app.appendChild(c);
+  const grid=c.querySelector(".home-grid");
+
+  const add=document.createElement("button"); add.type="button"; add.className="home-card home-card-new";
+  add.title="새 작품 만들기";
+  add.innerHTML=`<span class="home-card-plus">${ICONS.plus}</span><span class="home-card-new-label">새 작품</span>`;
+  add.onclick=()=>{ if(createNewProject()){ forceTab("idea"); render(); window.scrollTo(0,0); } };
+  grid.appendChild(add);
+
+  const list=DB.projects.map(p=>({p, t:projModTime(p)})).sort((a,b)=>b.t-a.t);
+  list.forEach(({p,t})=>{
+    const card=document.createElement("button"); card.type="button";
+    card.className="home-card"+(p.id===DB.current?" current":"");
+    card.title=p.name;
+    const logline=(p.planDoc&&p.planDoc.logline)||p.logline||(p.idea&&p.idea.logline)||"";
+    const genres=(Array.isArray(p.genres)&&p.genres.length) ? p.genres : ((p.planDoc&&p.planDoc.genre) ? [p.planDoc.genre] : []);
+    const chars=(p.characters||[]).filter(ch=>(ch.name||"").trim()).length;
+    const blocks=((p.writeDoc&&p.writeDoc.blocks)||[]).length;
+    const stats=[chars?`캐릭터 ${chars}`:"", blocks?`글 ${blocks}칸`:""].filter(Boolean).join(" · ");
+    card.innerHTML=`<div class="home-card-cover"><span>${esc((p.name||"?").trim().charAt(0)||"?")}</span>
+        ${p.isSampleProject?'<em class="home-card-badge">샘플</em>':""}</div>
+      <div class="home-card-body">
+        <div class="home-card-title">${esc(p.name||"제목 없음")}</div>
+        <div class="home-card-logline">${logline?esc(logline):'<span class="home-card-empty">로그라인 없음</span>'}</div>
+        ${genres.length?`<div class="home-card-genres">${genres.slice(0,3).map(g=>`<span>${esc(g)}</span>`).join("")}</div>`:""}
+        <div class="home-card-meta"><span>${esc(homeTimeLabel(t))}</span>${stats?`<span>${esc(stats)}</span>`:""}</div>
+      </div>`;
+    card.onclick=()=>homeOpenProject(p.id);
+    grid.appendChild(card);
+  });
 }
 
 /* ===== 📚 학습 (스토리텔링 구성요소 & 로그라인 설계 카드) ===== */
