@@ -53,6 +53,9 @@ function refreshAdminTabVisibility(){
 function refreshProfNavVisibility(){
   const grp=document.getElementById("profNavGroup");
   if(grp) grp.style.display=isProfessor()?"":"none";
+  /* 2026-10-31: [수업 공지]는 로그인한 학생 계정에만 (교수는 수업 상세의 [공지] 탭에서 쓴다) */
+  const board=document.getElementById("boardNavGroup");
+  if(board) board.style.display=(typeof currentUser!=="undefined" && currentUser && !isProfessor())?"":"none";
 }
 /* 2026-10-15: RPG 게임(섬 탈출 MUD-TRPG) 연동 — 게임이 켜진 수업의 학생, 또는 RPG 게임 GM 교수에게만
    [RPG 게임] 메뉴가 보인다. /api/game 한 번으로 판단하고 결과는 rpgGameInfo에 둔다 */
@@ -79,7 +82,8 @@ function onAuthChanged(){
   refreshProfNavVisibility();
   refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
-  if(activeTab==="profClasses" && !isProfessor()) forceTab("idea");
+  if((activeTab==="profClasses" || activeTab==="profMaterials") && !isProfessor()) forceTab("idea");
+  if(activeTab==="classBoard" && (!currentUser || isProfessor())) forceTab("idea");
   render();
   maybeShowWipeNotice();
   refreshNotifyPolling();  // 2026-09-11: 제출/첨삭 알림 폴링 시작·중단
@@ -821,7 +825,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={home:rHome, idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profClasses:rProfClasses, rpgGame:rRpgGame, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
+      profClasses:rProfClasses, profMaterials:rProfMaterials, classBoard:rClassBoard, rpgGame:rRpgGame, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
     (renderers[activeTab]||rIdea)();
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
@@ -8785,10 +8789,17 @@ function renderNotifyToasts(role, itemsRaw){
         <span class="notify-sub">클릭하면 제출함이 열립니다</span>`;
       main.onclick=()=>notifyOpenProfessor(it);
     }else{
+      if(it.noticeId){
+        const kindLabel = it.kind==="assignmentNotice" ? "새 과제 공지" : "새 공지";
+        main.innerHTML=`<span class="notify-title">${esc(it.className)} ${kindLabel}: ${esc(it.noticeTitle)}</span>
+          <span class="notify-sub">클릭하면 수업 공지가 열립니다</span>`;
+        main.onclick=()=>notifyOpenNotice(it);
+      }else{
       const what = it.kind==="feedback" ? "피드백이 도착했습니다" : "교수님이 확인했습니다";
       main.innerHTML=`<span class="notify-title">${esc(it.className)}-${esc(it.assignmentTitle)} ${esc(what)}</span>
         <span class="notify-sub">${esc(TYPE_LABEL[it.type]||it.type)} · 클릭하면 바로 볼 수 있습니다</span>`;
       main.onclick=()=>notifyOpenStudent(it);
+      }
     }
     const close=document.createElement("button");
     close.type="button"; close.className="notify-toast-close"; close.title="닫기";
@@ -8813,7 +8824,8 @@ function notifyDismiss(isProf, it){
     notifySaveDismissed();
   }else{
     /* 학생: 서버에 "확인함"으로 기록해서 다른 컴퓨터에서도 다시 뜨지 않게 한다 */
-    apiFetch("notifications", {method:"POST", body:JSON.stringify({ids:[it.submissionId]})});
+    if(it.noticeId) apiFetch("class-notices", {method:"POST", body:JSON.stringify({action:"read", ids:[it.noticeId]})});
+    else apiFetch("notifications", {method:"POST", body:JSON.stringify({ids:[it.submissionId]})});
   }
   notifyRemoveByKey(it.key);       // 서버 응답을 기다리지 않고 화면에서 바로 없앤다
   notifySignature="";              // 다음 폴링 때 다시 그리도록 서명 초기화
@@ -8838,6 +8850,14 @@ function notifyOpenProfessor(it){
   profReviewId = null; profReviewVersion = null;
   render();
 }
+/* 학생 — 수업 공지 알림을 누르면 [수업 공지]에서 그 수업을 연다(열면 읽음 처리되어 알림이 사라진다) */
+function notifyOpenNotice(it){
+  forceTab("classBoard");
+  boardClassId=it.classId;
+  try{ localStorage.setItem(BOARD_CLASS_KEY, String(boardClassId)); }catch(e){}
+  feedbackPage=null;
+  render();
+}
 /* 학생 — 알림을 누르면 해당 과제의 첨삭 보기 화면으로 이동 (열면 서버가 "확인함"으로 기록한다) */
 function notifyOpenStudent(it){
   const type=it.type;
@@ -8852,7 +8872,7 @@ let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — nul
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
 let profReviewVersion=null;  // 과제 관리 목록의 버전 드롭다운으로 옛 버전을 골랐을 때 그 버전 번호 — null이면 최신(=이어서 편집 가능)
 let profClassId=null;        // 2026-08-24: 열려있는 수업 id — null이면 수업 목록 화면, "none"이면 수업 미지정(전체 공개) 과제함
-let profClassTab="assignments"; // 수업 상세 화면에서 활성 탭: "assignments"(과제 관리) | "students"(수강 학생)
+let profClassTab="assignments"; // 수업 상세 화면에서 활성 탭: "notices"(공지) | "assignments"(과제 관리) | "students"(수강 학생)
 let reviewSplitIds=new Set();// 첨삭 화면에서 "이전 버전 / 첨삭"으로 위아래 분리된 블록 id 모음
 /* 학생 계정의 [첨삭 보기] — 팝업 대신 그 탭(기획서/플롯/글쓰기) 안에서 페이지로 전환.
    null이면 평소 탭 화면, {type, mode:'list'}면 그 타입의 제출 목록, {type, mode:'detail', id}면 상세 */
@@ -9809,6 +9829,7 @@ async function rProfClassDetail(classId){
     </div>
     <h2 id="classDetailTitle">${ICONS.book} ${plainTitle||"불러오는 중…"}</h2>
     ${plainTitle?"":`<div class="auth-tabs class-tabs">
+      <button type="button" class="auth-tab class-tab-btn" data-tab="notices">${ICONS.chat} 공지</button>
       <button type="button" class="auth-tab class-tab-btn" data-tab="assignments">${ICONS.book} 과제 관리</button>
       <button type="button" class="auth-tab class-tab-btn" data-tab="students">${ICONS.user} 수강 학생</button>
     </div>`}
@@ -9844,6 +9865,7 @@ async function rProfClassDetail(classId){
 
   const body=document.getElementById("classDetailBody"); if(!body) return;
   if(profClassTab==="students") renderClassStudentsTab(body, classId, res.body);
+  else if(profClassTab==="notices") renderClassNoticesTab(body, classId);
   else renderClassAssignmentsTab(body, classId);
 }
 /* 수업 상세 — "수강 학생" 탭: 현재 수강생 명단(제외 가능) + 추가 가능한(내 코드로 등록됐지만 이
@@ -9891,6 +9913,364 @@ function openAddClassStudentModal(classId, available){
     else alert((r.body&&r.body.error)||"추가에 실패했습니다.");
   };
 }
+/* ===== 수업 공지 · 교수 자료실 (2026-10-31) =====
+   - 교수 [자료실] 탭(rProfMaterials): 교수 계정에 묶인 자료. 수업마다 "공유"를 걸면 그 수업 학생이 받는다.
+     3/1·9/1 정기 초기화 대상이 아니라 학기가 바뀌어도 남는다(서버 materials.js 설명 참고).
+   - 수업 상세 [공지] 탭(renderClassNoticesTab): 일반 공지와 과제 공지(그 수업 과제 하나 연결)를 한 목록에.
+     자료실 자료를 첨부할 수 있다.
+   - 학생 [수업 공지] 탭(rClassBoard): 내가 등록된 수업을 골라 공지와 공유 자료를 본다. 열면 읽음 처리.
+   자료 내려받기는 로그인 토큰이 필요해서(<a href>로는 헤더를 못 붙인다) fetch → blob으로 저장한다. */
+const MATERIAL_MAX_MB=30;        /* 서버 materials.js MATERIAL_MAX_MB와 같은 값 */
+const BOARD_CLASS_KEY="storyhelper_board_class";
+let boardClassId=null;           /* 학생 [수업 공지]에서 고른 수업 id */
+try{ boardClassId=Number(localStorage.getItem(BOARD_CLASS_KEY))||null; }catch(e){}
+
+function pickFiles(multiple){
+  return new Promise(resolve=>{
+    const inp=document.createElement("input"); inp.type="file"; inp.multiple=!!multiple;
+    inp.onchange=()=>resolve([...inp.files]);
+    inp.click();
+  });
+}
+async function uploadMaterial(file){
+  if(file.size>MATERIAL_MAX_MB*1024*1024) return {error:`${file.name} — ${fileSizeText(file.size)} (자료는 파일 하나당 ${MATERIAL_MAX_MB}MB까지)`};
+  const token=getToken(); if(!token) return {error:"로그인이 필요합니다."};
+  try{
+    const r=await fetch("/api/materials?name="+encodeURIComponent(file.name),
+      {method:"POST", headers:{"Authorization":"Bearer "+token, "Content-Type":"application/octet-stream"}, body:file});
+    const j=await r.json().catch(()=>null);
+    if(!r.ok || !j || !j.material) return {error:`${file.name} — ${(j&&j.error)||"올리지 못했습니다."}`};
+    return {material:j.material};
+  }catch(e){ return {error:`${file.name} — 서버에 연결할 수 없습니다.`}; }
+}
+/* 여러 파일을 차례로 올린다. 버튼에 진행 상황을 보여주고, 실패한 파일은 한 번에 알린다 */
+async function uploadMaterials(files, btn){
+  const label=btn?btn.innerHTML:"";
+  const done=[], errs=[];
+  for(let i=0;i<files.length;i++){
+    if(btn) btn.textContent=`올리는 중… (${i+1}/${files.length})`;
+    const r=await uploadMaterial(files[i]);
+    if(r.material) done.push(r.material); else errs.push(r.error);
+  }
+  if(btn) btn.innerHTML=label;
+  if(errs.length) alert("다음 파일은 올리지 못했습니다.\n\n"+errs.join("\n"));
+  return done;
+}
+async function downloadMaterial(m, btn){
+  const token=getToken(); if(!token){ alert("로그인이 필요합니다."); return; }
+  if(btn) btn.disabled=true;
+  try{
+    const r=await fetch("/api/material-file?id="+m.id, {headers:{"Authorization":"Bearer "+token}});
+    if(!r.ok){ const j=await r.json().catch(()=>null); alert((j&&j.error)||"내려받지 못했습니다."); return; }
+    const url=URL.createObjectURL(await r.blob());
+    const a=document.createElement("a"); a.href=url; a.download=m.file_name||"자료";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+  }catch(e){ alert("서버에 연결할 수 없습니다."); }
+  finally{ if(btn) btn.disabled=false; }
+}
+function materialChipHtml(m){
+  return `<button type="button" class="material-chip" data-mat="${m.id}" title="내려받기">${ICONS.download} ${esc(m.title)}
+    <span class="material-chip-meta">${esc(fileExtOf(m.file_name).toUpperCase())} · ${fileSizeText(m.size)}</span></button>`;
+}
+function bindMaterialChips(root, list){
+  const byId={}; (list||[]).forEach(m=>{ byId[m.id]=m; });
+  root.querySelectorAll(".material-chip").forEach(b=>{
+    b.onclick=()=>{ const m=byId[b.dataset.mat]; if(m) downloadMaterial(m, b); };
+  });
+}
+/* 공지 본문 — esc()로 감싼 뒤(줄바꿈은 <br>) 주소만 링크로 바꾼다 */
+function linkifyEscaped(html){
+  return html.replace(/(https?:\/\/[^\s<]+)/g, u=>`<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+}
+function classLabel(cl){ return cl.name+(cl.section?` (${cl.section})`:""); }
+
+/* ----- 교수 [자료실] ----- */
+function rProfMaterials(){
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<h2>${ICONS.file} 자료실</h2>
+    <p class="hint">수업 시간에 쓸 자료를 올려두고 [공유 수업]에서 수업을 고르면 그 수업 학생들이 [수업 공지] 메뉴에서 내려받을 수 있습니다. 수업 공지를 쓸 때 첨부할 수도 있습니다.
+    자료실의 파일은 <b>매년 3월 1일·9월 1일 서버 초기화 때도 지워지지 않습니다</b> — 새 학기에는 새 수업에 공유만 다시 걸어 주세요. (파일 하나당 ${MATERIAL_MAX_MB}MB까지)</p>
+    <div class="assign-folder-actions"><button class="btn" id="matUploadBtn">${ICONS.upload} 자료 올리기</button></div>
+    <div id="matListWrap"><p class="hint">불러오는 중…</p></div>`;
+  app.appendChild(c);
+  const up=c.querySelector("#matUploadBtn");
+  up.onclick=async ()=>{
+    if(up.disabled) return;
+    const files=await pickFiles(true); if(!files.length) return;
+    up.disabled=true;
+    await uploadMaterials(files, up);
+    up.disabled=false;
+    renderProfMaterialList();
+  };
+  renderProfMaterialList();
+}
+async function renderProfMaterialList(){
+  const wrap=document.getElementById("matListWrap"); if(!wrap) return;
+  const [res, cres]=await Promise.all([apiFetch("materials"), apiFetch("professor-classes")]);
+  if(!wrap.isConnected) return;
+  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"불러오지 못했습니다.")}</p>`; return; }
+  const list=res.body.materials||[], classes=(cres.ok && cres.body && cres.body.classes)||[];
+  const cname={}; classes.forEach(cl=>{ cname[cl.id]=classLabel(cl); });
+  if(!list.length){ wrap.innerHTML=`<p class="hint">아직 올린 자료가 없습니다. [자료 올리기]로 첫 자료를 올려 보세요.</p>`; return; }
+  wrap.innerHTML=`<div class="material-table-wrap"><table class="admin-table material-table"><thead><tr>
+      <th>제목</th><th>파일</th><th>올린 날짜</th><th>공유 수업</th><th></th>
+    </tr></thead><tbody>${list.map(m=>{
+      const tags=m.classIds.filter(id=>cname[id]).map(id=>`<span class="material-class-tag">${esc(cname[id])}</span>`).join("");
+      return `<tr data-id="${m.id}">
+        <td class="material-title">${esc(m.title)}</td>
+        <td class="hint">${esc(m.file_name)}<br>${fileSizeText(m.size)}</td>
+        <td>${fmtDate(m.created_at)}</td>
+        <td>${tags||`<span class="hint">공유 안 함</span>`}</td>
+        <td class="material-actions">
+          <button type="button" class="btn ghost sm" data-act="share">${ICONS.group} 공유 수업</button>
+          <button type="button" class="btn ghost sm" data-act="rename" title="제목 바꾸기">${ICONS.edit}</button>
+          <button type="button" class="btn ghost sm" data-act="down" title="내려받기">${ICONS.download}</button>
+          <button type="button" class="btn ghost sm" data-act="del" title="삭제">${ICONS.trash}</button>
+        </td></tr>`;
+    }).join("")}</tbody></table></div>
+    <p class="hint">총 ${list.length}개 · ${fileSizeText(list.reduce((n,m)=>n+(m.size||0),0))}</p>`;
+  wrap.querySelectorAll("tr[data-id]").forEach(tr=>{
+    const m=list.find(x=>x.id===Number(tr.dataset.id)); if(!m) return;
+    tr.querySelector('[data-act="share"]').onclick=()=>openMaterialShareModal(m, classes);
+    tr.querySelector('[data-act="down"]').onclick=e=>downloadMaterial(m, e.currentTarget);
+    tr.querySelector('[data-act="rename"]').onclick=async ()=>{
+      const t=prompt("자료 제목", m.title); if(t==null) return;
+      if(!t.trim()){ alert("제목을 입력해주세요."); return; }
+      const r=await apiFetch("materials", {method:"PUT", body:JSON.stringify({id:m.id, title:t.trim()})});
+      if(r.ok) renderProfMaterialList(); else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
+    };
+    tr.querySelector('[data-act="del"]').onclick=async ()=>{
+      if(!confirm(`'${m.title}' 자료를 삭제할까요?\n공유한 수업과 이 자료를 첨부한 공지에서도 사라집니다.`)) return;
+      const r=await apiFetch("materials?id="+m.id, {method:"DELETE"});
+      if(r.ok) renderProfMaterialList(); else alert((r.body&&r.body.error)||"삭제에 실패했습니다.");
+    };
+  });
+}
+function openMaterialShareModal(m, classes){
+  if(!classes.length){ alert("먼저 [수업 관리]에서 수업을 만들어 주세요."); return; }
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="공유할 수업 — "+m.title;
+  top.append(ttl, iconBtn(ICONS.close,"닫기",close));
+  box.appendChild(top);
+  const on=new Set(m.classIds);
+  box.insertAdjacentHTML("beforeend", `<p class="hint">체크한 수업의 학생들이 [수업 공지] → [수업 자료]에서 이 파일을 내려받을 수 있습니다.</p>
+    <div class="class-add-list">${classes.map(cl=>`<label class="class-add-row"><input type="checkbox" value="${cl.id}"${on.has(cl.id)?" checked":""}> ${esc(classLabel(cl))}</label>`).join("")}</div>
+    <button class="btn" id="matShareSaveBtn" style="margin-top:14px;width:100%">저장</button>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  box.querySelector("#matShareSaveBtn").onclick=async ()=>{
+    const ids=[...box.querySelectorAll('input[type="checkbox"]:checked')].map(i=>Number(i.value));
+    const r=await apiFetch("materials", {method:"PUT", body:JSON.stringify({id:m.id, classIds:ids})});
+    if(r.ok){ close(); renderProfMaterialList(); }
+    else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
+  };
+}
+
+/* ----- 공지 목록(교수·학생 공용 모양) ----- */
+function noticeCardsHtml(notices, opt){
+  const prof=!!opt.prof;
+  return notices.map(n=>{
+    const a=n.assignment;
+    const unread=!prof && !n.read;
+    const goType=(!prof && a && a.type && TYPE_LABEL[a.type]) ? a.type : null;
+    return `<div class="notice-card${n.pinned?" pinned":""}${unread?" unread":""}" data-id="${n.id}">
+      <div class="notice-head">
+        ${n.pinned?`<span class="notice-tag pin">고정</span>`:""}
+        <span class="notice-tag ${n.kind==="assignment"?"assign":"normal"}">${n.kind==="assignment"?"과제 공지":"공지"}</span>
+        <span class="notice-title">${esc(n.title)}</span>
+        ${unread?`<span class="notice-tag new">새 글</span>`:""}
+        <span class="hint notice-date">${fmtDateTime(n.created_at)}${n.updated_at>n.created_at+60?" · 수정됨":""}</span>
+      </div>
+      ${a?`<div class="notice-assign">${ICONS.book} 과제 <b>${esc(a.title)}</b>${a.due_at?` · 제출기한 ${fmtDateTime(a.due_at)}`:""}${a.open?"":" · 제출 마감"}
+        ${goType?`<button type="button" class="btn ghost sm notice-go" data-type="${goType}">${esc(TYPE_LABEL[goType])}에서 제출하기</button>`:""}</div>`:""}
+      ${n.body?`<div class="notice-body">${linkifyEscaped(esc(n.body))}</div>`:""}
+      ${n.materials.length?`<div class="notice-files">${n.materials.map(materialChipHtml).join("")}</div>`:""}
+      ${prof?`<div class="notice-foot">
+        <span class="hint">읽은 학생 ${n.readCount||0}/${opt.studentCount||0}명</span>
+        <button type="button" class="btn ghost sm notice-edit">${ICONS.edit} 수정</button>
+        <button type="button" class="btn ghost sm notice-del">${ICONS.trash} 삭제</button>
+      </div>`:""}
+    </div>`;
+  }).join("");
+}
+
+/* ----- 교수: 수업 상세 [공지] 탭 ----- */
+async function renderClassNoticesTab(container, classId){
+  container.innerHTML=`<p class="hint">이 수업 학생들에게 보이는 공지입니다. <b>과제 공지</b>로 쓰면 이 수업의 과제를 연결할 수 있고, [자료실]의 자료를 첨부할 수 있습니다.
+    학생에게는 왼쪽 메뉴 [수업 공지]와 알림 팝업으로 보입니다.</p>
+    <div class="assign-folder-actions">
+      <button class="btn" id="noticeNewBtn">${ICONS.plus} 공지 쓰기</button>
+      <button class="btn ghost sm" id="noticeMatBtn">${ICONS.file} 자료실로</button>
+    </div>
+    <div id="noticeListWrap"><p class="hint">불러오는 중…</p></div>`;
+  container.querySelector("#noticeMatBtn").onclick=()=>{ forceTab("profMaterials"); render(); };
+  const reload=()=>renderClassNoticesTab(container, classId);
+  container.querySelector("#noticeNewBtn").onclick=()=>openNoticeModal(classId, null, reload);
+  const res=await apiFetch("class-notices?classId="+classId);
+  const wrap=container.querySelector("#noticeListWrap");
+  if(!wrap || !wrap.isConnected) return;
+  if(!res.ok || !res.body){ wrap.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"불러오지 못했습니다.")}</p>`; return; }
+  const d=res.body;
+  wrap.innerHTML=(d.notices.length ? `<div class="notice-list">${noticeCardsHtml(d.notices, {prof:true, studentCount:d.studentCount})}</div>`
+      : `<p class="hint">아직 공지가 없습니다. [공지 쓰기]로 첫 공지를 올려 보세요.</p>`)
+    + `<h3 class="board-sub">${ICONS.file} 이 수업에 공유한 자료 (${d.materials.length})</h3>`
+    + (d.materials.length ? `<div class="notice-files">${d.materials.map(materialChipHtml).join("")}</div>`
+      : `<p class="hint">[자료실]에서 자료의 [공유 수업]에 이 수업을 체크하면 여기와 학생 화면에 보입니다.</p>`);
+  bindMaterialChips(wrap, [...d.materials, ...d.notices.flatMap(n=>n.materials)]);
+  wrap.querySelectorAll(".notice-card").forEach(card=>{
+    const n=d.notices.find(x=>x.id===Number(card.dataset.id)); if(!n) return;
+    card.querySelector(".notice-edit").onclick=()=>openNoticeModal(classId, n, reload);
+    card.querySelector(".notice-del").onclick=async ()=>{
+      if(!confirm(`'${n.title}' 공지를 삭제할까요? (첨부한 자료는 자료실에 그대로 남습니다)`)) return;
+      const r=await apiFetch("class-notices?id="+n.id, {method:"DELETE"});
+      if(r.ok) reload(); else alert((r.body&&r.body.error)||"삭제에 실패했습니다.");
+    };
+  });
+}
+/* 공지 쓰기/수정 팝업 — notice가 있으면 수정 */
+async function openNoticeModal(classId, notice, onSaved){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  const box=document.createElement("div"); box.className="plot-modal notice-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=notice?"공지 수정":"공지 쓰기";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",close));
+  box.appendChild(top);
+  const n=notice||{kind:"notice", title:"", body:"", pinned:false, assignment:null, materials:[]};
+  box.insertAdjacentHTML("beforeend", `
+    <div class="notice-kind-row">
+      <label><input type="radio" name="noticeKind" value="notice"${n.kind!=="assignment"?" checked":""}> 일반 공지</label>
+      <label><input type="radio" name="noticeKind" value="assignment"${n.kind==="assignment"?" checked":""}> 과제 공지</label>
+      <label class="notice-pin-chk"><input type="checkbox" id="noticePinned"${n.pinned?" checked":""}> 맨 위에 고정</label>
+    </div>
+    <div id="noticeAssignRow" class="notice-assign-row">
+      <label>연결할 과제 <span class="hint">(선택 — 학생 화면에 과제 이름·제출기한이 함께 보입니다)</span></label>
+      <select id="noticeAssign"><option value="">불러오는 중…</option></select>
+    </div>
+    <label>제목</label><input type="text" id="noticeTitle" maxlength="200" value="${esc(n.title)}">
+    <label>내용</label><textarea id="noticeBody" rows="8" placeholder="공지 내용 (인터넷 주소는 자동으로 링크가 됩니다)"></textarea>
+    <label>첨부 자료 <span class="hint">(자료실의 자료 중에서 고르거나 새로 올립니다)</span></label>
+    <div id="noticeMatList" class="class-add-list notice-mat-list"><p class="hint">불러오는 중…</p></div>
+    <button type="button" class="btn ghost sm" id="noticeMatUpload" style="margin-top:6px">${ICONS.upload} 새 파일 올리기</button>
+    <button class="btn" id="noticeSaveBtn" style="margin-top:14px;width:100%">${notice?"저장":"올리기"}</button>`);
+  box.querySelector("#noticeBody").value=n.body||"";
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  box.querySelector("#noticeTitle").focus();
+
+  const assignRow=box.querySelector("#noticeAssignRow"), sel=box.querySelector("#noticeAssign");
+  const kindVal=()=>box.querySelector('input[name="noticeKind"]:checked').value;
+  const syncKind=()=>{ assignRow.style.display=kindVal()==="assignment"?"":"none"; };
+  box.querySelectorAll('input[name="noticeKind"]').forEach(r=>{ r.onchange=syncKind; });
+  syncKind();
+
+  /* 과제 목록과 자료실 목록을 함께 불러온다 */
+  const checked=new Set(n.materials.map(m=>m.id));
+  let mats=[];
+  const drawMats=()=>{
+    const ml=box.querySelector("#noticeMatList");
+    ml.innerHTML=mats.length ? mats.map(m=>`<label class="class-add-row"><input type="checkbox" value="${m.id}"${checked.has(m.id)?" checked":""}>
+      ${esc(m.title)} <span class="hint">${esc(m.file_name)} · ${fileSizeText(m.size)}</span></label>`).join("")
+      : `<p class="hint">자료실이 비어 있습니다. [새 파일 올리기]로 올리면 자료실에도 저장됩니다.</p>`;
+    ml.querySelectorAll("input").forEach(i=>{ i.onchange=()=>{ const id=Number(i.value); if(i.checked) checked.add(id); else checked.delete(id); }; });
+  };
+  const [ares, mres]=await Promise.all([apiFetch("professor-assignments?classId="+classId), apiFetch("materials")]);
+  if(!overlay.isConnected) return;
+  const assigns=(ares.ok && ares.body && ares.body.assignments)||[];
+  const curA=n.assignment ? n.assignment.id : null;
+  sel.innerHTML=`<option value="">(연결 안 함)</option>`+assigns.map(a=>`<option value="${a.id}"${a.id===curA?" selected":""}>${esc(a.title)}${a.due_at?` — 기한 ${fmtDateTime(a.due_at)}`:""}</option>`).join("");
+  /* 새 과제 공지에서 과제를 고르면 제목이 비어 있을 때 채워준다 */
+  sel.onchange=()=>{
+    const t=box.querySelector("#noticeTitle"), a=assigns.find(x=>x.id===Number(sel.value));
+    if(a && !t.value.trim()) t.value=`[과제] ${a.title}`;
+  };
+  mats=(mres.ok && mres.body && mres.body.materials)||[];
+  drawMats();
+
+  const upBtn=box.querySelector("#noticeMatUpload");
+  upBtn.onclick=async ()=>{
+    if(upBtn.disabled) return;
+    const files=await pickFiles(true); if(!files.length) return;
+    upBtn.disabled=true;
+    const added=await uploadMaterials(files, upBtn);
+    upBtn.disabled=false;
+    added.forEach(m=>{ checked.add(m.id); mats.unshift(m); });
+    drawMats();
+  };
+
+  box.querySelector("#noticeSaveBtn").onclick=async e=>{
+    const btn=e.currentTarget;
+    const title=box.querySelector("#noticeTitle").value.trim();
+    if(!title){ alert("제목을 입력해주세요."); return; }
+    const kind=kindVal();
+    const payload={id:notice?notice.id:undefined, classId, kind, title,
+      body:box.querySelector("#noticeBody").value, pinned:box.querySelector("#noticePinned").checked,
+      assignmentId:kind==="assignment" ? (Number(sel.value)||null) : null,
+      materialIds:[...checked].filter(id=>mats.some(m=>m.id===id))};
+    btn.disabled=true;
+    const r=await apiFetch("class-notices", {method:"POST", body:JSON.stringify(payload)});
+    btn.disabled=false;
+    if(r.ok){ close(); onSaved(); }
+    else alert((r.body&&r.body.error)||"저장에 실패했습니다.");
+  };
+}
+
+/* ----- 학생: [수업 공지] 탭 ----- */
+function rClassBoard(){
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<h2>${ICONS.chat} 수업 공지</h2>
+    <div id="boardClassBar" class="board-class-bar"></div>
+    <div id="boardBody"><p class="hint">불러오는 중…</p></div>`;
+  app.appendChild(c);
+  if(typeof currentUser==="undefined" || !currentUser){
+    c.querySelector("#boardBody").innerHTML=`<p class="hint">로그인하면 등록한 수업의 공지와 자료를 볼 수 있습니다.</p>`;
+    return;
+  }
+  loadClassBoard(c);
+}
+async function loadClassBoard(c){
+  const bar=c.querySelector("#boardClassBar"), body=c.querySelector("#boardBody");
+  const res=await apiFetch("class-notices");
+  if(!c.isConnected) return;
+  if(!res.ok || !res.body){ body.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"불러오지 못했습니다.")}</p>`; return; }
+  const classes=res.body.classes||[];
+  if(!classes.length){
+    bar.innerHTML="";
+    body.innerHTML=`<p class="hint">등록된 수업이 없습니다. 왼쪽 아래 [수업 코드 입력]으로 수업에 등록하면 그 수업의 공지와 자료가 여기에 보입니다.</p>`;
+    return;
+  }
+  if(!classes.some(x=>x.classId===boardClassId)) boardClassId=classes[0].classId;
+  bar.innerHTML=classes.map(cl=>`<button type="button" class="board-class-btn${cl.classId===boardClassId?" active":""}" data-id="${cl.classId}">
+    ${esc(cl.className)} <span class="hint">${esc(cl.profName||"")}</span>${cl.unread?` <span class="board-unread">${cl.unread}</span>`:""}</button>`).join("");
+  bar.querySelectorAll(".board-class-btn").forEach(b=>{
+    b.onclick=()=>{ boardClassId=Number(b.dataset.id); try{ localStorage.setItem(BOARD_CLASS_KEY, String(boardClassId)); }catch(e){} render(); };
+  });
+
+  const r=await apiFetch("class-notices?classId="+boardClassId);
+  if(!c.isConnected) return;
+  if(!r.ok || !r.body){ body.innerHTML=`<p class="hint">${esc((r.body&&r.body.error)||"불러오지 못했습니다.")}</p>`; return; }
+  const d=r.body;
+  body.innerHTML=`<h3 class="board-sub">공지</h3>`
+    + (d.notices.length ? `<div class="notice-list">${noticeCardsHtml(d.notices, {prof:false})}</div>` : `<p class="hint">아직 공지가 없습니다.</p>`)
+    + `<h3 class="board-sub">${ICONS.file} 수업 자료</h3>`
+    + (d.materials.length ? `<div class="notice-files">${d.materials.map(materialChipHtml).join("")}</div>` : `<p class="hint">교수님이 공유한 자료가 아직 없습니다.</p>`);
+  bindMaterialChips(body, [...d.materials, ...d.notices.flatMap(n=>n.materials)]);
+  body.querySelectorAll(".notice-go").forEach(b=>{
+    b.onclick=()=>{ const t=b.dataset.type; forceTab(t==="file"?"fileAssign":t); render(); };
+  });
+  /* 화면에 보인 안 읽은 공지는 읽음으로 — "새 글" 표시는 이번 화면에서는 그대로 두고 다음부터 사라진다 */
+  const unreadIds=d.notices.filter(n=>!n.read).map(n=>n.id);
+  if(unreadIds.length){
+    await apiFetch("class-notices", {method:"POST", body:JSON.stringify({action:"read", ids:unreadIds})});
+    const cur=bar.querySelector(`.board-class-btn[data-id="${boardClassId}"] .board-unread`); if(cur) cur.remove();
+    notifySignature=""; fetchNotifications();
+  }
+}
+
 /* ===== 과제 관리 자동 새로고침 (2026-09-15) =====
    과제 목록·제출함은 한 번 그리면 그대로여서, 학생이 새로 제출해도 탭을 다시 눌러야 보였다.
    화면을 통째로 다시 그리면(render()) 스크롤이 맨 위로 튀고 열어둔 팝업이 닫히므로, 목록 부분만

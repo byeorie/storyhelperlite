@@ -254,3 +254,15 @@ DROP INDEX IF EXISTS idx_user_data_updated;
 -- ALTER TABLE classes ADD COLUMN game_on INTEGER;    -- GM 교수가 게임을 켠 수업
 -- CREATE TABLE IF NOT EXISTS game_tickets (ticket TEXT PRIMARY KEY, user_id INTEGER NOT NULL, class_id INTEGER NOT NULL,
 --   role TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
+
+-- ===== 2026-10-31: 수업 공지 · 교수 자료실 =====
+-- functions/api/_utils.js 의 ensureBoardSchema()가 처음 호출 때 자동으로 만든다. 직접 실행할 필요는 없다(참고용).
+-- 네 표 모두 3/1·9/1 정기 초기화(wipeIfDue) 대상이 아니다. 자료 파일은 R2(STORYBOARD_BUCKET)의 "<교수id>/material/..." 키.
+-- CREATE TABLE IF NOT EXISTS materials (id INTEGER PRIMARY KEY AUTOINCREMENT, prof_id INTEGER NOT NULL,
+--   title TEXT NOT NULL, file_name TEXT NOT NULL, r2_key TEXT NOT NULL, size INTEGER NOT NULL, created_at INTEGER NOT NULL);
+-- CREATE TABLE IF NOT EXISTS material_classes (material_id INTEGER NOT NULL, class_id INTEGER NOT NULL, created_at INTEGER NOT NULL);
+-- CREATE TABLE IF NOT EXISTS class_notices (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
+--   prof_id INTEGER NOT NULL, kind TEXT NOT NULL DEFAULT 'notice', title TEXT NOT NULL, body TEXT,
+--   assignment_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, material_ids TEXT,
+--   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+-- CREATE TABLE IF NOT EXISTS notice_reads (notice_id INTEGER NOT NULL, student_id INTEGER NOT NULL, read_at INTEGER NOT NULL);

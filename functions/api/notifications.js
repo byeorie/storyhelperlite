@@ -1,4 +1,4 @@
-import { requireAuth, jsonResponse, nowSec, ensureSubmissionSchema } from "./_utils.js";
+import { requireAuth, jsonResponse, nowSec, ensureSubmissionSchema, ensureBoardSchema } from "./_utils.js";
 
 /* ===== 제출 / 첨삭 알림 (2026-09-11 추가) =====
    화면 오른쪽 위(상단바 아래)에 토스트 팝업으로 띄울 알림 목록을 내려준다.
@@ -72,6 +72,30 @@ export async function onRequestGet({ request, env }) {
       count: 1,
       lastAt: Math.max(r.feedback_at || 0, r.checked_at || 0),
     }));
+
+    /* 2026-10-31: 수업 공지 — 내가 등록된 수업에 최근 14일 안에 올라온, 아직 안 읽은 공지.
+       (14일 제한: 학기 중간에 수업에 들어온 학생에게 지난 공지가 한꺼번에 알림으로 쏟아지지 않게) */
+    try {
+      await ensureBoardSchema(env);
+      const { results: nrows } = await env.DB.prepare(
+        "SELECT n.id, n.kind, n.title, n.class_id, n.created_at, c.name AS class_name " +
+        "FROM class_notices n JOIN class_students cs ON cs.class_id = n.class_id JOIN classes c ON c.id = n.class_id " +
+        "WHERE cs.student_id = ? AND n.created_at >= ? " +
+        "  AND NOT EXISTS (SELECT 1 FROM notice_reads r WHERE r.notice_id = n.id AND r.student_id = ?) " +
+        "ORDER BY n.created_at DESC LIMIT 20"
+      ).bind(auth.user.id, nowSec() - 14 * 86400, auth.user.id).all();
+      (nrows || []).forEach((n) => items.push({
+        key: "n" + n.id,
+        kind: n.kind === "assignment" ? "assignmentNotice" : "notice",
+        noticeId: n.id,
+        classId: n.class_id,
+        className: n.class_name || "",
+        noticeTitle: n.title,
+        count: 1,
+        lastAt: n.created_at,
+      }));
+      items.sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+    } catch (e) {}
     return jsonResponse({ role: "student", items });
   } catch (e) {
     /* 알림은 부가 기능이므로, 표/컬럼이 아직 없는 DB에서도 앱이 멈추지 않도록 빈 목록으로 응답 */

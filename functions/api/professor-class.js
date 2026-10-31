@@ -1,4 +1,4 @@
-import { requireProfessor, jsonResponse } from "./_utils.js";
+import { requireProfessor, jsonResponse, deleteClassBoard } from "./_utils.js";
 
 /* GET /api/professor-class?id=123 — 수업 상세: 수강생 명단 + 추가 가능한(내 코드로 등록됐지만
    아직 이 수업에는 배정되지 않은) 학생 명단을 함께 내려준다 (수강생 추가 화면에서 바로 사용) */
@@ -80,6 +80,7 @@ export async function onRequestDelete({ request, env }) {
   }
   await env.DB.prepare("DELETE FROM assignments WHERE class_id = ?").bind(id).run();
   await env.DB.prepare("DELETE FROM class_students WHERE class_id = ?").bind(id).run();
+  await deleteClassBoard(env, id);  // 2026-10-31: 수업 공지·자료 공유 기록(자료 파일은 자료실에 남는다)
   await env.DB.prepare("DELETE FROM classes WHERE id = ? AND prof_id = ?").bind(id, auth.user.id).run();
 
   return jsonResponse({ ok: true });

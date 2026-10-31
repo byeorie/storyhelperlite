@@ -2,6 +2,36 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-10-31 — 수업 공지(과제 공지 포함) + 교수 자료실
+
+**요청**: 과제 공지와 수업 공지를 하나로(안내문 형식 X) — 수업 공지 탭에서 과제 공지도 쓰고, 자료실 자료를 공지에 첨부.
+교수 계정별 자료실은 매년 2회 초기화 때도 남게.
+- **서버 신규**
+  - `functions/api/materials.js` — 교수 자료실 GET/POST(파일 바이트 그대로, 30MB, pdf·ppt(x)·hwp(x)·doc(x)·xls(x)·zip·이미지·clip·psd·mp4·mp3 등)/
+    PUT(제목, 공유 수업 classIds — 내 수업만)/DELETE(R2 파일·공유 기록 함께).
+  - `functions/api/material-file.js` — 내려받기. 올린 교수 본인 + 공유받은 수업 수강생 + 그 자료가 첨부된 공지가 있는 수업 수강생만
+    (제출 파일과 달리 링크만으로는 못 받음). 앱은 Authorization 헤더로 fetch → blob 저장.
+  - `functions/api/class-notices.js` — 수업 공지 GET(교수: 내 수업 / 학생: 등록된 수업, 공지 + 공유 자료, 학생은 read 표시·교수는 읽은 학생 수),
+    GET(학생, classId 없이: 등록 수업 목록 + 안 읽은 수), POST(교수: 쓰기/수정 — kind notice|assignment, 과제 공지는 그 수업 과제 연결,
+    materialIds 첨부, 고정), POST {action:"read"}(학생 읽음 표시), DELETE.
+- **서버 수정**
+  - `_utils.js` — `ensureBoardSchema()`(materials · material_classes · class_notices · notice_reads 자동 생성), `parseIdList`,
+    `deleteClassBoard`. `wipeIfDue` 주석에 이 표들은 일부러 초기화 대상이 아님을 명시(삭제 목록은 그대로).
+  - `notifications.js` — 학생 알림에 최근 14일 안의 안 읽은 공지(kind notice / assignmentNotice) 추가.
+  - `professor-class.js` 수업 삭제 시 그 수업의 공지·공유 기록 삭제(자료 파일은 자료실에 남음).
+  - `admin.js` 교수 계정 삭제 시 공지·자료실(R2 파일 포함)도 정리, 회원 삭제 시 notice_reads 정리.
+- **화면**
+  - `index.html` — 교수 메뉴에 [자료실], 학생 전용 [수업 공지] 메뉴(boardNavGroup, 메인 화면 바로 아래).
+  - `app.js` — `rProfMaterials`(자료 올리기 여러 개, 공유 수업 팝업, 제목 바꾸기, 내려받기, 삭제),
+    수업 상세 탭에 [공지] 추가(`renderClassNoticesTab`, `openNoticeModal`: 일반/과제 공지, 과제 선택 시 빈 제목에 "[과제] 과제명",
+    자료실 체크 + 새 파일 올리기, 맨 위 고정, 읽은 학생 n/m명), 학생 `rClassBoard`(수업 버튼 + 안 읽은 수, 공지 카드, 수업 자료,
+    과제 공지의 [○○에서 제출하기], 열면 읽음 처리). 알림 토스트에 공지 알림(누르면 그 수업 공지, ×는 읽음 처리).
+  - `style.css` — `.notice-*`, `.material-*`, `.board-*`.
+- `schema.sql` — 새 표 4개 참고용 기록(자동 생성되므로 D1 콘솔 실행 불필요).
+- 검증: node:sqlite로 만든 가짜 D1 + 가짜 R2에서 서버 함수 25개 시나리오 통과(권한: 다른 수업 학생·다른 교수 차단, 다른 수업 과제 연결 거부,
+  읽음 → 알림 제거, 자료 삭제 시 R2 삭제, 수업 삭제 시 공지 삭제, wipeIfDue 실행 후에도 자료 유지). 브라우저(가짜 API)에서
+  교수 자료실·공유 팝업·공지 쓰기, 학생 수업 공지·알림 클릭·내려받기·제출하기 이동, 375px 폭 가로 스크롤 없음 확인.
+
 ## 2026-10-28 — 메인 화면 작품 카드에 삭제 버튼
 
 - `app.js` — 상단 [삭제] 버튼의 동작을 `deleteProject(id)`로 묶어 카드 삭제 버튼과 같이 씀.

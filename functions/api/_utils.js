@@ -79,6 +79,57 @@ export async function ensureClassSchema(env) {
   classSchemaEnsured = true;
 }
 
+/* ===== (2026-10-31) 수업 공지 · 교수 자료실 =====
+   - materials        : 교수 계정에 묶인 자료(파일은 R2 STORYBOARD_BUCKET의 "<교수id>/material/..." 키)
+   - material_classes : 자료를 어느 수업에 공유했는지(학생은 그 수업의 [수업 자료]에서 내려받는다)
+   - class_notices    : 수업 공지(kind "notice" 일반 공지 / "assignment" 과제 공지 — 과제 공지는 그 수업의
+                        과제 하나를 assignment_id로 연결할 수 있다). material_ids는 첨부한 자료 id의 JSON 배열.
+   - notice_reads     : 학생이 공지를 읽은 기록(알림에 "새 공지"를 띄울지 판단)
+   네 표 모두 3/1·9/1 정기 초기화(wipeIfDue) 대상이 아니다 — 학기가 바뀌어도 자료가 그대로 남는다. */
+let boardSchemaEnsured = false;
+export async function ensureBoardSchema(env) {
+  if (boardSchemaEnsured) return;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS materials (id INTEGER PRIMARY KEY AUTOINCREMENT, prof_id INTEGER NOT NULL, " +
+      "title TEXT NOT NULL, file_name TEXT NOT NULL, r2_key TEXT NOT NULL, size INTEGER NOT NULL, created_at INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_materials_prof ON materials(prof_id)",
+    "CREATE TABLE IF NOT EXISTS material_classes (material_id INTEGER NOT NULL, class_id INTEGER NOT NULL, created_at INTEGER NOT NULL)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_material_classes_pair ON material_classes(material_id, class_id)",
+    "CREATE INDEX IF NOT EXISTS idx_material_classes_class ON material_classes(class_id)",
+    "CREATE TABLE IF NOT EXISTS class_notices (id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL, " +
+      "prof_id INTEGER NOT NULL, kind TEXT NOT NULL DEFAULT 'notice', title TEXT NOT NULL, body TEXT, " +
+      "assignment_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, material_ids TEXT, " +
+      "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_class_notices_class ON class_notices(class_id)",
+    "CREATE TABLE IF NOT EXISTS notice_reads (notice_id INTEGER NOT NULL, student_id INTEGER NOT NULL, read_at INTEGER NOT NULL)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_notice_reads_pair ON notice_reads(notice_id, student_id)",
+  ];
+  for (const sql of stmts) {
+    try { await env.DB.prepare(sql).run(); } catch (e) {}
+  }
+  boardSchemaEnsured = true;
+}
+
+/* 공지의 material_ids(JSON 문자열) → 숫자 배열 */
+export function parseIdList(text) {
+  try {
+    const arr = JSON.parse(text || "[]");
+    return Array.isArray(arr) ? arr.map(Number).filter((n) => n > 0) : [];
+  } catch (e) { return []; }
+}
+
+/* 수업 하나에 딸린 공지·자료를 모두 지운다(수업 삭제, 교수 계정 삭제 때). R2 파일은 자료실에 남는다. */
+export async function deleteClassBoard(env, classId) {
+  const stmts = [
+    ["DELETE FROM notice_reads WHERE notice_id IN (SELECT id FROM class_notices WHERE class_id = ?)", classId],
+    ["DELETE FROM class_notices WHERE class_id = ?", classId],
+    ["DELETE FROM material_classes WHERE class_id = ?", classId],
+  ];
+  for (const [sql, v] of stmts) {
+    try { await env.DB.prepare(sql).bind(v).run(); } catch (e) {}
+  }
+}
+
 /* ===== (2026-09-08) 수강 등록 표 정리 =====
    "수업 코드 입력이 꼬여서 같은 수업에 두 번 등록된 학생이 생겼다"는 신고에 대한 대응.
    원래 schema.sql에는 중복을 막는 UNIQUE 인덱스가 있지만, 그 SQL을 운영 DB에 실행하지 않았다면
@@ -162,7 +213,9 @@ export async function wipeIfDue(env) {
      수업(classes)·등록 코드·수강생 배정(class_students)·교수 등록(student_professors)·과제(assignments)와
      제출물까지 통째로 사라졌다 — 3/1, 9/1은 바로 개강일이라 학기 초에 만들어둔 수업이 날아갈 수 있었다.
      서버 용량의 대부분은 학생 작품 데이터(user_data)이므로 그것만 정리하면 목적은 달성된다.
-     이제 수업·등록 코드·과제·제출물·첨삭 기록은 그대로 보존한다(필요하면 관리자 화면에서 직접 삭제). */
+     이제 수업·등록 코드·과제·제출물·첨삭 기록은 그대로 보존한다(필요하면 관리자 화면에서 직접 삭제).
+     (2026-10-31) 수업 공지(class_notices)와 교수 자료실(materials·material_classes, R2 파일)도 일부러
+     여기에 넣지 않는다 — 교수가 올린 수업 자료는 학기가 바뀌어도 그대로 남아야 한다. */
   const tables = [
     "user_data",
     "sessions", "password_resets", "rate_limits",

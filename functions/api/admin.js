@@ -1,4 +1,4 @@
-import { requireAdmin, jsonResponse, ADMIN_USERNAME, ensureGameSchema } from "./_utils.js";
+import { requireAdmin, jsonResponse, ADMIN_USERNAME, ensureGameSchema, deleteClassBoard } from "./_utils.js";
 
 /* GET /api/admin — 회원 명단 조회 (관리자 전용) */
 export async function onRequestGet({ request, env }) {
@@ -108,6 +108,17 @@ export async function onRequestPost({ request, env }) {
         await env.DB.prepare("DELETE FROM submissions WHERE assignment_id = ?").bind(a.id).run();
       }
       await env.DB.prepare("DELETE FROM assignments WHERE prof_id = ?").bind(userId).run();
+      // 2026-10-31: 이 교수의 수업 공지·자료 공유 기록, 자료실(목록 + R2 파일)도 함께 정리
+      try {
+        const { results: cls } = await env.DB.prepare("SELECT id FROM classes WHERE prof_id = ?").bind(userId).all();
+        for (const c of (cls || [])) await deleteClassBoard(env, c.id);
+        const { results: mats } = await env.DB.prepare("SELECT id, r2_key FROM materials WHERE prof_id = ?").bind(userId).all();
+        for (const m of (mats || [])) {
+          if (env.STORYBOARD_BUCKET) { try { await env.STORYBOARD_BUCKET.delete(m.r2_key); } catch (e) {} }
+          await env.DB.prepare("DELETE FROM material_classes WHERE material_id = ?").bind(m.id).run();
+        }
+        await env.DB.prepare("DELETE FROM materials WHERE prof_id = ?").bind(userId).run();
+      } catch (e) {}  // 자료실 표가 아직 없는 DB
       // 2026-08-24: 이 교수가 만든 수업들의 수강생 배정·수업 자체도 함께 정리
       await env.DB.prepare("DELETE FROM class_students WHERE class_id IN (SELECT id FROM classes WHERE prof_id = ?)").bind(userId).run();
       await env.DB.prepare("DELETE FROM classes WHERE prof_id = ?").bind(userId).run();
@@ -119,6 +130,7 @@ export async function onRequestPost({ request, env }) {
     // 이 회원이 학생으로서 등록해둔 교수 목록·수업 수강 배정도 정리
     await env.DB.prepare("DELETE FROM student_professors WHERE student_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM class_students WHERE student_id = ?").bind(userId).run();
+    try { await env.DB.prepare("DELETE FROM notice_reads WHERE student_id = ?").bind(userId).run(); } catch (e) {}
     // 학생 계정이든(자신이 제출한 것) 교수 계정이든(교수 자신도 제출자로 남아있을 수 있음) 제출물 정리
     try {
       await env.DB.prepare(

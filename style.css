@@ -1634,3 +1634,46 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
   .home-card{min-height:210px}
   .home-card-cover{height:72px}
 }
+
+/* ===== 수업 공지 · 자료실 (2026-10-31) ===== */
+.notice-list{display:flex;flex-direction:column;gap:10px;margin-bottom:6px}
+.notice-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff}
+.notice-card.pinned{border-color:var(--accent);background:#fffaf6}
+.notice-card.unread{box-shadow:inset 3px 0 0 var(--accent)}
+.notice-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.notice-title{font-weight:700;font-size:15px}
+.notice-head .notice-date{margin:0 0 0 auto;font-size:12px}
+.notice-tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap}
+.notice-tag.normal{background:var(--accent2);color:var(--ink)}
+.notice-tag.assign{background:#dbe7f5;color:#2b3a67}
+.notice-tag.pin{background:var(--accent);color:#fff}
+.notice-tag.new{background:#e05a3a;color:#fff}
+.notice-assign{margin-top:8px;padding:6px 10px;background:var(--bg);border-radius:8px;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.notice-assign .notice-go{margin-left:auto}
+.notice-body{margin-top:8px;font-size:14px;white-space:normal;word-break:break-word}
+.notice-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.notice-foot{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
+.notice-foot .hint{margin-right:auto}
+.material-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:5px 10px;border:1px solid var(--line);
+  border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:var(--ink);text-align:left}
+.material-chip:hover{background:var(--accent2)}
+.material-chip:disabled{opacity:.5;cursor:wait}
+.material-chip-meta{font-size:11px;color:var(--muted)}
+.material-table-wrap{overflow-x:auto}
+.material-table td{vertical-align:middle}
+.material-title{font-weight:600}
+.material-actions{white-space:nowrap}
+.material-class-tag{display:inline-block;margin:1px 3px 1px 0;padding:0 7px;border-radius:999px;background:var(--accent2);font-size:11.5px}
+.board-sub{font-size:15px;margin:18px 0 8px;display:flex;align-items:center;gap:6px}
+.board-class-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.board-class-btn{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;font-size:13.5px}
+.board-class-btn.active{border-color:var(--accent);background:var(--accent);color:#fff}
+.board-class-btn.active .hint{color:#fff;opacity:.85}
+.board-unread{display:inline-block;min-width:18px;padding:0 5px;border-radius:999px;background:#e05a3a;color:#fff;font-size:11px;font-weight:700;text-align:center}
+.notice-modal{max-width:620px;width:94vw}
+.notice-modal textarea{width:100%;box-sizing:border-box}
+.notice-kind-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:4px 0 8px}
+.notice-kind-row label{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer}
+.notice-pin-chk{margin-left:auto !important}
+.notice-assign-row select{width:100%}
+.notice-mat-list{max-height:180px;overflow-y:auto}
