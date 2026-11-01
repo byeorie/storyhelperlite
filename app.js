@@ -53,9 +53,9 @@ function refreshAdminTabVisibility(){
 function refreshProfNavVisibility(){
   const grp=document.getElementById("profNavGroup");
   if(grp) grp.style.display=isProfessor()?"":"none";
-  /* 2026-10-31: [수업 공지]는 로그인한 학생 계정에만 (교수는 수업 상세의 [공지] 탭에서 쓴다) */
+  /* 2026-10-31: [수업 공지]는 로그인한 계정 모두(2026-11-01 교수도 — 내 수업들의 공지를 한곳에서 보고 쓴다) */
   const board=document.getElementById("boardNavGroup");
-  if(board) board.style.display=(typeof currentUser!=="undefined" && currentUser && !isProfessor())?"":"none";
+  if(board) board.style.display=(typeof currentUser!=="undefined" && currentUser)?"":"none";
 }
 /* 2026-10-15: RPG 게임(섬 탈출 MUD-TRPG) 연동 — 게임이 켜진 수업의 학생, 또는 RPG 게임 GM 교수에게만
    [RPG 게임] 메뉴가 보인다. /api/game 한 번으로 판단하고 결과는 rpgGameInfo에 둔다 */
@@ -83,7 +83,7 @@ function onAuthChanged(){
   refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
   if((activeTab==="profClasses" || activeTab==="profMaterials") && !isProfessor()) forceTab("idea");
-  if(activeTab==="classBoard" && (!currentUser || isProfessor())) forceTab("idea");
+  if(activeTab==="classBoard" && !currentUser) forceTab("idea");
   render();
   maybeShowWipeNotice();
   refreshNotifyPolling();  // 2026-09-11: 제출/첨삭 알림 폴링 시작·중단
@@ -9918,7 +9918,8 @@ function openAddClassStudentModal(classId, available){
      3/1·9/1 정기 초기화 대상이 아니라 학기가 바뀌어도 남는다(서버 materials.js 설명 참고).
    - 수업 상세 [공지] 탭(renderClassNoticesTab): 일반 공지와 과제 공지(그 수업 과제 하나 연결)를 한 목록에.
      자료실 자료를 첨부할 수 있다.
-   - 학생 [수업 공지] 탭(rClassBoard): 내가 등록된 수업을 골라 공지와 공유 자료를 본다. 열면 읽음 처리.
+   - [수업 공지] 탭(rClassBoard): 학생은 내가 등록된 수업을 골라 공지와 공유 자료를 본다(열면 읽음 처리).
+     교수는 내 수업을 골라 같은 화면에서 공지를 보고 쓴다(2026-11-01, 수업 상세 [공지] 탭과 같은 화면).
    자료 내려받기는 로그인 토큰이 필요해서(<a href>로는 헤더를 못 붙인다) fetch → blob으로 저장한다. */
 const MATERIAL_MAX_MB=30;        /* 서버 materials.js MATERIAL_MAX_MB와 같은 값 */
 const BOARD_CLASS_KEY="storyhelper_board_class";
@@ -10232,7 +10233,25 @@ function rClassBoard(){
   }
   loadClassBoard(c);
 }
+/* 교수 — 내 수업 버튼 + 고른 수업의 공지 관리 화면(수업 상세 [공지] 탭과 같은 화면) */
+async function loadProfBoard(c){
+  const bar=c.querySelector("#boardClassBar"), body=c.querySelector("#boardBody");
+  const res=await apiFetch("professor-classes");
+  if(!c.isConnected) return;
+  const classes=(res.ok && res.body && res.body.classes)||[];
+  if(!classes.length){
+    body.innerHTML=`<p class="hint">아직 만든 수업이 없습니다. [수업 관리]에서 수업을 만들면 수업마다 공지를 쓸 수 있습니다.</p>`;
+    return;
+  }
+  if(!classes.some(x=>x.id===boardClassId)) boardClassId=classes[0].id;
+  bar.innerHTML=classes.map(cl=>`<button type="button" class="board-class-btn${cl.id===boardClassId?" active":""}" data-id="${cl.id}">${esc(classLabel(cl))}</button>`).join("");
+  bar.querySelectorAll(".board-class-btn").forEach(b=>{
+    b.onclick=()=>{ boardClassId=Number(b.dataset.id); try{ localStorage.setItem(BOARD_CLASS_KEY, String(boardClassId)); }catch(e){} render(); };
+  });
+  renderClassNoticesTab(body, boardClassId);
+}
 async function loadClassBoard(c){
+  if(isProfessor()) return loadProfBoard(c);
   const bar=c.querySelector("#boardClassBar"), body=c.querySelector("#boardBody");
   const res=await apiFetch("class-notices");
   if(!c.isConnected) return;
