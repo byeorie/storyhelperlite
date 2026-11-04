@@ -10091,7 +10091,7 @@ function noticeCardsHtml(notices, opt){
       ${n.body?`<div class="notice-body">${linkifyEscaped(esc(n.body))}</div>`:""}
       ${n.materials.length?`<div class="notice-files">${n.materials.map(materialChipHtml).join("")}</div>`:""}
       ${prof?`<div class="notice-foot">
-        <span class="hint">읽은 학생 ${n.readCount||0}/${opt.studentCount||0}명</span>
+        <span class="hint">읽은 학생 ${n.readCount||0}/${opt.studentCount||0}명${(n.classes||[]).length>1?` · 공개 수업 ${n.classes.map(c=>`<span class="material-class-tag">${esc(c.name)}</span>`).join("")}`:""}</span>
         <button type="button" class="btn ghost sm notice-edit">${ICONS.edit} 수정</button>
         <button type="button" class="btn ghost sm notice-del">${ICONS.trash} 삭제</button>
       </div>`:""}
@@ -10126,13 +10126,18 @@ async function renderClassNoticesTab(container, classId){
     const n=d.notices.find(x=>x.id===Number(card.dataset.id)); if(!n) return;
     card.querySelector(".notice-edit").onclick=()=>openNoticeModal(classId, n, reload);
     card.querySelector(".notice-del").onclick=async ()=>{
-      if(!confirm(`'${n.title}' 공지를 삭제할까요? (첨부한 자료는 자료실에 그대로 남습니다)`)) return;
+      const multi=(n.classes||[]).length>1 ? `
+이 공지를 공개한 수업 ${n.classes.length}곳 모두에서 사라집니다.` : "";
+      if(!confirm(`'${n.title}' 공지를 삭제할까요?${multi}
+(첨부한 자료는 자료실에 그대로 남습니다)`)) return;
       const r=await apiFetch("class-notices?id="+n.id, {method:"DELETE"});
       if(r.ok) reload(); else alert((r.body&&r.body.error)||"삭제에 실패했습니다.");
     };
   });
 }
-/* 공지 쓰기/수정 팝업 — notice가 있으면 수정 */
+/* 공지 쓰기/수정 팝업 — notice가 있으면 수정.
+   2026-11-04: [공개할 수업]을 여러 개 체크하면 공지 하나가 그 수업들에 함께 보인다(처음엔 지금 수업이 체크됨).
+   과제 공지는 체크한 수업마다 그 수업의 과제를 하나씩 고른다 — 학생에게는 자기 수업의 과제만 보인다. */
 async function openNoticeModal(classId, notice, onSaved){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
@@ -10142,16 +10147,18 @@ async function openNoticeModal(classId, notice, onSaved){
   const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent=notice?"공지 수정":"공지 쓰기";
   top.append(ttl, iconBtn(ICONS.close,"닫기",close));
   box.appendChild(top);
-  const n=notice||{kind:"notice", title:"", body:"", pinned:false, assignment:null, materials:[]};
+  const n=notice||{kind:"notice", title:"", body:"", pinned:false, materials:[], classes:[], assignmentIds:[]};
   box.insertAdjacentHTML("beforeend", `
     <div class="notice-kind-row">
       <label><input type="radio" name="noticeKind" value="notice"${n.kind!=="assignment"?" checked":""}> 일반 공지</label>
       <label><input type="radio" name="noticeKind" value="assignment"${n.kind==="assignment"?" checked":""}> 과제 공지</label>
       <label class="notice-pin-chk"><input type="checkbox" id="noticePinned"${n.pinned?" checked":""}> 맨 위에 고정</label>
     </div>
+    <label>공개할 수업 <span class="hint">(여러 개 고르면 이 공지 하나가 그 수업들에 함께 보입니다)</span></label>
+    <div id="noticeClassList" class="notice-class-list"><p class="hint">불러오는 중…</p></div>
     <div id="noticeAssignRow" class="notice-assign-row">
-      <label>연결할 과제 <span class="hint">(선택 — 학생 화면에 과제 이름·제출기한이 함께 보입니다)</span></label>
-      <select id="noticeAssign"><option value="">불러오는 중…</option></select>
+      <label>연결할 과제 <span class="hint">(선택 — 수업마다 그 수업의 과제를 고릅니다. 학생 화면에 과제 이름·제출기한이 함께 보입니다)</span></label>
+      <div id="noticeAssignList"></div>
     </div>
     <label>제목</label><input type="text" id="noticeTitle" maxlength="200" value="${esc(n.title)}">
     <label>내용</label><textarea id="noticeBody" rows="8" placeholder="공지 내용 (인터넷 주소는 자동으로 링크가 됩니다)"></textarea>
@@ -10163,15 +10170,52 @@ async function openNoticeModal(classId, notice, onSaved){
   overlay.appendChild(box); document.body.appendChild(overlay);
   box.querySelector("#noticeTitle").focus();
 
-  const assignRow=box.querySelector("#noticeAssignRow"), sel=box.querySelector("#noticeAssign");
+  const assignRow=box.querySelector("#noticeAssignRow");
   const kindVal=()=>box.querySelector('input[name="noticeKind"]:checked').value;
   const syncKind=()=>{ assignRow.style.display=kindVal()==="assignment"?"":"none"; };
   box.querySelectorAll('input[name="noticeKind"]').forEach(r=>{ r.onchange=syncKind; });
   syncKind();
 
-  /* 과제 목록과 자료실 목록을 함께 불러온다 */
+  /* 내 수업·과제·자료실 목록을 함께 불러온다 */
+  const [cres, ares, mres]=await Promise.all([apiFetch("professor-classes"), apiFetch("professor-assignments"), apiFetch("materials")]);
+  if(!overlay.isConnected) return;
+  const classes=(cres.ok && cres.body && cres.body.classes)||[];
+  const assigns=(ares.ok && ares.body && ares.body.assignments)||[];
+
+  /* 공개 수업 — 수정이면 지금 공개된 수업들, 새 공지면 지금 보고 있는 수업 */
+  const onClasses=new Set(notice && n.classes.length ? n.classes.map(cl=>cl.id) : [classId]);
+  /* 수업별로 고른 과제 {classId: assignmentId} */
+  const pickA={};
+  (n.assignmentIds||[]).forEach(id=>{ const a=assigns.find(x=>x.id===id); if(a) pickA[a.class_id]=a.id; });
+
+  const drawAssigns=()=>{
+    const list=box.querySelector("#noticeAssignList");
+    const rows=classes.filter(cl=>onClasses.has(cl.id));
+    list.innerHTML=rows.map(cl=>{
+      const own=assigns.filter(a=>a.class_id===cl.id);
+      return `<div class="notice-assign-pick"><span class="notice-assign-cls">${esc(classLabel(cl))}</span>
+        <select data-class="${cl.id}"><option value="">(연결 안 함)</option>${own.map(a=>`<option value="${a.id}"${pickA[cl.id]===a.id?" selected":""}>${esc(a.title)}${a.due_at?` — 기한 ${fmtDateTime(a.due_at)}`:""}</option>`).join("")}</select></div>`;
+    }).join("") || `<p class="hint">공개할 수업을 먼저 골라 주세요.</p>`;
+    list.querySelectorAll("select").forEach(sel=>{
+      sel.onchange=()=>{
+        const cid=Number(sel.dataset.class), aid=Number(sel.value)||null;
+        if(aid) pickA[cid]=aid; else delete pickA[cid];
+        /* 제목이 비어 있으면 처음 고른 과제 이름으로 채워준다 */
+        const t=box.querySelector("#noticeTitle"), a=assigns.find(x=>x.id===aid);
+        if(a && !t.value.trim()) t.value=`[과제] ${a.title}`;
+      };
+    });
+  };
+  const cl=box.querySelector("#noticeClassList");
+  cl.innerHTML=classes.length ? classes.map(c=>`<label class="notice-class-chk"><input type="checkbox" value="${c.id}"${onClasses.has(c.id)?" checked":""}> ${esc(classLabel(c))}</label>`).join("")
+    : `<p class="hint">수업이 없습니다.</p>`;
+  cl.querySelectorAll("input").forEach(i=>{
+    i.onchange=()=>{ const id=Number(i.value); if(i.checked) onClasses.add(id); else { onClasses.delete(id); delete pickA[id]; } drawAssigns(); };
+  });
+  drawAssigns();
+
   const checked=new Set(n.materials.map(m=>m.id));
-  let mats=[];
+  let mats=(mres.ok && mres.body && mres.body.materials)||[];
   const drawMats=()=>{
     const ml=box.querySelector("#noticeMatList");
     ml.innerHTML=mats.length ? mats.map(m=>`<label class="class-add-row"><input type="checkbox" value="${m.id}"${checked.has(m.id)?" checked":""}>
@@ -10179,17 +10223,6 @@ async function openNoticeModal(classId, notice, onSaved){
       : `<p class="hint">자료실이 비어 있습니다. [새 파일 올리기]로 올리면 자료실에도 저장됩니다.</p>`;
     ml.querySelectorAll("input").forEach(i=>{ i.onchange=()=>{ const id=Number(i.value); if(i.checked) checked.add(id); else checked.delete(id); }; });
   };
-  const [ares, mres]=await Promise.all([apiFetch("professor-assignments?classId="+classId), apiFetch("materials")]);
-  if(!overlay.isConnected) return;
-  const assigns=(ares.ok && ares.body && ares.body.assignments)||[];
-  const curA=n.assignment ? n.assignment.id : null;
-  sel.innerHTML=`<option value="">(연결 안 함)</option>`+assigns.map(a=>`<option value="${a.id}"${a.id===curA?" selected":""}>${esc(a.title)}${a.due_at?` — 기한 ${fmtDateTime(a.due_at)}`:""}</option>`).join("");
-  /* 새 과제 공지에서 과제를 고르면 제목이 비어 있을 때 채워준다 */
-  sel.onchange=()=>{
-    const t=box.querySelector("#noticeTitle"), a=assigns.find(x=>x.id===Number(sel.value));
-    if(a && !t.value.trim()) t.value=`[과제] ${a.title}`;
-  };
-  mats=(mres.ok && mres.body && mres.body.materials)||[];
   drawMats();
 
   const upBtn=box.querySelector("#noticeMatUpload");
@@ -10207,10 +10240,12 @@ async function openNoticeModal(classId, notice, onSaved){
     const btn=e.currentTarget;
     const title=box.querySelector("#noticeTitle").value.trim();
     if(!title){ alert("제목을 입력해주세요."); return; }
+    const classIds=classes.map(c=>c.id).filter(id=>onClasses.has(id));
+    if(!classIds.length){ alert("공개할 수업을 하나 이상 골라주세요."); return; }
     const kind=kindVal();
-    const payload={id:notice?notice.id:undefined, classId, kind, title,
+    const payload={id:notice?notice.id:undefined, classIds, kind, title,
       body:box.querySelector("#noticeBody").value, pinned:box.querySelector("#noticePinned").checked,
-      assignmentId:kind==="assignment" ? (Number(sel.value)||null) : null,
+      assignmentIds:kind==="assignment" ? classIds.map(id=>pickA[id]).filter(Boolean) : [],
       materialIds:[...checked].filter(id=>mats.some(m=>m.id===id))};
     btn.disabled=true;
     const r=await apiFetch("class-notices", {method:"POST", body:JSON.stringify(payload)});

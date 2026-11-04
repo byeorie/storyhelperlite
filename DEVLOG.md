@@ -2,6 +2,24 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-11-04 — 공지 하나를 여러 수업에 동시 공개
+
+**요청**: 과제 공지 게시판에서 게시물 하나를 여러 수업에 동시에 공개 — 게시물에서 공개할 수업을 체크.
+- `_utils.js` `ensureBoardSchema()` — `notice_classes(notice_id, class_id)` 표 신설(공개 수업), `class_notices.assignment_ids`
+  컬럼(JSON, 수업당 과제 1개). 예전 공지는 원래 수업(class_id) 하나로 자동 연결(INSERT … WHERE id NOT IN notice_classes).
+  `noticeAssignmentIds(row)` — assignment_ids가 없던 예전 공지는 assignment_id 하나.
+  `deleteClassBoard`: 그 수업에서만 공개를 빼고, 공개 수업이 하나도 안 남은 공지만 삭제(먼저 ensureBoardSchema로 예전 공지 이전).
+- `class-notices.js` — 조회·읽음·안 읽은 수 모두 notice_classes 기준. 공지의 과제는 "지금 보는 수업"의 과제만 보여준다.
+  교수 조회에 공지별 `classes`(공개 수업)·`assignmentIds`. POST는 `classIds`(내 수업만, 1개 이상)·`assignmentIds`(공개 수업의 과제만,
+  수업당 1개)를 받는다(예전 classId/assignmentId도 받음). 수정 시 공개 수업을 다시 지정. 읽은 학생 수는 그 수업 수강생 기준.
+- `notifications.js` — 공지 알림을 notice_classes로, 같은 공지가 내 수업 두 곳에 공개돼도 알림은 하나(GROUP BY).
+- `material-file.js` — 공지 첨부 자료 권한도 notice_classes 기준.
+- `app.js` `openNoticeModal` — [공개할 수업] 체크(새 공지는 지금 수업이 체크됨, 수정은 지금 공개 수업), 과제 공지는 체크한 수업마다
+  그 수업 과제를 고르는 칸. 공지 카드에 공개 수업이 2곳 이상이면 태그 표시, 삭제 확인에 "공개한 수업 n곳 모두에서 사라짐".
+- `style.css` — `.notice-class-*`, `.notice-assign-*`, 공지 팝업이 길면 안쪽 목록이 눌리지 않고 팝업 전체가 스크롤.
+- 검증: 가짜 D1 시험 38개 통과(예전 공지 이전, 수업별 과제 표시, 공개 밖 과제·한 수업 과제 2개 거부, 알림 1건, 수업별 읽음 수,
+  공개 수업 하나 삭제 후에도 공지 유지, 삭제). 브라우저(가짜 API)에서 수정 시 체크·과제 미리 채움, 새 공지 저장 요청 확인.
+
 ## 2026-11-01 — 교수 계정에도 [수업 공지] 메뉴
 
 - `app.js` — [수업 공지] 메뉴를 학생뿐 아니라 교수에게도 보이게 함(`refreshProfNavVisibility`, `onAuthChanged`).

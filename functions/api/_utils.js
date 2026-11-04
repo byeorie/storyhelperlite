@@ -103,6 +103,15 @@ export async function ensureBoardSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_class_notices_class ON class_notices(class_id)",
     "CREATE TABLE IF NOT EXISTS notice_reads (notice_id INTEGER NOT NULL, student_id INTEGER NOT NULL, read_at INTEGER NOT NULL)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_notice_reads_pair ON notice_reads(notice_id, student_id)",
+    /* 2026-11-04: 공지 하나를 여러 수업에 동시 공개 — 어느 수업에 보이는지는 notice_classes가 정한다
+       (class_notices.class_id는 처음 쓴 수업으로만 남는다). 과제 공지는 수업마다 다른 과제를 연결할 수 있어
+       assignment_ids(JSON 배열, 수업당 1개)에 둔다. 예전 공지는 아래 INSERT로 원래 수업 1개에 연결된다. */
+    "ALTER TABLE class_notices ADD COLUMN assignment_ids TEXT",
+    "CREATE TABLE IF NOT EXISTS notice_classes (notice_id INTEGER NOT NULL, class_id INTEGER NOT NULL)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_notice_classes_pair ON notice_classes(notice_id, class_id)",
+    "CREATE INDEX IF NOT EXISTS idx_notice_classes_class ON notice_classes(class_id)",
+    "INSERT OR IGNORE INTO notice_classes (notice_id, class_id) SELECT id, class_id FROM class_notices " +
+      "WHERE id NOT IN (SELECT notice_id FROM notice_classes)",
   ];
   for (const sql of stmts) {
     try { await env.DB.prepare(sql).run(); } catch (e) {}
@@ -118,16 +127,27 @@ export function parseIdList(text) {
   } catch (e) { return []; }
 }
 
-/* 수업 하나에 딸린 공지·자료를 모두 지운다(수업 삭제, 교수 계정 삭제 때). R2 파일은 자료실에 남는다. */
+/* 수업 하나에 딸린 공지·자료 공유를 지운다(수업 삭제, 교수 계정 삭제 때). R2 파일은 자료실에 남는다.
+   여러 수업에 공개된 공지는 이 수업에서만 빠지고, 더 이상 공개된 수업이 없는 공지만 삭제된다.
+   (먼저 ensureBoardSchema로 예전 공지를 notice_classes에 옮겨 둬야 한다 — 안 그러면 "연결 없음"으로 보여 지워진다) */
 export async function deleteClassBoard(env, classId) {
+  await ensureBoardSchema(env);
+  const orphan = "SELECT id FROM class_notices WHERE id NOT IN (SELECT notice_id FROM notice_classes)";
   const stmts = [
-    ["DELETE FROM notice_reads WHERE notice_id IN (SELECT id FROM class_notices WHERE class_id = ?)", classId],
-    ["DELETE FROM class_notices WHERE class_id = ?", classId],
-    ["DELETE FROM material_classes WHERE class_id = ?", classId],
+    ["DELETE FROM notice_classes WHERE class_id = ?", [classId]],
+    ["DELETE FROM notice_reads WHERE notice_id IN (" + orphan + ")", []],
+    ["DELETE FROM class_notices WHERE id IN (" + orphan + ")", []],
+    ["DELETE FROM material_classes WHERE class_id = ?", [classId]],
   ];
   for (const [sql, v] of stmts) {
-    try { await env.DB.prepare(sql).bind(v).run(); } catch (e) {}
+    try { await env.DB.prepare(sql).bind(...v).run(); } catch (e) {}
   }
+}
+
+/* 공지에 연결된 과제 id 목록 — assignment_ids가 없던 예전 공지는 assignment_id 하나 */
+export function noticeAssignmentIds(row) {
+  if (row.assignment_ids) return parseIdList(row.assignment_ids);
+  return row.assignment_id ? [row.assignment_id] : [];
 }
 
 /* ===== (2026-09-08) 수강 등록 표 정리 =====

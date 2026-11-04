@@ -78,11 +78,13 @@ export async function onRequestGet({ request, env }) {
     try {
       await ensureBoardSchema(env);
       const { results: nrows } = await env.DB.prepare(
-        "SELECT n.id, n.kind, n.title, n.class_id, n.created_at, c.name AS class_name " +
-        "FROM class_notices n JOIN class_students cs ON cs.class_id = n.class_id JOIN classes c ON c.id = n.class_id " +
+        /* 2026-11-04: 공개 수업은 notice_classes — 같은 공지가 내 수업 두 곳에 공개됐어도 알림은 하나 */
+        "SELECT n.id, n.kind, n.title, MIN(nc.class_id) AS class_id, n.created_at, MIN(c.name) AS class_name " +
+        "FROM class_notices n JOIN notice_classes nc ON nc.notice_id = n.id " +
+        "JOIN class_students cs ON cs.class_id = nc.class_id JOIN classes c ON c.id = nc.class_id " +
         "WHERE cs.student_id = ? AND n.created_at >= ? " +
         "  AND NOT EXISTS (SELECT 1 FROM notice_reads r WHERE r.notice_id = n.id AND r.student_id = ?) " +
-        "ORDER BY n.created_at DESC LIMIT 20"
+        "GROUP BY n.id ORDER BY n.created_at DESC LIMIT 20"
       ).bind(auth.user.id, nowSec() - 14 * 86400, auth.user.id).all();
       (nrows || []).forEach((n) => items.push({
         key: "n" + n.id,

@@ -19,7 +19,8 @@ async function studentCanRead(env, materialId, studentId) {
   ).bind(materialId, studentId).first();
   if (shared) return true;
   const { results } = await env.DB.prepare(
-    "SELECT n.material_ids FROM class_notices n JOIN class_students cs ON cs.class_id = n.class_id " +
+    "SELECT DISTINCT n.id, n.material_ids FROM class_notices n JOIN notice_classes nc ON nc.notice_id = n.id " +
+    "JOIN class_students cs ON cs.class_id = nc.class_id " +
     "WHERE cs.student_id = ? AND n.material_ids IS NOT NULL AND n.material_ids != '[]'"
   ).bind(studentId).all();
   return (results || []).some((r) => parseIdList(r.material_ids).includes(materialId));

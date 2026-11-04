@@ -1670,10 +1670,17 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .board-class-btn.active{border-color:var(--accent);background:var(--accent);color:#fff}
 .board-class-btn.active .hint{color:#fff;opacity:.85}
 .board-unread{display:inline-block;min-width:18px;padding:0 5px;border-radius:999px;background:#e05a3a;color:#fff;font-size:11px;font-weight:700;text-align:center}
-.notice-modal{max-width:620px;width:94vw}
+.notice-modal{max-width:620px;width:94vw;overflow-y:auto}
+.notice-modal>*{flex-shrink:0}
 .notice-modal textarea{width:100%;box-sizing:border-box}
 .notice-kind-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:4px 0 8px}
 .notice-kind-row label{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer}
 .notice-pin-chk{margin-left:auto !important}
 .notice-assign-row select{width:100%}
 .notice-mat-list{max-height:180px;overflow-y:auto}
+/* 2026-11-04: 공지 여러 수업 공개 */
+.notice-class-list{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 8px}
+.notice-class-chk{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer}
+.notice-assign-pick{display:flex;align-items:center;gap:8px;margin:4px 0}
+.notice-assign-cls{flex:0 0 auto;max-width:40%;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notice-assign-pick select{flex:1;min-width:0}
