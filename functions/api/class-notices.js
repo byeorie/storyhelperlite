@@ -80,10 +80,10 @@ async function loadBoard(env, cls, viewer) {
     classesByNotice = {};
     if (noticeIds.length) {
       const { results: links } = await env.DB.prepare(
-        "SELECT nc.notice_id, c.id, c.name FROM notice_classes nc JOIN classes c ON c.id = nc.class_id " +
+        "SELECT nc.notice_id, c.id, c.name, c.section FROM notice_classes nc JOIN classes c ON c.id = nc.class_id " +
         "WHERE nc.notice_id IN (" + inList(noticeIds) + ") ORDER BY c.name"
       ).bind(...noticeIds).all();
-      (links || []).forEach((l) => { (classesByNotice[l.notice_id] = classesByNotice[l.notice_id] || []).push({ id: l.id, name: l.name }); });
+      (links || []).forEach((l) => { (classesByNotice[l.notice_id] = classesByNotice[l.notice_id] || []).push({ id: l.id, name: l.name, section: l.section }); });
     }
   }
 

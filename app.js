@@ -10091,7 +10091,7 @@ function noticeCardsHtml(notices, opt){
       ${n.body?`<div class="notice-body">${linkifyEscaped(esc(n.body))}</div>`:""}
       ${n.materials.length?`<div class="notice-files">${n.materials.map(materialChipHtml).join("")}</div>`:""}
       ${prof?`<div class="notice-foot">
-        <span class="hint">읽은 학생 ${n.readCount||0}/${opt.studentCount||0}명${(n.classes||[]).length>1?` · 공개 수업 ${n.classes.map(c=>`<span class="material-class-tag">${esc(c.name)}</span>`).join("")}`:""}</span>
+        <span class="hint">읽은 학생 ${n.readCount||0}/${opt.studentCount||0}명${(n.classes||[]).length>1?` · 공개 수업 ${n.classes.map(c=>`<span class="material-class-tag">${esc(classLabel(c))}</span>`).join("")}`:""}</span>
         <button type="button" class="btn ghost sm notice-edit">${ICONS.edit} 수정</button>
         <button type="button" class="btn ghost sm notice-del">${ICONS.trash} 삭제</button>
       </div>`:""}
