@@ -1695,3 +1695,32 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .write-plot-head .plot-name-tag{margin-left:0;min-width:0}
 .plot-switch-row{margin-top:8px;font-size:13px;color:var(--muted)}
 .plot-switch-select{margin-left:4px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff}
+
+/* ===== 플롯 작성 — 오른쪽에 다른 플롯 함께 보기 (2026-11-05) ===== */
+.plot-toolbar .plot-compare-select{width:auto;max-width:220px;margin:0;font-size:12px;padding:5px 8px;height:auto;min-height:0}
+.plot-compare-split{display:flex;gap:14px;align-items:flex-start}
+.plot-compare-main{flex:1 1 58%;min-width:0}
+.plot-compare-panel{flex:1 1 42%;min-width:280px;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow-y:auto;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.plot-compare-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.plot-compare-title{flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.plot-compare-title .plot-name-tag{margin-left:0}
+.plot-compare-struct{font-size:12px;color:var(--muted)}
+.plot-compare-head .btn .icon{width:14px;height:14px}
+.plot-compare-sec{border-left:4px solid var(--line);background:#fbfaf7;border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.plot-compare-sec-name{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.plot-compare-sec-name b{color:var(--accent);margin-right:2px}
+.plot-compare-desc{font-size:12px;color:var(--muted);margin-bottom:4px;white-space:pre-wrap}
+.plot-compare-ideas{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+.plot-compare-ideas li{white-space:pre-wrap}
+.plot-compare-empty{font-size:12px;color:var(--muted);font-style:italic}
+.plot-compare-block{border-top:1px dashed var(--line);padding-top:5px;margin-top:5px;font-size:13px;line-height:1.6}
+.plot-compare-block:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.plot-compare-btitle{font-weight:700;font-size:12px;color:var(--accent)}
+.plot-compare-text,.plot-compare-line{white-space:pre-wrap}
+.plot-compare-line b{color:var(--accent);font-size:12px}
+@media(max-width:1023px){
+  .plot-compare-split{flex-direction:column}
+  .plot-compare-main,.plot-compare-panel{flex:none;width:100%}
+  .plot-compare-panel{position:static;max-height:none;min-width:0}
+}

@@ -564,45 +564,67 @@ function fillPlotDoc(pd){
     ideaOverrides: (pd.ideaOverrides && typeof pd.ideaOverrides==="object") ? Object.assign({}, pd.ideaOverrides) : {},
   };
 }
-/* ===== 작품 하나에 플롯 여러 개 (2026-11-05) =====
-   P.plots=[{id, name, plotDoc, writeDoc}], P.activePlotId = 지금 열린 플롯.
-   기존 코드 여러 곳이 P.plotDoc / P.writeDoc을 그대로 쓰므로, "열린 플롯"의 데이터는 계속 그 자리에 두고
-   plots 목록의 그 항목은 plotDoc/writeDoc을 null로 비워 둔다(같은 데이터를 두 번 저장하지 않기 위함).
-   다른 플롯을 열 때(selectPlot) 지금 것을 목록 항목에 넣고, 열 플롯의 것을 P.plotDoc/P.writeDoc으로 꺼낸다.
-   글쓰기(writeDoc)는 플롯 섹션에 매달려 있으므로 플롯마다 따로 가진다. 콘티·제출·내보내기는 열린 플롯 기준. */
+/* ===== 작품 하나에 플롯·글쓰기 여러 개 (2026-11-05) =====
+   P.plots=[{id, name, plot, write, plotDoc, writeDoc}], P.activePlotId = 지금 열린 항목(없으면 null).
+   - plot: [플롯 생성] 목록에 보이는 항목, write: [글쓰기] 목록에 보이는 항목.
+     [플롯 생성]에서 만든 항목은 plot+write(플롯마다 글쓰기가 딸림), [글쓰기]에서 만든 항목은 write만(플롯 없는 글쓰기).
+   - 기존 코드 여러 곳이 P.plotDoc / P.writeDoc을 그대로 쓰므로, "열린 항목"의 데이터는 계속 그 자리에 두고
+     목록의 그 항목은 plotDoc/writeDoc을 null로 비워 둔다(같은 데이터를 두 번 저장하지 않기 위함).
+     다른 항목을 열 때(selectPlot) 지금 것을 목록 항목에 넣고, 열 항목의 것을 P.plotDoc/P.writeDoc으로 꺼낸다.
+   - 카드는 0개여도 된다. 열린 항목이 없으면 activePlotId=null이고 P.plotDoc/P.writeDoc은 빈 값.
+   - 콘티·제출·내보내기는 열린 항목 기준. */
+function plotDocHasContent(pd, wd){
+  return !!((pd && (pd.structure || (pd.sections||[]).length)) || (wd && ((wd.blocks||[]).length || (wd.groups||[]).length)));
+}
 function ensurePlots(p){
   if(!p || typeof p!=="object") return;
   if(!Array.isArray(p.plots)) p.plots=[];
   p.plots=p.plots.filter(x=>x && typeof x==="object").map(x=>({
     id:x.id||uid(), name:(typeof x.name==="string"&&x.name)||"플롯",
+    plot: x.plot!==false, write: x.write!==false,   // 예전 항목(플래그 없음)은 플롯+글쓰기
     plotDoc: x.plotDoc ? fillPlotDoc(x.plotDoc) : null,
     writeDoc: x.writeDoc ? fillWriteDoc(x.writeDoc) : null,
   }));
-  let act=p.plots.find(x=>x.id===p.activePlotId);
-  if(!act){
-    /* 예전 작품(플롯 1개 시절) 또는 열린 플롯 정보가 사라진 경우 — 지금 P.plotDoc/P.writeDoc을 담는 항목을 만든다 */
-    act={id:uid(), name:p.plots.length?`플롯 ${p.plots.length+1}`:"플롯 1", plotDoc:null, writeDoc:null};
-    p.plots.unshift(act); p.activePlotId=act.id;
-  }
-  /* 열린 플롯 항목에 데이터가 남아 있으면(비정상) P 쪽이 비어 있을 때만 꺼내 쓴다 */
-  if(act.plotDoc){ if(!p.plotDoc || !(p.plotDoc.sections||[]).length) p.plotDoc=act.plotDoc; act.plotDoc=null; }
-  if(act.writeDoc){ if(!p.writeDoc || !(p.writeDoc.blocks||[]).length) p.writeDoc=act.writeDoc; act.writeDoc=null; }
   if(!p.plotDoc) p.plotDoc=fillPlotDoc(null);
   if(!p.writeDoc) p.writeDoc=fillWriteDoc(null);
+  let act=p.plots.find(x=>x.id===p.activePlotId);
+  if(!act){
+    /* 예전 작품(플롯 1개 시절)이거나, 열린 항목 없이 P.plotDoc/P.writeDoc에 내용이 생긴 경우(첨삭 반영 등)
+       — 그 내용을 담는 항목을 만든다. 내용이 없으면 열린 항목 없이 둔다 */
+    if(plotDocHasContent(p.plotDoc, p.writeDoc)){
+      const hasPlot=!!p.plotDoc.structure && p.plotDoc.structure!=="custom" || (p.plotDoc.sections||[]).some(s=>(s.ideaIds||[]).length);
+      act={id:uid(), name:hasPlot?`플롯 ${p.plots.filter(x=>x.plot).length+1}`:`글쓰기 ${p.plots.filter(x=>x.write).length+1}`,
+        plot:hasPlot || !(p.writeDoc.blocks||[]).length, write:true, plotDoc:null, writeDoc:null};
+      p.plots.unshift(act); p.activePlotId=act.id;
+    }else{
+      p.activePlotId=null;
+    }
+  }
+  if(act){
+    /* 열린 항목에 데이터가 남아 있으면(비정상) P 쪽이 비어 있을 때만 꺼내 쓴다 */
+    if(act.plotDoc){ if(!(p.plotDoc.sections||[]).length) p.plotDoc=act.plotDoc; act.plotDoc=null; }
+    if(act.writeDoc){ if(!(p.writeDoc.blocks||[]).length) p.writeDoc=act.writeDoc; act.writeDoc=null; }
+  }
   p.plots.forEach(x=>{ if(x!==act){ if(!x.plotDoc) x.plotDoc=fillPlotDoc(null); if(!x.writeDoc) x.writeDoc=fillWriteDoc(null); } });
 }
-/* 플롯 항목의 실제 데이터 (열린 플롯이면 P.plotDoc/P.writeDoc) */
+/* 항목의 실제 데이터 (열린 항목이면 P.plotDoc/P.writeDoc) */
 function plotDataOf(pl){
   if(pl.id===P.activePlotId) return {plotDoc:P.plotDoc, writeDoc:P.writeDoc};
   return {plotDoc:pl.plotDoc||fillPlotDoc(null), writeDoc:pl.writeDoc||fillWriteDoc(null)};
 }
-function activePlot(){ ensurePlots(P); return P.plots.find(x=>x.id===P.activePlotId); }
+function activePlot(){ ensurePlots(P); return P.plots.find(x=>x.id===P.activePlotId)||null; }
+/* 열린 항목을 목록에 넣고 닫는다 (열린 항목이 없는 상태로) */
+function stashActivePlot(){
+  const cur=P.plots.find(x=>x.id===P.activePlotId);
+  if(cur){ cur.plotDoc=P.plotDoc; cur.writeDoc=P.writeDoc; }
+  P.plotDoc=fillPlotDoc(null); P.writeDoc=fillWriteDoc(null); P.activePlotId=null;
+}
 function selectPlot(id){
   ensurePlots(P);
   if(id===P.activePlotId) return;
-  const cur=P.plots.find(x=>x.id===P.activePlotId), next=P.plots.find(x=>x.id===id);
+  const next=P.plots.find(x=>x.id===id);
   if(!next) return;
-  if(cur){ cur.plotDoc=P.plotDoc; cur.writeDoc=P.writeDoc; }
+  stashActivePlot();
   P.plotDoc=next.plotDoc||fillPlotDoc(null); P.writeDoc=next.writeDoc||fillWriteDoc(null);
   next.plotDoc=null; next.writeDoc=null;
   P.activePlotId=id;
@@ -610,35 +632,64 @@ function selectPlot(id){
   writeSelectMode=false; writeSelectedIds.clear();
   save({touch:false});
 }
+/* 새 플롯 — [플롯 생성]에서. 그 플롯의 글쓰기도 [글쓰기]에 함께 생긴다 */
 function addPlot(){
   ensurePlots(P);
-  const name=prompt("새 플롯 이름:", `플롯 ${P.plots.length+1}`); if(name===null) return null;
-  const pl={id:uid(), name:name.trim()||`플롯 ${P.plots.length+1}`, plotDoc:fillPlotDoc(null), writeDoc:fillWriteDoc(null)};
+  const n=P.plots.filter(x=>x.plot).length+1;
+  const name=prompt("새 플롯 이름:", `플롯 ${n}`); if(name===null) return null;
+  const pl={id:uid(), name:name.trim()||`플롯 ${n}`, plot:true, write:true, plotDoc:fillPlotDoc(null), writeDoc:fillWriteDoc(null)};
+  P.plots.push(pl);
+  selectPlot(pl.id); save();
+  return pl;
+}
+/* 새 글쓰기 — [글쓰기]에서. 플롯 없이 "본문" 단계 하나로 바로 쓸 수 있다 */
+function addWriting(){
+  ensurePlots(P);
+  const n=P.plots.filter(x=>x.write).length+1;
+  const name=prompt("새 글쓰기 이름:", `글쓰기 ${n}`); if(name===null) return null;
+  const pd=fillPlotDoc(null); pd.sections=[{id:uid(), name:"본문", desc:"", ideaIds:[]}];
+  const pl={id:uid(), name:name.trim()||`글쓰기 ${n}`, plot:false, write:true, plotDoc:pd, writeDoc:fillWriteDoc(null)};
   P.plots.push(pl);
   selectPlot(pl.id); save();
   return pl;
 }
 function renamePlot(id){
   const pl=(P.plots||[]).find(x=>x.id===id); if(!pl) return;
-  const name=prompt("플롯 이름 변경:", pl.name); if(name===null) return;
+  const name=prompt("이름 변경:", pl.name); if(name===null) return;
   pl.name=name.trim()||pl.name; save(); render();
 }
-function deletePlot(id){
+function removePlotEntry(id){
+  if(id===P.activePlotId) stashActivePlot();
+  P.plots=P.plots.filter(x=>x.id!==id);
+  if(plotCompareId===id) plotCompareId=null;
+}
+/* mode "plot": 플롯 카드 삭제 — 쓴 글이 있으면 글쓰기는 [글쓰기]에 남긴다.
+   mode "write": 글쓰기 카드 삭제 — 쓴 글을 지우고, 플롯은 [플롯 생성]에 남긴다. */
+function deletePlot(id, mode){
   ensurePlots(P);
   const pl=P.plots.find(x=>x.id===id); if(!pl) return;
-  if(P.plots.length<=1){ alert("플롯은 최소 1개 있어야 합니다."); return; }
-  if(!confirm(`'${pl.name}' 플롯을 삭제할까요?\n이 플롯으로 쓴 글쓰기 내용도 함께 삭제되며 되돌릴 수 없습니다.\n(아이디어 원본은 아이디어 수집에 그대로 남습니다.)`)) return;
-  if(id===P.activePlotId) selectPlot(P.plots.find(x=>x.id!==id).id);
-  P.plots=P.plots.filter(x=>x.id!==id);
+  const {writeDoc:wd}=plotDataOf(pl);
+  const hasWriting=(wd.blocks||[]).length>0;
+  if(mode==="write"){
+    if(!confirm(`'${pl.name}' 글쓰기를 삭제할까요?\n쓴 글이 모두 지워집니다.${pl.plot?"\n(플롯은 [플롯 생성]에 그대로 남습니다.)":""}`)) return;
+    if(pl.plot){
+      const empty=fillWriteDoc(null);
+      if(id===P.activePlotId) P.writeDoc=empty; else pl.writeDoc=empty;
+      pl.write=false;
+    }else removePlotEntry(id);
+  }else{
+    const keepWrite=pl.write && hasWriting;
+    if(!confirm(`'${pl.name}' 플롯을 삭제할까요?${keepWrite?"\n이 플롯으로 쓴 글은 [글쓰기]에 그대로 남습니다.":""}\n(아이디어 원본은 아이디어 수집에 그대로 남습니다.)`)) return;
+    if(keepWrite) pl.plot=false;   // 글쓰기가 기대는 단계(섹션)는 그대로 두고 플롯 목록에서만 뺀다
+    else removePlotEntry(id);
+  }
   save(); render();
 }
 /* 작품 전체의 글쓰기 칸 수 (메인 화면 작품 카드용) */
 function projectWriteBlockCount(p){
-  if(!Array.isArray(p.plots) || !p.plots.length) return ((p.writeDoc&&p.writeDoc.blocks)||[]).length;
-  return p.plots.reduce((n,pl)=>{
-    const wd = pl.id===p.activePlotId ? p.writeDoc : pl.writeDoc;
-    return n+((wd&&wd.blocks)||[]).length;
-  },0);
+  let n=((p.writeDoc&&p.writeDoc.blocks)||[]).length;  // 열린 항목(또는 예전 작품)
+  (Array.isArray(p.plots)?p.plots:[]).forEach(pl=>{ if(pl.id!==p.activePlotId) n+=((pl.writeDoc&&pl.writeDoc.blocks)||[]).length; });
+  return n;
 }
 function blankChar(){
   return {id:uid(), name:"",role:"영웅",age:"",gender:"",job:"",mbti:"",enneagram:"",goal:"",flaw:"",strength:"",arc:"",arcType:"",desc:"", relationships:[], image:"",
@@ -898,7 +949,7 @@ function render(){
     // 2026-08-20: 캐릭터 탭은 상세 편집 화면(charDetailFor 있음)일 때만 넓게 표시됐는데,
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
-    app.classList.toggle("wide", activeTab==="home"||activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
+    app.classList.toggle("wide", activeTab==="home"||(activeTab==="plot" && plotEditOpen && !feedbackPage && P && !!plotCompareTarget())||activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
       ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance"||practiceFor==="twist") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
@@ -5201,6 +5252,77 @@ function plotBackBtn(mode){
   b.onclick=()=>{ if(mode==="write") writeEditOpen=false; else plotEditOpen=false; render(); window.scrollTo(0,0); };
   return b;
 }
+/* ===== 오른쪽에 다른 플롯 함께 보기 (2026-11-05) =====
+   플롯 작성 화면에서 다른 플롯 하나를 오른쪽에 읽기 전용으로 띄워 비교·참고한다.
+   [플롯]/[글] 보기 전환, [이 플롯 열기]로 왼쪽·오른쪽 맞바꾸기. 화면 상태라 저장하지 않는다. */
+let plotCompareId=null;
+let plotCompareView="plot"; // "plot" | "write"
+function plotCompareTarget(){
+  if(!plotCompareId || !Array.isArray(P.plots)) return null;
+  if(plotCompareId===P.activePlotId){ plotCompareId=null; return null; }
+  const pl=P.plots.find(x=>x.id===plotCompareId);
+  if(!pl){ plotCompareId=null; return null; }
+  return pl;
+}
+function renderPlotCompareInto(box, pl){
+  const {plotDoc:pd, writeDoc:wd}=plotDataOf(pl);
+  const struct=PLOT_STRUCTURES[pd.structure];
+  const head=document.createElement("div"); head.className="plot-compare-head";
+  const ttl=document.createElement("div"); ttl.className="plot-compare-title";
+  ttl.innerHTML=`<span class="plot-name-tag">${esc(pl.name)}</span><span class="plot-compare-struct">${pd.structure?esc(struct?struct.label:"사용자 구조"):"구조 없음"}</span>`;
+  const swap=document.createElement("button"); swap.type="button"; swap.className="btn ghost sm";
+  swap.textContent="⇄ 이 플롯 열기"; swap.title="이 플롯을 왼쪽(작성)으로, 지금 플롯을 오른쪽(참고)으로 바꿉니다";
+  swap.onclick=()=>{ const prev=P.activePlotId; selectPlot(pl.id); plotCompareId=prev; render(); };
+  const close=document.createElement("button"); close.type="button"; close.className="btn ghost sm";
+  close.innerHTML=ICONS.close; close.title="오른쪽 플롯 닫기";
+  close.onclick=()=>{ plotCompareId=null; render(); };
+  head.append(ttl, swap, close);
+  box.appendChild(head);
+
+  const tabs=document.createElement("div"); tabs.className="side-view-tabs";
+  [["plot","플롯"],["write","글"]].forEach(([k,lb])=>{
+    const b=document.createElement("button"); b.type="button";
+    b.className="side-view-tab"+(plotCompareView===k?" active":""); b.textContent=lb;
+    b.onclick=()=>{ plotCompareView=k; render(); };
+    tabs.appendChild(b);
+  });
+  box.appendChild(tabs);
+
+  const body=document.createElement("div"); body.className="plot-compare-body";
+  box.appendChild(body);
+  const secs=pd.sections||[];
+  if(!secs.length){ body.innerHTML='<p class="hint">이 플롯은 아직 구조를 고르지 않았습니다.</p>'; return; }
+  const ov=pd.ideaOverrides||{};
+  const ideaText=id=>{
+    if(Object.prototype.hasOwnProperty.call(ov,id)) return ov[id];
+    const idea=findIdea(id); return idea?(idea.text||""):"";
+  };
+  const blocks=wd.blocks||[];
+  secs.forEach((sec,i)=>{
+    const s=document.createElement("div"); s.className="plot-compare-sec";
+    s.style.borderLeftColor=getSectionColor(sec.id);
+    let html=`<div class="plot-compare-sec-name"><b>${i+1}</b> ${esc(sec.name)}</div>`;
+    if(plotCompareView==="plot"){
+      if(sec.desc) html+=`<div class="plot-compare-desc">${esc(sec.desc)}</div>`;
+      const ids=sec.ideaIds||[];
+      html+=ids.length
+        ? `<ul class="plot-compare-ideas">${ids.map(id=>`<li>${esc(ideaText(id))||'<span class="muted">(빈 아이디어)</span>'}</li>`).join("")}</ul>`
+        : '<div class="plot-compare-empty">아이디어 없음</div>';
+    }else{
+      const bl=blocks.filter(b=>b.sectionId===sec.id);
+      html+=bl.length
+        ? bl.map(b=>`<div class="plot-compare-block">${b.title?`<div class="plot-compare-btitle">${esc(b.title)}</div>`:""}`
+            +(b.items||[]).filter(it=>String(it.text||"").trim()).map(it=>it.type==="line"
+              ? `<div class="plot-compare-line"><b>${esc(it.char||"대사")}</b> ${esc(it.text)}</div>`
+              : `<div class="plot-compare-text">${esc(it.text)}</div>`).join("")
+            +((!b.title && !(b.items||[]).some(it=>String(it.text||"").trim()))?'<div class="plot-compare-empty">(빈 칸)</div>':"")
+            +`</div>`).join("")
+        : '<div class="plot-compare-empty">쓴 글 없음</div>';
+    }
+    s.innerHTML=html;
+    body.appendChild(s);
+  });
+}
 function openPlotFrom(mode, id){
   selectPlot(id);
   if(mode==="write") writeEditOpen=true; else plotEditOpen=true;
@@ -5212,25 +5334,24 @@ function rPlotCards(mode){
   const c=document.createElement("div");
   c.innerHTML=`<div class="card"><h2>${isWrite?ICONS.edit+" 글쓰기":ICONS.book+" 플롯 생성"}</h2>
     <p class="hint">${isWrite
-      ?"플롯마다 글쓰기가 따로 있습니다. 카드를 누르면 그 플롯의 섹션을 틀로 글쓰기 화면이 열립니다."
-      :"한 작품에 플롯을 여러 개 만들 수 있습니다. 카드를 누르면 플롯 작성 화면이 열립니다. 각 플롯의 글쓰기는 [글쓰기] 탭에서 따로 이어 쓸 수 있어요."}</p>
+      ?"[플롯 생성]에서 만든 플롯마다 글쓰기가 하나씩 있고, [＋ 새 글쓰기]로 플롯 없이 바로 쓰기 시작할 수도 있습니다. 카드를 누르면 글쓰기 화면이 열립니다."
+      :"한 작품에 플롯을 여러 개 만들 수 있습니다. 카드를 누르면 플롯 작성 화면이 열립니다. 각 플롯의 글쓰기는 [글쓰기] 탭에서 이어 쓸 수 있어요."}</p>
     <div class="home-grid plot-card-grid"></div></div>`;
   app.appendChild(c);
   const grid=c.querySelector(".plot-card-grid");
 
+  /* [+ 새 플롯] → 플롯 작성 화면, [+ 새 글쓰기] → 플롯 없이 바로 글쓰기 화면 */
   const add=document.createElement("button"); add.type="button"; add.className="home-card home-card-new";
-  add.title="새 플롯 만들기";
-  add.innerHTML=`<span class="home-card-plus">${ICONS.plus}</span><span class="home-card-new-label">새 플롯</span>`;
+  add.title=isWrite?"새 글쓰기 만들기":"새 플롯 만들기";
+  add.innerHTML=`<span class="home-card-plus">${ICONS.plus}</span><span class="home-card-new-label">${isWrite?"새 글쓰기":"새 플롯"}</span>`;
   add.onclick=()=>{
-    if(!addPlot()) return;
-    /* 새 플롯은 구조부터 골라야 하므로 글쓰기 탭에서 만들었어도 플롯 작성 화면으로 보낸다 */
-    plotEditOpen=true;
-    if(isWrite) forceTab("plot");
+    if(isWrite){ if(!addWriting()) return; writeEditOpen=true; }
+    else{ if(!addPlot()) return; plotEditOpen=true; }
     render(); window.scrollTo(0,0);
   };
   grid.appendChild(add);
 
-  P.plots.forEach((pl,i)=>{
+  P.plots.filter(pl=>isWrite?pl.write:pl.plot).forEach((pl,i)=>{
     const {plotDoc:pd, writeDoc:wd}=plotDataOf(pl);
     const struct=PLOT_STRUCTURES[pd.structure];
     const structLabel=pd.structure ? (struct?struct.label:"사용자 구조") : "";
@@ -5242,24 +5363,27 @@ function rPlotCards(mode){
     const card=document.createElement("button"); card.type="button";
     card.className="home-card plot-card"+(pl.id===P.activePlotId?" current":"");
     card.title=pl.name;
-    const secLine=secs.length ? secs.map(s=>esc(s.name)).join(" · ") : '<span class="home-card-empty">아직 플롯 구조를 고르지 않았습니다</span>';
+    const secLine=secs.length ? secs.map(s=>esc(s.name)).join(" · ")
+      : `<span class="home-card-empty">${isWrite?"단계 없음 — 열면 '본문'으로 시작합니다":"아직 플롯 구조를 고르지 않았습니다"}</span>`;
+    const tagLabel=isWrite && !pl.plot ? "플롯 없음" : structLabel;
     const stats=isWrite
       ? [blocks.length?`글 ${blocks.length}칸`:"", chars?`${chars.toLocaleString()}자`:""].filter(Boolean).join(" · ")||"아직 쓴 글 없음"
       : [secs.length?`섹션 ${secs.length}`:"", ideas?`아이디어 ${ideas}`:""].filter(Boolean).join(" · ");
     card.innerHTML=`<div class="home-card-cover"><span>${i+1}</span>
-        ${pl.id===P.activePlotId?'<em class="home-card-badge">열린 플롯</em>':""}</div>
+        ${pl.id===P.activePlotId?'<em class="home-card-badge">열림</em>':""}</div>
       <div class="home-card-body">
         <div class="home-card-title">${esc(pl.name)}</div>
-        ${structLabel?`<div class="home-card-genres"><span>${esc(structLabel)}</span></div>`:""}
+        ${tagLabel?`<div class="home-card-genres"><span>${esc(tagLabel)}</span></div>`:""}
         <div class="home-card-logline">${secLine}</div>
         <div class="home-card-meta"><span>${esc(stats)}</span></div>
       </div>`;
     card.onclick=()=>openPlotFrom(mode, pl.id);
     const del=document.createElement("button"); del.type="button"; del.className="home-card-del";
-    del.title="플롯 삭제"; del.setAttribute("aria-label", `'${pl.name}' 플롯 삭제`); del.innerHTML=ICONS.trash;
-    del.onclick=()=>deletePlot(pl.id);
+    const kind=isWrite?"글쓰기":"플롯";
+    del.title=kind+" 삭제"; del.setAttribute("aria-label", `'${pl.name}' ${kind} 삭제`); del.innerHTML=ICONS.trash;
+    del.onclick=()=>deletePlot(pl.id, mode);
     const ren=document.createElement("button"); ren.type="button"; ren.className="home-card-del plot-card-rename";
-    ren.title="플롯 이름 변경"; ren.setAttribute("aria-label", `'${pl.name}' 이름 변경`); ren.innerHTML=ICONS.edit;
+    ren.title="이름 변경"; ren.setAttribute("aria-label", `'${pl.name}' 이름 변경`); ren.innerHTML=ICONS.edit;
     ren.onclick=()=>renamePlot(pl.id);
     wrap.append(card, del, ren);
     grid.appendChild(wrap);
@@ -5268,10 +5392,10 @@ function rPlotCards(mode){
 
 function rPlot(){
   if(feedbackPage && feedbackPage.type==="plot"){ rFeedbackPage(); return; }
-  if(!plotEditOpen){ rPlotCards("plot"); return; }
+  const curPlot=activePlot();
+  if(!plotEditOpen || !curPlot || !curPlot.plot){ plotEditOpen=false; rPlotCards("plot"); return; }
   if(!P.plotDoc) P.plotDoc={structure:"", sections:[]};
   cleanPlotRefs();
-  const curPlot=activePlot();
   const plotNameHtml=curPlot?` <span class="plot-name-tag">${esc(curPlot.name)}</span>`:"";
 
   /* 아직 구조를 고르지 않았으면 선택 화면 */
@@ -5310,9 +5434,19 @@ function rPlot(){
       <button class="btn danger sm" id="changeStruct">구조 변경</button>
     </div>`;
   head.querySelector(".char-detail-top").appendChild(plotBackBtn("plot"));
+  /* 2026-11-05: 오른쪽에 다른 플롯 함께 열기(참고용) */
+  const others=(P.plots||[]).filter(x=>x.id!==P.activePlotId);
+  if(others.length){
+    const cmp=document.createElement("select"); cmp.className="plot-switch-select plot-compare-select";
+    cmp.title="오른쪽에 다른 플롯을 함께 띄워 참고합니다(읽기 전용)";
+    cmp.innerHTML=`<option value="">${plotCompareTarget()?"오른쪽 플롯 닫기":"오른쪽에 다른 플롯 열기…"}</option>`
+      +others.map(o=>`<option value="${esc(o.id)}"${o.id===plotCompareId?" selected":""}>${esc(o.name)}</option>`).join("");
+    cmp.onchange=()=>{ plotCompareId=cmp.value||null; render(); };
+    head.querySelector(".plot-toolbar").appendChild(cmp);
+  }
   app.appendChild(head);
   wireSubmitBtn(head,"plot");
-  head.querySelector("#goWrite").onclick=()=>{ writeEditOpen=true; forceTab("write"); render(); window.scrollTo(0,0); };
+  head.querySelector("#goWrite").onclick=()=>{ if(curPlot && !curPlot.write){ curPlot.write=true; save(); } writeEditOpen=true; forceTab("write"); render(); window.scrollTo(0,0); };
   head.querySelector("#addSection").onclick=()=>{
     const name=prompt("새 섹션 이름:","새 섹션"); if(name===null)return;
     P.plotDoc.sections.push({id:uid(), name:name||"새 섹션", desc:"", ideaIds:[]});
@@ -5344,6 +5478,18 @@ function rPlot(){
     e.preventDefault();
     commitSectionOrder(secWrap);
   });
+
+  /* 다른 플롯을 함께 열었으면 왼쪽(지금 플롯) / 오른쪽(참고 플롯)으로 나눈다 */
+  const cmpPlot=plotCompareTarget();
+  if(cmpPlot){
+    const split=document.createElement("div"); split.className="plot-compare-split";
+    const left=document.createElement("div"); left.className="plot-compare-main";
+    left.append(head, secWrap);
+    const right=document.createElement("div"); right.className="plot-compare-panel";
+    renderPlotCompareInto(right, cmpPlot);
+    split.append(left, right);
+    app.appendChild(split);
+  }
 
   /* 아이디어 선택 팝업 (열려 있을 때만) */
   if(plotPickerFor){
@@ -5699,20 +5845,15 @@ function rWrite(){
   if(feedbackPage && feedbackPage.type==="write"){ rFeedbackPage(); return; }
   if(!P.writeDoc) P.writeDoc={blocks:[]};
   if(!Array.isArray(P.writeDoc.groups)) P.writeDoc.groups=[];
-  if(!writeEditOpen){ rPlotCards("write"); return; }
   const curPlot=activePlot();
+  if(!writeEditOpen || !curPlot || !curPlot.write){ writeEditOpen=false; rPlotCards("write"); return; }
   const pd=P.plotDoc;
-  if(!pd || !pd.structure || !pd.sections.length){
-    const c=document.createElement("div"); c.className="card";
-    c.innerHTML=`<div class="char-detail-top"></div><h2>${ICONS.edit} 글쓰기${curPlot?` <span class="plot-name-tag">${esc(curPlot.name)}</span>`:""}</h2>
-      <p class="hint">먼저 <b>플롯 생성</b>에서 이 플롯의 구조를 만들어 주세요. 플롯 섹션이 글쓰기의 틀이 됩니다.</p>
-      <button class="btn sm" id="goPlotEdit">${ICONS.book} 이 플롯 작성하러 가기</button>`;
-    c.querySelector(".char-detail-top").appendChild(plotBackBtn("write"));
-    c.querySelector("#goPlotEdit").onclick=()=>{ plotEditOpen=true; forceTab("plot"); render(); window.scrollTo(0,0); };
-    app.appendChild(c);
-    return;
-  }
-  let fixed=repairDuplicateIds();
+  let fixed=false;
+  /* 2026-11-05: 플롯 없이도 글쓰기 가능 — 단계(섹션)가 하나도 없으면 "본문" 단계 하나로 시작한다.
+     구조(structure)는 비워 두므로, 나중에 [플롯 생성]에서 구조를 고르면 그 단계들로 바뀌고 쓴 칸은 첫 단계로 모인다 */
+  if(!Array.isArray(pd.sections)) pd.sections=[];
+  if(!pd.sections.length){ pd.sections.push({id:uid(), name:"본문", desc:"", ideaIds:[]}); fixed=true; }
+  if(repairDuplicateIds()) fixed=true;
   /* 구조에 없는(고아) 블록은 첫 섹션으로 회수 */
   const secIds=new Set(pd.sections.map(s=>s.id));
   (P.writeDoc.blocks||[]).forEach(b=>{ if(!secIds.has(b.sectionId)){ b.sectionId=pd.sections[0].id; fixed=true; } });
@@ -5747,6 +5888,14 @@ function rWrite(){
   nameTag.title="지금 쓰고 있는 플롯";
   const plotHead=document.createElement("div"); plotHead.className="write-plot-head";
   plotHead.append(plotBackBtn("write"), nameTag);
+  if(curPlot && !curPlot.plot){
+    /* 플롯 없이 시작한 글쓰기 — 원하면 이 글의 플롯을 만들어 [플롯 생성]에 올린다 */
+    const mk=document.createElement("button"); mk.type="button"; mk.className="btn ghost sm";
+    mk.innerHTML=ICONS.book+" 이 글의 플롯 만들기";
+    mk.title="이 글쓰기에 플롯을 붙여 [플롯 생성]에서 구조·아이디어를 정리합니다";
+    mk.onclick=()=>{ curPlot.plot=true; save(); plotEditOpen=true; forceTab("plot"); render(); window.scrollTo(0,0); };
+    plotHead.appendChild(mk);
+  }
   main.appendChild(plotHead);
   bar.append(loadBtn);
   const barRight=document.createElement("div"); barRight.className="write-toolbar-right";
@@ -7202,17 +7351,20 @@ function rStoryboard(){
   app.appendChild(head);
   /* 2026-11-05: 플롯이 여러 개면 어느 플롯의 글로 콘티를 만들지 고른다 */
   ensurePlots(P);
-  if(P.plots.length>1){
+  const writes=P.plots.filter(x=>x.write);
+  const actW=writes.some(x=>x.id===P.activePlotId);
+  if(writes.length>1 || (writes.length && !actW)){
     const row=document.createElement('div'); row.className='plot-switch-row';
-    const lb=document.createElement('label'); lb.textContent='플롯 ';
+    const lb=document.createElement('label'); lb.textContent='글쓰기 ';
     const sel=document.createElement('select'); sel.className='plot-switch-select';
-    P.plots.forEach(pl=>{ const o=document.createElement('option'); o.value=pl.id; o.textContent=pl.name; if(pl.id===P.activePlotId) o.selected=true; sel.appendChild(o); });
+    if(!actW){ const o=document.createElement('option'); o.value=''; o.textContent='고르세요…'; o.selected=true; o.disabled=true; sel.appendChild(o); }
+    writes.forEach(pl=>{ const o=document.createElement('option'); o.value=pl.id; o.textContent=pl.name; if(pl.id===P.activePlotId) o.selected=true; sel.appendChild(o); });
     sel.onchange=()=>{ selectPlot(sel.value); render(); };
     lb.appendChild(sel); row.appendChild(lb); head.appendChild(row);
   }
   wireSubmitBtn(head,"storyboard");
 
-  if(!pd || !pd.structure || !pd.sections.length || !(P.writeDoc.blocks||[]).length){
+  if(!pd || !(pd.sections||[]).length || !(P.writeDoc.blocks||[]).length){
     const c2=document.createElement("div"); c2.className="card";
     c2.innerHTML='<p class="hint">먼저 <b>글쓰기</b> 탭에서 장면 블록을 만들어 주세요.</p>';
     app.appendChild(c2);
