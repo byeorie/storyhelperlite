@@ -1684,3 +1684,14 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .notice-assign-pick{display:flex;align-items:center;gap:8px;margin:4px 0}
 .notice-assign-cls{flex:0 0 auto;max-width:40%;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .notice-assign-pick select{flex:1;min-width:0}
+
+/* ===== 플롯 카드 목록 — 작품 하나에 플롯 여러 개 (2026-11-05) ===== */
+.plot-card-rename{left:44px}
+.plot-card .home-card-cover span{font-size:30px}
+.plot-name-tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;margin-left:6px;border-radius:999px;
+  background:var(--accent2);color:var(--accent);vertical-align:middle;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.write-plot-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-width:0}
+.write-plot-head .btn{flex-shrink:0}
+.write-plot-head .plot-name-tag{margin-left:0;min-width:0}
+.plot-switch-row{margin-top:8px;font-size:13px;color:var(--muted)}
+.plot-switch-select{margin-left:4px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff}
