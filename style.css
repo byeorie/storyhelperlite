@@ -1724,3 +1724,14 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
   .plot-compare-main,.plot-compare-panel{flex:none;width:100%}
   .plot-compare-panel{position:static;max-height:none;min-width:0}
 }
+
+/* ===== 글쓰기 — 플롯 불러오기 팝업 (2026-11-05, 3차) ===== */
+.write-src-plot{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.write-plot-pick-list{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;margin-top:8px}
+.write-plot-pick{text-align:left;border:1px solid var(--line);border-radius:10px;background:#fcfbf9;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}
+.write-plot-pick:hover{border-color:var(--accent);background:#fff}
+.write-plot-pick.current{border-color:var(--accent2)}
+.wpp-name{font-weight:800;font-size:14px}
+.wpp-name em{font-style:normal;font-size:10px;font-weight:700;padding:1px 7px;margin-left:4px;border-radius:999px;background:var(--accent2);color:var(--accent)}
+.wpp-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.wpp-secs{font-size:12px;color:var(--ink);margin-top:4px;line-height:1.5}
