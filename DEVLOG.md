@@ -2,6 +2,13 @@
 
 프로젝트 파일이 생성/수정/삭제될 때마다 이 파일을 갱신합니다.
 
+## 2026-11-09 — RPG 게임: [게임 편집기 열기] (운영자 전용)
+
+- [RPG 게임] 화면의 운영자 칸(내 시험 서버 아래)에 "게임 편집기 (운영자)" 줄과 [게임 편집기 열기] 버튼.
+- functions/api/game.js: POST { mode:"ticket", editor:true } — 운영자(ADMIN_USERNAME)만. game_tickets 에 role 'editor'(60초, 1회) 입장권을 넣고
+  편집기 주소(환경 변수 EDITOR_URL, 기본 https://island-mud-editor.byeorie.workers.dev)/?t=입장권 을 돌려준다.
+- 입장권 확인은 게임 쪽(island-mud 저장소, 게임 Worker 의 EditorAuth)이 한다. 편집기 입장권으로는 게임에 들어갈 수 없다.
+
 ## 2026-11-05 (4) — 플롯과 글쓰기 분리 (글쓰기에서 플롯 골라 불러오기) + 버그 수정
 
 **요청**: "글쓰기 페이지에 플롯이 뜨고, 플롯을 못 불러오는 등 버그" — 전체 점검 후 수정.

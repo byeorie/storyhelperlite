@@ -9,11 +9,16 @@ import { requireAuth, jsonResponse, nowSec, makeToken, ensureGameSchema, ADMIN_U
         학생: 그 수업 수강생 + 수업에 게임이 켜져 있어야 함 / GM 교수: 자기 수업 + 게임이 켜져 있어야 함
    POST /api/game { mode:"ticket", admin:true }         — (2026-10-15) 운영자(관리자) 전용: 수업·GM 지정 없이 "내 시험 서버" 입장권을 만든다.
         게임이 운영자마다 따로 열리는 시험 서버로 바로 들어가게 한다 (class_id 0, role "admin"). 게임 쪽도 운영자 아이디를 다시 확인한다
+   POST /api/game { mode:"ticket", editor:true }        — (2026-11-09) 운영자 전용: 서버 게임 편집기 입장권(role "editor", 60초, 1회).
+        편집기 주소(EDITOR_URL)/?t=입장권 을 돌려준다. 게임 쪽(EditorAuth)이 입장권을 쓰고 운영자 아이디를 다시 확인한다.
+        편집기 입장권으로는 게임에 들어갈 수 없다
    게임 주소는 Pages 환경 변수 GAME_URL. 비어 있으면 아래 기본 주소를 쓴다 (2026-10-15: 환경 변수가 빈 값으로
    저장되어 [GM 화면]이 막혔던 일이 있어, 설정이 빠져도 접속이 되도록 기본값을 둔다) */
 const TICKET_SEC = 60;
 const DEFAULT_GAME_URL = "https://island-mud-world.byeorie.workers.dev";
 const gameUrl = env => String(env.GAME_URL || "").trim() || DEFAULT_GAME_URL;
+const DEFAULT_EDITOR_URL = "https://island-mud-editor.byeorie.workers.dev";
+const editorUrl = env => String(env.EDITOR_URL || "").trim() || DEFAULT_EDITOR_URL;
 
 async function isGm(env, userId) {
   try {
@@ -56,6 +61,15 @@ export async function onRequestPost({ request, env }) {
   const u = auth.user;
   let classId = Number(body && body.classId);
 
+  if (body && body.mode === "ticket" && body.editor) {
+    if (u.username !== ADMIN_USERNAME) return jsonResponse({ error: "운영자만 쓸 수 있습니다." }, 403);
+    const now = nowSec(), ticket = await makeToken();
+    try { await env.DB.prepare("DELETE FROM game_tickets WHERE expires_at < ?").bind(now - 3600).run(); } catch (e) {}
+    await env.DB.prepare(
+      "INSERT INTO game_tickets (ticket, user_id, class_id, role, created_at, expires_at, used) VALUES (?, ?, 0, 'editor', ?, ?, 0)"
+    ).bind(ticket, u.id, now, now + TICKET_SEC).run();
+    return jsonResponse({ ok: true, url: editorUrl(env).replace(/\/+$/, "") + "/?t=" + ticket });
+  }
   if (body && body.mode === "ticket" && body.admin) {
     if (u.username !== ADMIN_USERNAME) return jsonResponse({ error: "운영자만 들어갈 수 있습니다." }, 403);
     const now = nowSec(), ticket = await makeToken();
