@@ -667,7 +667,7 @@ function selectPlot(id){
   next.plotDoc=null; next.writeDoc=null;
   P.activePlotId=id;
   plotPickerFor=null; plotCollapsed.clear();
-  writeSelectMode=false; writeSelectedIds.clear(); writeCutMode=false;
+  writeSelectMode=false; writeSelectedIds.clear(); writeCutMode=false; writeSelAnchor=null;
   save({touch:false});
 }
 function newEntry(kind, name){
@@ -5875,6 +5875,19 @@ let writeDlgFor=null;       // 대사 추가 팝업이 열린 블록 id
 let writeFocusTitle=null;   // 렌더 후 제목 입력에 포커스할 블록 id
 let writeSelectMode=false;  // 본문 블록 선택 모드(그룹화용)
 let writeCutMode=false;     // 2026-11-12: [칸 자르기] 모드 — 지문/대사 사이를 누르면 칸이 둘로 나뉜다
+let writeSelAnchor=null;    // 2026-11-12: Shift 범위 선택의 기준(마지막으로 누른 칸)
+/* 칸 선택/해제 — shift면 기준 칸부터 이 칸까지(화면 순서) 모두 on 상태로 맞춘다 */
+function writeToggleSelect(id, on, shift){
+  const ord=allWriteBlocksOrdered().map(b=>b.id);
+  if(shift && writeSelAnchor && ord.indexOf(writeSelAnchor)>=0 && ord.indexOf(id)>=0){
+    let a=ord.indexOf(writeSelAnchor), b=ord.indexOf(id); if(a>b){ const t=a; a=b; b=t; }
+    for(let i=a;i<=b;i++){ if(on) writeSelectedIds.add(ord[i]); else writeSelectedIds.delete(ord[i]); }
+  }else{
+    if(on) writeSelectedIds.add(id); else writeSelectedIds.delete(id);
+  }
+  writeSelAnchor=id;
+  render();
+}
 let writeSelectedIds=new Set(); // 선택된 본문 블록 id들
 let ctxMenuTargetBlock=null;    // 우클릭 메뉴가 열린 블록
 
@@ -5954,7 +5967,7 @@ function rWrite(){
   const selBtn=document.createElement("button"); selBtn.className="btn ghost sm icon-btn"+(writeSelectMode?" wt-selecting":"");
   selBtn.innerHTML=ICONS.check+(writeSelectMode?" 선택 중":" 블록 선택");
   selBtn.title="여러 본문 블록을 선택해 그룹으로 묶을 수 있습니다";
-  selBtn.onclick=()=>{ writeSelectMode=!writeSelectMode; if(!writeSelectMode) writeSelectedIds.clear(); render(); };
+  selBtn.onclick=()=>{ writeSelectMode=!writeSelectMode; if(!writeSelectMode){ writeSelectedIds.clear(); writeSelAnchor=null; } render(); };
   /* 2026-11-12: [칸 자르기] — 켜고 칸 안의 지문/대사 사이를 누르면 그 자리에서 칸이 둘로 나뉜다 */
   const cutBtn=document.createElement("button"); cutBtn.className="btn ghost sm icon-btn"+(writeCutMode?" wt-selecting":"");
   cutBtn.innerHTML=ICONS.cut+(writeCutMode?" 자르기·합치기 끝내기":" 칸 자르기·합치기");
@@ -5968,6 +5981,14 @@ function rWrite(){
     if(groupBtn.disabled) groupBtn.style.opacity=.45;
     groupBtn.onclick=groupSelectedBlocks;
     barRight.appendChild(groupBtn);
+    /* 2026-11-12: 선택한 칸들을 복사해서 새 글쓰기 카드로 저장 */
+    const saveNewBtn=document.createElement("button"); saveNewBtn.className="btn ghost sm icon-btn";
+    saveNewBtn.innerHTML=ICONS.copy+" 새 글쓰기로 저장 ("+writeSelectedIds.size+")";
+    saveNewBtn.title="선택한 칸들을 복사해 새 글쓰기로 저장합니다 (지금 글쓰기는 그대로)";
+    saveNewBtn.disabled=!writeSelectedIds.size;
+    if(saveNewBtn.disabled) saveNewBtn.style.opacity=.45;
+    saveNewBtn.onclick=saveSelectionAsNewWriting;
+    barRight.appendChild(saveNewBtn);
   }
   if(typeof currentUser!=="undefined" && currentUser && currentUser.role!=="professor"){
     const submitBtn=document.createElement("button"); submitBtn.className="btn ghost sm icon-btn";
@@ -6270,6 +6291,39 @@ function blockGroupWrap(gid, list){
   return wrap;
 }
 /* 선택된 본문 블록들을 하나의 그룹으로 묶기 */
+/* 2026-11-12: 선택한 칸 → 새 글쓰기 카드. 칸은 복사본(새 id)이고 지금 글쓰기는 그대로 둔다.
+   칸이 속한 단계(섹션)와 섹션 블럭(그룹)만 함께 옮겨 같은 모양을 유지한다. 콘티 그림은 R2에 새로 복제해서
+   한쪽에서 다시 그리거나 지워도 다른 쪽 그림이 사라지지 않게 한다(복제에 실패한 그림은 빼고 알려준다). */
+async function saveSelectionAsNewWriting(){
+  const sel=allWriteBlocksOrdered().filter(b=>writeSelectedIds.has(b.id));
+  if(!sel.length) return;
+  const cur=activePlot();
+  const n=nextEntryNo("write","글쓰기");
+  const name=prompt(`선택한 칸 ${sel.length}개를 새 글쓰기로 저장합니다.\n새 글쓰기 이름:`, cur?`${cur.name} (선택)`:`글쓰기 ${n}`);
+  if(name===null) return;
+  const secIds=new Set(sel.map(b=>b.sectionId)), grpIds=new Set(sel.map(b=>b.groupId).filter(Boolean));
+  const pd=deepCopy(P.plotDoc||fillPlotDoc(null));
+  pd.sections=(pd.sections||[]).filter(s=>secIds.has(s.id));
+  if(!pd.sections.length) pd.sections=[{id:uid(), name:"본문", desc:"", ideaIds:[]}];
+  const groups=((P.writeDoc&&P.writeDoc.groups)||[]).filter(g=>grpIds.has(g.id)).map(deepCopy);
+  const blocks=sel.map(b=>{ const c=deepCopy(b); c.id=uid(); (c.items||[]).forEach(it=>{ it.id=uid(); }); return c; });
+  let lost=0;
+  for(const c of blocks){
+    if(c.storyboard && c.storyboard.key){
+      const key=await duplicateStoryboardImage(c.storyboard.key);
+      if(key) c.storyboard={key, size:c.storyboard.size}; else { c.storyboard=null; lost++; }
+    }
+  }
+  const e={id:uid(), name:name.trim()||`글쓰기 ${n}`, kind:"write", srcPlotId:cur?(cur.srcPlotId||""):"",
+    plotDoc:fillPlotDoc(pd), writeDoc:fillWriteDoc({blocks, groups})};
+  ensurePlots(P);
+  P.plots.push(e);
+  writeSelectMode=false; writeSelectedIds.clear(); writeSelAnchor=null;
+  save();
+  const msg=`'${e.name}' 글쓰기로 저장했습니다. (칸 ${blocks.length}개)`+(lost?`\n콘티 그림 ${lost}개는 복사하지 못해 빠졌습니다.`:"")+"\n\n새 글쓰기를 지금 열까요?";
+  if(confirm(msg)){ selectPlot(e.id); writeEditOpen=true; }
+  render(); window.scrollTo(0,0);
+}
 function groupSelectedBlocks(){
   if(writeSelectedIds.size<2) return;
   const name=prompt("그룹 이름:", "그룹"); if(name===null) return;
@@ -6346,10 +6400,16 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   delBtn.onclick=()=>{ if(!confirm("이 장면 블록을 삭제할까요?"))return; P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id); save(); render(); };
   if(writeSelectMode){
     const chk=document.createElement("input"); chk.type="checkbox"; chk.className="scene-select-chk";
-    chk.title="선택해서 그룹으로 묶기"; chk.checked=writeSelectedIds.has(bl.id);
-    chk.onclick=e=>e.stopPropagation();
-    chk.onchange=()=>{ if(chk.checked) writeSelectedIds.add(bl.id); else writeSelectedIds.delete(bl.id); render(); };
+    chk.title="선택 (Shift+클릭: 마지막으로 누른 칸부터 여기까지 한꺼번에)"; chk.checked=writeSelectedIds.has(bl.id);
+    chk.onclick=e=>{ e.stopPropagation(); writeToggleSelect(bl.id, chk.checked, e.shiftKey); };
     head.appendChild(chk);
+    /* 2026-11-12: 선택 모드에서는 칸의 빈 곳을 눌러도 선택/해제(입력칸·버튼은 제외) — Shift를 누르면 범위 선택 */
+    d.addEventListener("click", e=>{
+      if(!writeSelectMode) return;
+      if(e.target.closest("input,textarea,button,select,a,[contenteditable='true'],.dlg-text,.scene-title")) return;
+      if(e.shiftKey){ e.preventDefault(); const s=window.getSelection&&window.getSelection(); if(s) s.removeAllRanges(); }
+      writeToggleSelect(bl.id, !writeSelectedIds.has(bl.id), e.shiftKey);
+    });
   }
   /* 2026-09-11: 섹션 블럭(그룹)에 속한 칸은 그룹 머리에 이미 플롯(아이디어) 제목이 있으므로
      칸 안의 "플롯 / 제목" 칸을 두지 않는다. 그룹 밖 낱개 칸 블록은 그대로 제목을 쓴다. */
