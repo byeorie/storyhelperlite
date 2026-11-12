@@ -9357,6 +9357,24 @@ window.addEventListener("popstate", e=>{
 
 /* 두 텍스트를 단어 단위로 비교해, 이전 텍스트(before)에서 지금(after)과 달라진 부분만
    <span class="diff-bg">로 감싼 HTML을 만든다 (LCS 기반의 간단한 단어 단위 diff) */
+/* diffPrevHtml과 같은 단어 비교로, 첨삭에서 빠진(바뀐) 단어의 원문 위치 [{start,end,diff:true}]를 돌려준다.
+   글쓰기 "이전 버전"을 지문/대사 칸 모양으로 그리면서 그 위에 붉은 표시를 얹을 때 쓴다(2026-11-12). */
+function diffRemovedRanges(beforeText, afterText){
+  const a=(beforeText||"").split(/(\s+)/), b=(afterText||"").split(/(\s+)/);
+  const n=a.length, m=b.length, out=[];
+  if(!n || beforeText===afterText) return out;
+  const dp=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) dp[i][j]= a[i]===b[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j], dp[i][j+1]);
+  let i=0, j=0, pos=0;
+  const mark=(tok)=>{ if(tok.trim()){ const last=out[out.length-1]; if(last && last.end===pos) last.end=pos+tok.length; else out.push({start:pos, end:pos+tok.length, diff:true}); } };
+  while(i<n && j<m){
+    if(a[i]===b[j]){ pos+=a[i].length; i++; j++; }
+    else if(dp[i+1][j]>=dp[i][j+1]){ mark(a[i]); pos+=a[i].length; i++; }
+    else j++;
+  }
+  while(i<n){ mark(a[i]); pos+=a[i].length; i++; }
+  return out;
+}
 function diffPrevHtml(beforeText, afterText){
   const a=(beforeText||"").split(/(\s+)/);
   const b=(afterText||"").split(/(\s+)/);
@@ -9517,6 +9535,8 @@ async function buildSubmissionData(type){
         id:bl.id, title:bl.title||"",
         sectionId:bl.sectionId||"", sectionName:secName[bl.sectionId]||"",
         groupId:bl.groupId||"", groupName:bl.groupId?(grpName[bl.groupId]||"그룹"):"",
+        /* 2026-11-12: 칸의 배경/캐릭터 메모도 보낸다 — 피드백·첨삭 화면을 학생 글쓰기 화면과 똑같이 그리기 위함 */
+        backgrounds:(bl.backgrounds||[]).slice(), characters:(bl.characters||[]).slice(),
         items:kept,
         text:kept.map(it=> it.type==="line" ? `${it.char}: ${it.text}` : it.text).join("\n"),
       };
@@ -11744,6 +11764,9 @@ function buildReviewPairs(type, data, feedback){
         after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (b.text||""),
         /* 2026-09-15: 지문/대사 칸 구조 — 있으면 이 경계대로 그린다(옛 제출물은 없어서 null) */
         items: Array.isArray(b.items) ? b.items : null,
+        /* 2026-11-12: 학생 글쓰기 화면처럼 칸 번호 배지 + 배경/캐릭터 줄(예전 제출물엔 없어서 빈 줄) */
+        num: i+1,
+        meta: {backgrounds:Array.isArray(b.backgrounds)?b.backgrounds:[], characters:Array.isArray(b.characters)?b.characters:[]},
       };
     });
   }
@@ -12061,6 +12084,11 @@ function appendMemoRange(el, rawText, from, to, ranged, numMap, colorMap, cls){
     if(en<=cur) return;
     const ss=Math.max(cur,s);
     if(ss>cur) el.appendChild(document.createTextNode(rawText.slice(cur,ss)));
+    if(m.diff){
+      /* 첨삭 비교용 가짜 범위(diffRemovedRanges) — 메모가 아니라 각주 번호 없이 붉은 바탕만 */
+      if(en>ss){ const sp=document.createElement("span"); sp.className="diff-bg"; sp.textContent=rawText.slice(ss,en); el.appendChild(sp); }
+      cur=Math.max(cur,en); return;
+    }
     if(en>ss){
       const mark=document.createElement("mark"); mark.className="memo-hl "+cls(m.id); mark.dataset.memoId=m.id;
       mark.textContent=rawText.slice(ss,en);
@@ -12318,7 +12346,41 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
     rerender();
   };
   let curGroup=null, curSub=null;
+  /* 2026-11-12: 글쓰기는 학생 글쓰기 화면과 똑같은 틀로 그린다 —
+     단계(.write-group: 번호 원 + 단계 이름) → 섹션 블럭(.write-blockgroup: 베이지 상자 "1화") →
+     칸(.scene-block: 번호 배지 + 배경/캐릭터) → 지문/대사 칸. 예전에는 단계를 띠 머리말, 섹션 블럭을
+     작은 알약, 칸을 "1. 제목" 라벨 상자로 그려서 학생이 쓰던 화면과 모양이 많이 달랐다. */
+  const isWrite=pairs.some(p=>p.kind==="write");
+  let wList=null, wParent=null, wSecNo=0;
   pairs.forEach(p=>{
+    if(isWrite){
+      const gid=p.group?p.group.id:null, sid=p.subgroup?p.subgroup.id:null;
+      if(!wList || gid!==curGroup){
+        curGroup=gid; curSub=null;
+        const g=document.createElement("div"); g.className="write-group rv-write-group";
+        if(gid){
+          const dv=document.createElement("div"); dv.className="write-divider";
+          const num=document.createElement("span"); num.className="wd-num"; num.textContent=String(++wSecNo);
+          const nm=document.createElement("span"); nm.className="wd-name"; nm.textContent=p.group.name||"";
+          dv.append(num, nm); g.appendChild(dv);
+        }
+        wList=document.createElement("div"); wList.className="write-blocklist";
+        g.appendChild(wList); container.appendChild(g);
+        wParent=wList;
+      }
+      if(sid!==curSub){
+        curSub=sid;
+        if(sid){
+          const bg=document.createElement("div"); bg.className="write-blockgroup";
+          const hd=document.createElement("div"); hd.className="wg-head";
+          const tt=document.createElement("span"); tt.className="wg-title"; tt.textContent=p.subgroup.name||"그룹";
+          hd.appendChild(tt);
+          const body=document.createElement("div"); body.className="wg-body";
+          bg.append(hd, body); wList.appendChild(bg);
+          wParent=body;
+        }else wParent=wList;
+      }
+    }else
     /* 원본 화면과 같은 묶음 구조를 보여주기 위한 머리말
        (플롯: 섹션 / 글쓰기: 플롯 섹션 + 그 안의 섹션 블럭(그룹)) */
     if(p.group && p.group.id!==curGroup){
@@ -12340,8 +12402,36 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
     const split = editable ? splitIds.has(p.id) : changed;
     const {mine, numMap, colorMap}=computePairMemoNumbering(memos, p.id);
     const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":"")+(p.kind?" kind-"+p.kind:""); wrap.dataset.id=p.id;
+    const isScene=isWrite && p.kind==="write";
+    if(isScene){
+      wrap.classList.add("scene-block","rv-scene");
+      if(p.group && p.group.id) wrap.style.borderLeftColor=getSectionColor(p.group.id);  /* 글쓰기 화면처럼 단계별 색 띠 */
+      const head=document.createElement("div"); head.className="scene-head";
+      const num=document.createElement("span"); num.className="scene-num"; num.textContent=String(p.num||"");
+      const sp=document.createElement("div"); sp.className="scene-title-spacer";
+      const meta=p.meta||{};
+      const mrow=document.createElement("div"); mrow.className="scene-meta-row";
+      [["배경",meta.backgrounds],["캐릭터",meta.characters]].forEach(([lb,list])=>{
+        if(!Array.isArray(list) || !list.length) return;
+        const col=document.createElement("div"); col.className="scene-meta-col";
+        const l=document.createElement("span"); l.className="scene-meta-label"; l.textContent=lb+": ";
+        const v=document.createElement("span"); v.className="scene-meta-item"; v.textContent=list.join(", ");
+        col.append(l, v); mrow.appendChild(col);
+      });
+      if(mrow.children.length) sp.appendChild(mrow);
+      head.append(num, sp);
+      if(split){ const tag=document.createElement("span"); tag.className="rv-scene-tag"; tag.textContent="첨삭"; head.appendChild(tag); }
+      wrap.appendChild(head);
+    }
     let memoTargetEl;
-    if(!split){
+    if(!split && isScene){
+      /* 학생 화면의 칸처럼 라벨 상자 없이 지문/대사 칸만 */
+      const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
+      renderBeforeBody(txt, p, mine, numMap, colorMap);
+      wrap.appendChild(txt);
+      renderMemoCardsInto(wrap, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
+      memoTargetEl=txt;
+    }else if(!split){
       const box=document.createElement("div"); box.className="plan-block review-before";
       const lbl=document.createElement("label"); lbl.textContent=p.label;
       const txt=document.createElement("div"); txt.className="review-before-text";
@@ -12353,20 +12443,31 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
     }else{
       const prev=document.createElement("div"); prev.className="version-prev";
       const toggle=document.createElement("div"); toggle.className="version-prev-toggle";
-      const setToggleLabel=()=>{ toggle.textContent=(prev.classList.contains("collapsed")?"▸":"▾")+" 이전 버전 · "+p.label; };
+      const setToggleLabel=()=>{ toggle.textContent=(prev.classList.contains("collapsed")?"▸":"▾")+" 이전 버전"+(isScene?"":" · "+p.label); };
       toggle.onclick=()=>{ prev.classList.toggle("collapsed"); setToggleLabel(); };
-      const prevText=document.createElement("div"); prevText.className="version-prev-text";
+      const prevText=document.createElement("div"); prevText.className="version-prev-text"+(isScene?" review-before-text rv-scene-items":"");
       setToggleLabel();
       prev.append(toggle, prevText);
 
       const cur=document.createElement("div"); cur.className="ta-wrap version-current";
-      const lbl=document.createElement("label"); lbl.textContent=p.label+(editable?" — 첨삭":" — 교수님 첨삭");
+      const lbl=document.createElement("label");
+      lbl.textContent=isScene ? (editable?"첨삭":"교수님 첨삭") : p.label+(editable?" — 첨삭":" — 교수님 첨삭");
       cur.appendChild(lbl);
       let getAfter;
+      /* 글쓰기 "이전 버전"도 지문/대사 칸 모양 그대로 — 첨삭에서 빠진 단어만 붉게 칠한다 */
+      const drawPrevDiff=(after)=>{
+        if(isScene) renderStyledBeforeText(prevText, "write", p.before, diffRemovedRanges(p.before, after), new Map(), null, p.items);
+        else prevText.innerHTML=diffPrevHtml(p.before, after);
+      };
       if(editable && p.kind==="write"){
         /* 2026-09-15: 글쓰기는 지문/대사 칸을 합치지 않고 칸마다 따로 고친다 */
         wrap.dataset.itemized="1";
-        renderWriteAfterItems(cur, p, ()=>{ if(!mine.length) prevText.innerHTML=diffPrevHtml(p.before, p.after); });
+        renderWriteAfterItems(cur, p, ()=>{ if(!mine.length) drawPrevDiff(p.after); });
+        getAfter=()=>p.after;
+      }else if(!editable && isScene){
+        const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
+        renderStyledBeforeText(txt, "write", p.after, [], new Map(), null, p.after===p.before?p.items:null);
+        cur.appendChild(txt);
         getAfter=()=>p.after;
       }else if(editable){
         const ta=document.createElement("textarea"); ta.className="plan-ta-lg"; ta.value=p.after;
@@ -12382,7 +12483,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       /* 이 블록에 메모가 있으면 "이전 버전" 패널은 첨삭 diff 강조 대신 메모 강조(하이라이트+각주번호)를
          보여준다 — 같은 텍스트 위에 두 강조를 함께 표시하기 어려워, 메모가 달린 블록은 메모 표시를 우선한다 */
       if(mine.length) renderBeforeBody(prevText, p, mine, numMap, colorMap);
-      else prevText.innerHTML=diffPrevHtml(p.before, getAfter());
+      else drawPrevDiff(getAfter());
       renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
       wrap.append(prev, cur);
       memoTargetEl=prevText;
@@ -12394,7 +12495,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
         openReviewBlockCtxMenu(e.clientX, e.clientY, p, wrap, pairs, splitIds, editable, memos, memoOpts, memoRange, rerender);
       });
     }
-    container.appendChild(wrap);
+    (isWrite && wParent ? wParent : container).appendChild(wrap);
   });
 }
 /* 첨삭 화면(교수) 블록 우클릭 메뉴 — 원본 블록이면 [첨삭](위/아래로 분리),

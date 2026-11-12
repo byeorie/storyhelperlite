@@ -1323,6 +1323,31 @@ canvas.draw-layer-canvas.is-base{position:relative}
   overflow:hidden;line-height:1.6}
 .rv-after-text:focus{outline:none;background:#fff;border-radius:6px}
 
+/* ===== 2026-11-12: 글쓰기 피드백·첨삭 화면을 학생 글쓰기 화면과 같은 틀로 =====
+   단계(.write-group) · 섹션 블럭(.write-blockgroup) · 칸(.scene-block)은 글쓰기 화면 클래스를 그대로 쓰고,
+   여기서는 첨삭 화면에만 있는 부분(지문/대사 줄 크기, 이전 버전/첨삭 상자)만 학생 화면 크기에 맞춘다. */
+.review-pair.rv-scene{margin-bottom:0;gap:0}
+.rv-scene .scene-head{align-items:center}
+.rv-scene .scene-num{margin-top:0}
+.rv-scene-tag{flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);background:var(--accent2);
+  border-radius:5px;padding:2px 7px}
+.rv-scene .review-before-text{white-space:normal}
+.rv-scene .review-before-text .rv-sub{border-radius:7px;padding:7px 9px;margin-top:6px;font-size:11px;line-height:1.5;white-space:pre-wrap;background:#fff}
+.rv-scene .review-before-text .rv-sub.rv-line{background:#fbf8f3}
+.rv-scene .review-before-text .rv-sub:first-child{margin-top:0}
+.rv-scene .review-before-text .rv-sub .dlg-who{font-size:11px}
+.rv-scene .version-prev{border-radius:7px 7px 0 0}
+.rv-scene .version-prev-text{padding:0 8px 8px;font-size:11px}
+.rv-scene .version-prev-text .rv-sub{background:#fbfaf7;color:var(--muted)}
+.rv-scene .version-prev-text .rv-sub.rv-line{background:#f6f1e7}
+.rv-scene .ta-wrap.version-current{margin-bottom:0;padding:8px 10px;border-radius:0 0 7px 7px}
+.rv-scene .ta-wrap.version-current > label{font-size:11px;font-weight:700;margin-bottom:6px}
+.rv-scene .rv-after-item{border-radius:7px;padding:7px 9px}
+.rv-scene .rv-after-text,.rv-scene .rv-after-char{font-size:11px}
+.rv-scene .ta-wrap textarea.rv-after-text{min-height:0;line-height:1.5}
+.rv-scene .memo-block-list{margin-top:6px}
+.rv-write-group .write-blockgroup:last-child{margin-bottom:0}
+
 /* 2026-09-15: 파일 과제 — 고른 파일 목록 / 제출된 clip 파일 줄 */
 .file-pick-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .file-pick-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:6px 8px}
