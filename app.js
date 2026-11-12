@@ -3657,7 +3657,7 @@ document.addEventListener("drop", dndStopScroll, true);
    그래서 손가락/펜으로 손잡이를 끌면 포인터 이벤트를 받아 dragstart/dragover/drop/dragend를 직접 만들어
    보낸다 → 마우스용으로 짜 둔 기존 드래그 처리 코드가 그대로 동작한다. 마우스는 기존 방식 그대로. */
 const TOUCH_DND_HANDLES=".idea-handle,.plot-idea-handle,.plot-sec-move,.scene-handle,.sub-handle,.sb-row-handle,.class-row-handle";
-const TOUCH_DND_SOURCES=".sub-branch,.sub-block,.scene-block,.plot-idea,.plot-section,.idea-block,.sb-row,.class-row";
+const TOUCH_DND_SOURCES=".sub-branch,.sub-block,.rv-after-item,.scene-block,.plot-idea,.plot-section,.idea-block,.sb-row,.class-row";
 let touchDnd=null;
 function touchDndFire(target, type, x, y, related){
   if(!target) return null;
@@ -11756,7 +11756,7 @@ function buildReviewPairs(type, data, feedback){
     /* 2026-11-12: 교수가 칸을 새로 넣거나(added) 지운(deleted) 첨삭 — 첨삭 배열이 "화면 순서대로의 칸 목록"이 된다.
        학생 칸은 id로 짝을 찾고, 첨삭에 없는 학생 칸은 원래 자리(앞 칸 뒤)에 그대로 끼운다.
        added/deleted가 하나도 없는 예전 첨삭은 아래 예전 방식(순서 = 제출 칸 순서) 그대로다. */
-    if(fbArr.some(f=>f && (f.added || f.deleted))){
+    if(fbArr.some(f=>f && (f.added || f.deleted || f.moved))){
       const seq=[], used=new Set();
       fbArr.forEach(f=>{
         if(!f) return;
@@ -11779,10 +11779,13 @@ function buildReviewPairs(type, data, feedback){
             meta:{backgrounds:[], characters:[]} };
         }
         const b=blocks[s.bi], f=s.f;
+        const mv=!!(f && f.moved);   /* 교수가 옮긴 칸은 첨삭에 적힌 자리(단계/섹션 블럭)를 따른다 */
+        const secId=mv?f.sectionId:b.sectionId, secName=mv?f.sectionName:b.sectionName;
+        const grpId=mv?f.groupId:b.groupId, grpName=mv?f.groupName:b.groupName;
         return {
-          id:b.id||("i"+s.bi), label:`${s.bi+1}. ${b.title||"(제목 없음)"}`, kind:"write",
-          group: b.sectionId ? {id:b.sectionId, name:b.sectionName||"섹션"} : null,
-          subgroup: b.groupId ? {id:b.groupId, name:b.groupName||"그룹"} : null,
+          id:b.id||("i"+s.bi), label:`${s.bi+1}. ${b.title||"(제목 없음)"}`, kind:"write", moved:mv,
+          group: secId ? {id:secId, name:secName||"섹션"} : null,
+          subgroup: grpId ? {id:grpId, name:grpName||"그룹"} : null,
           before:b.text||"",
           after: f && f.deleted ? "" : (f && typeof f.text==="string" ? f.text : (b.text||"")),
           deleted: !!(f && f.deleted),
@@ -12297,10 +12300,38 @@ function renderWriteAfterItems(cur, p, onChange){
   const box=document.createElement("div"); box.className="rv-after-items";
   const sync=()=>{ p.after=writeRowsToText(rows); if(onChange) onChange(); };
   /* 2026-11-12: 교수가 지문/대사 줄을 직접 넣고(아래 점선 버튼) 지울(×) 수 있다 — 학생 글쓰기 화면과 같은 방식 */
+  /* 2026-11-12: 줄 손잡이로 끌어 같은 칸 안에서 순서 바꾸기 */
+  let dragIdx=null;
   const draw=(focusIdx)=>{
     box.innerHTML="";
     rows.forEach((r,idx)=>{
       const row=document.createElement("div"); row.className="rv-after-item"+(r.type==="line"?" is-line":" is-text");
+      const hd=document.createElement("span"); hd.className="sub-handle"; hd.innerHTML=ICONS.grip; hd.title="끌어서 줄 이동";
+      hd.addEventListener("mousedown", ()=>{ row.draggable=true; });
+      hd.addEventListener("mouseup", ()=>{ row.draggable=false; });
+      row.appendChild(hd);
+      row.addEventListener("dragstart", e=>{
+        e.stopPropagation(); dragIdx=idx; e.dataTransfer.effectAllowed="move";
+        try{ e.dataTransfer.setData("text/plain", "rv-row"); }catch(_){}
+        setTimeout(()=>row.classList.add("dragging"),0);
+      });
+      row.addEventListener("dragend", e=>{ e.stopPropagation(); row.draggable=false; row.classList.remove("dragging"); dragIdx=null;
+        box.querySelectorAll(".rv-drop-before,.rv-drop-after").forEach(el=>el.classList.remove("rv-drop-before","rv-drop-after")); });
+      row.addEventListener("dragover", e=>{
+        if(dragIdx==null || dragIdx===idx) return;
+        e.preventDefault(); e.stopPropagation();
+        const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
+        row.classList.toggle("rv-drop-after", after); row.classList.toggle("rv-drop-before", !after);
+      });
+      row.addEventListener("dragleave", e=>{ if(!row.contains(e.relatedTarget)) row.classList.remove("rv-drop-before","rv-drop-after"); });
+      row.addEventListener("drop", e=>{
+        if(dragIdx==null || dragIdx===idx) return;
+        e.preventDefault(); e.stopPropagation();
+        const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
+        const [m]=rows.splice(dragIdx,1);
+        let at=idx-(dragIdx<idx?1:0)+(after?1:0);
+        rows.splice(at,0,m); dragIdx=null; sync(); draw();
+      });
       let first=null;
       if(r.type==="line"){
         const ci=document.createElement("input"); ci.type="text"; ci.className="rv-after-char"; ci.value=r.char==="(미지정)"?"":r.char; ci.placeholder="캐릭터";
@@ -12391,6 +12422,23 @@ function renderMemoCardsInto(container, mine, numMap, opts, colorMap){
    초안 편집 중엔 저장 전이라 onDelete 없이 로컬 배열만 바뀌고, 학생 화면에선 onDelete로 즉시 서버에
    반영). canEdit이면 메모 카드 텍스트를 클릭해 바로 수정할 수 있다(textarea로 바뀌고 Enter/포커스
    해제 시 저장, Esc면 취소 — onEdit은 교수 화면에서 저장 전 로컬 배열만 바꾸는 용도로 지금은 안 씀). */
+/* ===== 2026-11-12: 교수 첨삭 화면 — 글쓰기 칸 끌어 옮기기 =====
+   옮긴 칸은 moved=true가 되고 놓인 자리의 단계/섹션 블럭(group/subgroup)을 따라간다.
+   target이 없으면(섹션 블럭 빈 자리에 놓음) 그 묶음의 마지막 칸 뒤로 간다. */
+let rvDragPid=null;
+function moveReviewPair(pairs, dragId, target, after, group, subgroup){
+  const from=pairs.findIndex(x=>x.id===dragId); if(from<0) return;
+  const [d]=pairs.splice(from,1);
+  let at;
+  if(target){ at=pairs.indexOf(target)+(after?1:0); }
+  else{
+    const gid=group?group.id:null, sid=subgroup?subgroup.id:null;
+    at=-1; pairs.forEach((x,k)=>{ if((x.group?x.group.id:null)===gid && (x.subgroup?x.subgroup.id:null)===sid) at=k+1; });
+    if(at<0) at=pairs.length;
+  }
+  pairs.splice(at,0,d);
+  d.group=group||null; d.subgroup=subgroup||null; d.moved=true;
+}
 function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts){
   memos = memos || [];
   memoOpts = memoOpts || {};
@@ -12409,6 +12457,19 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
      작은 알약, 칸을 "1. 제목" 라벨 상자로 그려서 학생이 쓰던 화면과 모양이 많이 달랐다. */
   const isWrite=pairs.some(p=>p.kind==="write");
   let wList=null, wParent=null, wSecNo=0, wBlockNo=0;
+  /* 칸이 아닌 빈 자리(섹션 블럭 상자 · 단계 목록)에 놓으면 그 묶음 끝으로 */
+  const dropZone=(el, group, subgroup)=>{
+    if(!editable) return;
+    el.addEventListener("dragover", e=>{ if(!rvDragPid) return; e.preventDefault(); el.classList.add("rv-zone-over"); });
+    el.addEventListener("dragleave", e=>{ if(!el.contains(e.relatedTarget)) el.classList.remove("rv-zone-over"); });
+    el.addEventListener("drop", e=>{
+      el.classList.remove("rv-zone-over");
+      if(!rvDragPid) return;
+      e.preventDefault(); e.stopPropagation();
+      moveReviewPair(pairs, rvDragPid, null, true, group, subgroup);
+      rvDragPid=null; rerender();
+    });
+  };
   /* 대사 칸 캐릭터 입력의 자동완성 목록 — 이 제출물에 나온 캐릭터 이름들 */
   if(isWrite && editable){
     const names=new Set();
@@ -12432,6 +12493,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
         }
         wList=document.createElement("div"); wList.className="write-blocklist";
         g.appendChild(wList); container.appendChild(g);
+        dropZone(g, p.group||null, null);
         wParent=wList;
       }
       if(sid!==curSub){
@@ -12443,6 +12505,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
           hd.appendChild(tt);
           const body=document.createElement("div"); body.className="wg-body";
           bg.append(hd, body); wList.appendChild(bg);
+          dropZone(bg, p.group||null, p.subgroup);
           wParent=body;
         }else wParent=wList;
       }
@@ -12476,6 +12539,35 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       if(p.deleted) wrap.classList.add("rv-deleted");
       if(p.group && p.group.id) wrap.style.borderLeftColor=getSectionColor(p.group.id);  /* 글쓰기 화면처럼 단계별 색 띠 */
       const head=document.createElement("div"); head.className="scene-head";
+      /* 2026-11-12: 교수는 손잡이로 칸을 끌어 순서를 바꾸거나 다른 단계/섹션 블럭으로 옮길 수 있다 */
+      if(editable){
+        const handle=document.createElement("span"); handle.className="scene-handle"; handle.innerHTML=ICONS.grip; handle.title="끌어서 칸 이동";
+        handle.addEventListener("mousedown", ()=>{ wrap.draggable=true; });
+        handle.addEventListener("mouseup", ()=>{ wrap.draggable=false; });
+        head.appendChild(handle);
+        wrap.addEventListener("dragstart", e=>{
+          if(e.target!==wrap) return;           /* 안쪽 줄 끌기와 섞이지 않게 */
+          rvDragPid=p.id; e.dataTransfer.effectAllowed="move";
+          try{ e.dataTransfer.setData("text/plain", "rv-scene"); }catch(_){}
+          setTimeout(()=>wrap.classList.add("dragging"),0);
+        });
+        wrap.addEventListener("dragend", ()=>{ wrap.draggable=false; wrap.classList.remove("dragging"); rvDragPid=null;
+          container.querySelectorAll(".rv-drop-before,.rv-drop-after").forEach(el=>el.classList.remove("rv-drop-before","rv-drop-after")); });
+        wrap.addEventListener("dragover", e=>{
+          if(!rvDragPid || rvDragPid===p.id) return;
+          e.preventDefault(); e.stopPropagation();
+          const r=wrap.getBoundingClientRect(), after=e.clientY>r.top+r.height/2;
+          wrap.classList.toggle("rv-drop-after", after); wrap.classList.toggle("rv-drop-before", !after);
+        });
+        wrap.addEventListener("dragleave", e=>{ if(!wrap.contains(e.relatedTarget)) wrap.classList.remove("rv-drop-before","rv-drop-after"); });
+        wrap.addEventListener("drop", e=>{
+          if(!rvDragPid || rvDragPid===p.id) return;
+          e.preventDefault(); e.stopPropagation();
+          const r=wrap.getBoundingClientRect();
+          moveReviewPair(pairs, rvDragPid, p, e.clientY>r.top+r.height/2, p.group, p.subgroup);
+          rvDragPid=null; rerender();
+        });
+      }
       const num=document.createElement("span"); num.className="scene-num"; num.textContent=p.deleted?"–":String(++wBlockNo);
       const sp=document.createElement("div"); sp.className="scene-title-spacer";
       const meta=p.meta||{};
@@ -12636,13 +12728,15 @@ function openReviewBlockCtxMenu(x, y, p, wrap, pairs, splitIds, editable, memos,
 function buildFeedbackFromPairs(type, data, afterList, pairs){
   /* 2026-11-12: 글쓰기에서 교수가 칸을 추가/삭제했으면 화면 순서대로의 칸 목록으로 저장한다
      (buildReviewPairs가 다시 읽는 형식). 추가/삭제가 없으면 예전과 똑같은 모양으로 저장해 옛 화면과도 호환. */
-  if(type==="write" && Array.isArray(pairs) && pairs.some(p=>p.added || p.deleted)){
+  if(type==="write" && Array.isArray(pairs) && pairs.some(p=>p.added || p.deleted || p.moved)){
+    const place=(p)=>({ sectionId:p.group?p.group.id:"", sectionName:p.group?p.group.name:"",
+                        groupId:p.subgroup?p.subgroup.id:"", groupName:p.subgroup?p.subgroup.name:"" });
     return pairs.map((p,i)=>{
       const text=afterList[i]||"";
-      if(p.added) return { id:p.id, text, added:true,
-        sectionId:p.group?p.group.id:"", sectionName:p.group?p.group.name:"",
-        groupId:p.subgroup?p.subgroup.id:"", groupName:p.subgroup?p.subgroup.name:"" };
+      if(p.added) return Object.assign({ id:p.id, text, added:true }, place(p));
       if(p.deleted) return { id:p.id, text:"", deleted:true };
+      /* 2026-11-12: 끌어서 옮긴 학생 칸 — 놓인 단계/섹션 블럭을 함께 저장 */
+      if(p.moved) return Object.assign({ id:p.id, text, moved:true }, place(p));
       return { id:p.id, text };
     });
   }
@@ -12760,7 +12854,7 @@ function applyWriteFeedback(feedback, memos, data){
   const fbArr=Array.isArray(feedback)?feedback:[];
 
   /* 2026-11-12: 교수가 넣은 칸(added)·지운 칸(deleted) — 새 형식에서는 첨삭 배열 순서가 화면 순서다 */
-  const v2=fbArr.some(f=>f && (f.added || f.deleted));
+  const v2=fbArr.some(f=>f && (f.added || f.deleted || f.moved));
   let prevBlockId=null;
   fbArr.forEach((fb,i)=>{
     if(!fb) return;
@@ -12800,8 +12894,27 @@ function applyWriteFeedback(feedback, memos, data){
     if(!bl) return;
     const txt=(fb.text && fb.text.trim()) ? fb.text : ((src && src.text) || "");
     if(txt.trim()) bl.items=parseFeedbackTextToItems(txt);
+    /* 2026-11-12: 교수가 끌어서 옮긴 칸 — 놓인 단계/섹션 블럭으로 */
+    if(fb.moved){
+      const gid=fb.groupId||"";
+      if(gid && !P.writeDoc.groups.some(g=>g.id===gid))
+        P.writeDoc.groups.push({id:gid, name:fb.groupName||"그룹", fromIdea:"", sectionId:fb.sectionId||""});
+      bl.sectionId=fb.sectionId||bl.sectionId; bl.groupId=gid;
+      if(fb.sectionName) subBlocks=subBlocks.concat([{sectionId:fb.sectionId, sectionName:fb.sectionName}]);
+    }
     setAppliedMemos("write", fb.id, memos);
   });
+
+  /* 새 형식이면 첨삭 순서대로 칸 순서도 맞춘다 — 첨삭에 나온 칸들끼리만 자리를 바꾸고(그 칸들이 있던 자리에
+     첨삭 순서대로 다시 채움), 제출 뒤 학생이 새로 만든 칸은 제자리에 둔다 */
+  if(v2){
+    const order=fbArr.filter(f=>f && !f.deleted).map(f=>f.id);
+    const rank={}; order.forEach((id,k)=>{ rank[id]=k; });
+    const slots=[], picked=[];
+    P.writeDoc.blocks.forEach((b,k)=>{ if(rank[b.id]!=null){ slots.push(k); picked.push(b); } });
+    picked.sort((a,b)=>rank[a.id]-rank[b.id]);
+    slots.forEach((k,j)=>{ P.writeDoc.blocks[k]=picked[j]; });
+  }
 
   ensureWriteSections(subBlocks);
 }
