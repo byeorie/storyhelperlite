@@ -667,7 +667,7 @@ function selectPlot(id){
   next.plotDoc=null; next.writeDoc=null;
   P.activePlotId=id;
   plotPickerFor=null; plotCollapsed.clear();
-  writeSelectMode=false; writeSelectedIds.clear();
+  writeSelectMode=false; writeSelectedIds.clear(); writeCutMode=false;
   save({touch:false});
 }
 function newEntry(kind, name){
@@ -5874,6 +5874,7 @@ function plotIdeaCard(b, secWrap, secId){
 let writeDlgFor=null;       // 대사 추가 팝업이 열린 블록 id
 let writeFocusTitle=null;   // 렌더 후 제목 입력에 포커스할 블록 id
 let writeSelectMode=false;  // 본문 블록 선택 모드(그룹화용)
+let writeCutMode=false;     // 2026-11-12: [칸 자르기] 모드 — 지문/대사 사이를 누르면 칸이 둘로 나뉜다
 let writeSelectedIds=new Set(); // 선택된 본문 블록 id들
 let ctxMenuTargetBlock=null;    // 우클릭 메뉴가 열린 블록
 
@@ -5954,7 +5955,12 @@ function rWrite(){
   selBtn.innerHTML=ICONS.check+(writeSelectMode?" 선택 중":" 블록 선택");
   selBtn.title="여러 본문 블록을 선택해 그룹으로 묶을 수 있습니다";
   selBtn.onclick=()=>{ writeSelectMode=!writeSelectMode; if(!writeSelectMode) writeSelectedIds.clear(); render(); };
-  barRight.appendChild(selBtn);
+  /* 2026-11-12: [칸 자르기] — 켜고 칸 안의 지문/대사 사이를 누르면 그 자리에서 칸이 둘로 나뉜다 */
+  const cutBtn=document.createElement("button"); cutBtn.className="btn ghost sm icon-btn"+(writeCutMode?" wt-selecting":"");
+  cutBtn.innerHTML=ICONS.cut+(writeCutMode?" 자르기·합치기 끝내기":" 칸 자르기·합치기");
+  cutBtn.title="켜고 칸 안의 지문/대사 사이를 누르면 칸이 둘로 나뉘고, 칸 머리의 [합치기]로 위 칸과 하나로 합칩니다";
+  cutBtn.onclick=()=>{ writeCutMode=!writeCutMode; render(); };
+  barRight.append(cutBtn, selBtn);
   if(writeSelectMode){
     const groupBtn=document.createElement("button"); groupBtn.className="btn ghost sm icon-btn";
     groupBtn.innerHTML=ICONS.group+" 그룹으로 묶기 ("+writeSelectedIds.size+")";
@@ -6356,6 +6362,16 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   }else{
     head.append(handle, numEl, titleEl, bgBtn, charBtn, delBtn);
   }
+  /* 2026-11-12: [칸 자르기·합치기] 켜짐 — 같은 단계에서 바로 위 칸이 있으면 [위 칸과 합치기] */
+  if(writeCutMode){
+    const secBlocks=blocksOfSection(bl.sectionId), prev=secBlocks[secBlocks.indexOf(bl)-1];
+    if(prev){
+      const mg=document.createElement("button"); mg.type="button"; mg.className="rv-act rv-merge-btn";
+      mg.innerHTML=ICONS.group+" 합치기"; mg.title="위 칸과 합치기 — 이 칸의 지문/대사를 바로 위 칸 끝에 붙이고 이 칸은 없앱니다";
+      mg.onclick=e=>{ e.stopPropagation(); mergeWriteBlockUp(prev, bl); };
+      head.insertBefore(mg, delBtn);
+    }
+  }
   d.appendChild(head);
   if(bl.id===writeFocusTitle){
     writeFocusTitle=null;
@@ -6374,7 +6390,11 @@ function sceneBlockCard(bl, main, liveRefresh, num){
 
   /* 하위 블록(본문/대사) */
   const itemsEl=document.createElement("div"); itemsEl.className="scene-items"; itemsEl.dataset.block=bl.id;
-  (bl.items||[]).forEach(it=>itemsEl.appendChild(subBlockEl(bl, it, liveRefresh, main)));
+  (bl.items||[]).forEach((it,k)=>{
+    /* 2026-11-12: [칸 자르기] 켜짐 — 지문/대사 사이의 가위 선을 누르면 그 아래 줄들이 새 칸으로 나뉜다 */
+    if(writeCutMode && k>0) itemsEl.appendChild(writeCutLine(bl, k));
+    itemsEl.appendChild(subBlockEl(bl, it, liveRefresh, main));
+  });
   setupItemDnD(itemsEl, main);
   d.appendChild(itemsEl);
   /* 2026-09-16: 지문·대사를 다른 칸으로 옮길 때 — 대상 칸의 지문/대사 목록 위가 아니라
@@ -6407,6 +6427,34 @@ function sceneBlockCard(bl, main, liveRefresh, num){
   addRow.append(addTextDashed, addDlgDashed);
   d.appendChild(addRow);
   return d;
+}
+/* [칸 자르기] 가위 선 — 누르면 bl의 k번째 줄부터를 새 칸으로 떼어 바로 뒤에 넣는다.
+   새 칸은 같은 단계·섹션 블럭에 들어가고 배경/캐릭터 메모를 그대로 물려받는다(콘티 그림은 앞 칸에 남음). */
+function writeCutLine(bl, k){
+  const cut=document.createElement("button"); cut.type="button"; cut.className="rv-cut-line"; cut.title="여기서 칸을 둘로 자릅니다";
+  cut.innerHTML=`<span>${ICONS.cut} 여기서 자르기</span>`;
+  cut.onclick=e=>{
+    e.stopPropagation();
+    const items=bl.items||[];
+    const nb={id:uid(), sectionId:bl.sectionId, fromIdea:"", title:"", items:items.slice(k), groupId:bl.groupId||"",
+      backgrounds:(bl.backgrounds||[]).slice(), characters:(bl.characters||[]).slice(), storyboard:null};
+    bl.items=items.slice(0,k);
+    const at=P.writeDoc.blocks.indexOf(bl);
+    P.writeDoc.blocks.splice(at+1, 0, nb);
+    save(); render();
+  };
+  return cut;
+}
+/* [위 칸과 합치기] — bl의 줄들을 prev 끝에 붙이고 bl을 없앤다. 배경/캐릭터 메모는 겹치지 않게 합치고,
+   콘티 그림은 위 칸 것을 쓰되 위 칸에 없으면 아래 칸 것을 가져온다. */
+function mergeWriteBlockUp(prev, bl){
+  prev.items=(prev.items||[]).concat(bl.items||[]);
+  const uniq=(a,b)=>{ const out=(a||[]).slice(); (b||[]).forEach(x=>{ if(out.indexOf(x)<0) out.push(x); }); return out; };
+  prev.backgrounds=uniq(prev.backgrounds, bl.backgrounds);
+  prev.characters=uniq(prev.characters, bl.characters);
+  if(!(prev.storyboard && prev.storyboard.key) && bl.storyboard && bl.storyboard.key) prev.storyboard=bl.storyboard;
+  P.writeDoc.blocks=P.writeDoc.blocks.filter(x=>x.id!==bl.id);
+  save(); render();
 }
 /* 배경/캐릭터 메모 줄 — 내용이 없으면 null */
 function sceneMetaRow(bl){
@@ -11687,6 +11735,7 @@ async function rProfSubmissionReview(id, version){
   }
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
   reviewSplitIds=new Set(pairs.filter(p=>p.after!==p.before).map(p=>p.id));
+  rvCutMode=false;
   const reviewMemos=Array.isArray(sub.memos)?sub.memos.slice():[];
   renderReviewPairs(pairsEl, pairs, isLatest, reviewSplitIds, reviewMemos, {canAdd:isLatest, canDelete:isLatest, canEdit:isLatest});
   if(saveBtn) saveBtn.style.display=isLatest?"":"none";
@@ -12432,6 +12481,7 @@ function renderMemoCardsInto(container, mine, numMap, opts, colorMap){
    target이 없으면(섹션 블럭 빈 자리에 놓음) 그 묶음의 마지막 칸 뒤로 간다. */
 let rvDragPid=null;
 let rvRowDrag=null;   /* 끄는 중인 지문/대사 줄 {p, rows, idx, sync, draw} — renderWriteAfterItems가 채운다 */
+let rvCutMode=false;  /* [칸 자르기] 켜짐 — 줄 사이를 누르면 칸이 둘로 나뉜다 (첨삭 화면을 새로 열면 꺼짐) */
 function rvClearDropMarks(){
   document.querySelectorAll(".rv-drop-before,.rv-drop-after,.rv-row-target").forEach(el=>el.classList.remove("rv-drop-before","rv-drop-after","rv-row-target"));
 }
@@ -12481,6 +12531,16 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
   };
   /* 대사 칸 캐릭터 입력의 자동완성 목록 — 이 제출물에 나온 캐릭터 이름들 */
   if(isWrite && editable){
+    /* [칸 자르기] 토글 — 켜면 모든 칸이 "줄 + 자르는 선" 보기로 바뀐다 */
+    const bar=document.createElement("div"); bar.className="rv-tool-bar";
+    const cutBtn=document.createElement("button"); cutBtn.type="button";
+    cutBtn.className="btn ghost sm icon-btn rv-cut-toggle"+(rvCutMode?" wt-selecting":"");
+    cutBtn.innerHTML=ICONS.cut+(rvCutMode?" 자르기·합치기 끝내기":" 칸 자르기·합치기");
+    cutBtn.title="켜고 칸 안의 줄과 줄 사이를 누르면 칸이 둘로 나뉘고, 칸 머리의 [합치기]로 위 칸과 하나로 합칩니다";
+    cutBtn.onclick=()=>{ rvCutMode=!rvCutMode; rerender(); };
+    bar.appendChild(cutBtn);
+    if(rvCutMode){ const h=document.createElement("span"); h.className="hint"; h.textContent="줄 사이 가위 선 → 그 아래 줄들을 새 칸으로 / 칸 머리 [합치기] → 위 칸에 붙이기"; bar.appendChild(h); }
+    container.appendChild(bar);
     const names=new Set();
     pairs.forEach(p=>{ (p.items||[]).forEach(it=>{ if(it && it.type==="line" && it.char) names.add(it.char); });
       ((p.meta&&p.meta.characters)||[]).forEach(n=>n&&names.add(n)); });
@@ -12621,6 +12681,23 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
             if(split) mk(ICONS.eraser+" 원본으로","첨삭 입력을 접고 원본 보기로(고친 내용은 남아 있음)",()=>{ splitIds.delete(p.id); rerender(); });
             else mk(ICONS.edit+" 첨삭","이 칸의 지문/대사를 고칩니다",()=>{ splitIds.add(p.id); rerender(); });
           }
+          /* [칸 자르기·합치기] 켜짐 — 같은 단계의 바로 위(지우지 않은) 칸과 합치기 */
+          if(rvCutMode){
+            let k=pairs.indexOf(p)-1; while(k>=0 && pairs[k].deleted) k--;
+            const prevP=k>=0 ? pairs[k] : null;
+            if(prevP && (prevP.group?prevP.group.id:null)===(p.group?p.group.id:null)){
+              mk(ICONS.group+" 합치기","위 칸과 합치기 — 이 칸의 지문/대사를 바로 위 칸 끝에 붙이고 이 칸은 없앱니다",()=>{
+                const keep=r=>r.type==="line" || (r.text||"").trim();
+                prevP.after=writeRowsToText(writeAfterRows(prevP).filter(keep).concat(writeAfterRows(p).filter(keep)));
+                if(!prevP.added && prevP.after!==prevP.before) splitIds.add(prevP.id);
+                if(p.added){
+                  pairs.splice(pairs.indexOf(p),1);
+                  for(let j=memos.length-1;j>=0;j--) if(memos[j].pairId===p.id) memos.splice(j,1);
+                }else p.deleted=true;
+                splitIds.delete(p.id); rerender();
+              }, "rv-merge-btn");
+            }
+          }
           mk(ICONS.plus+" 칸","이 칸 아래에 새 칸을 넣습니다",()=>{
             const np={ id:"fbw-"+uid(), label:"교수님이 추가한 칸", kind:"write", added:true,
               group:p.group||null, subgroup:p.subgroup||null, before:"", after:"", items:null, meta:{backgrounds:[], characters:[]} };
@@ -12641,7 +12718,42 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       wrap.appendChild(head);
     }
     let memoTargetEl;
-    if(!split && isScene){
+    const cutView = rvCutMode && editable && isScene && !p.deleted;
+    if(cutView){
+      /* 2026-11-12: [칸 자르기] 켜짐 — 지금 첨삭 내용(없으면 원본)의 지문/대사 줄을 보여주고, 줄과 줄 사이를
+         누르면 그 아래 줄들을 새 칸(교수가 추가한 칸)으로 떼어 바로 뒤에 넣는다 */
+      wrap.classList.add("rv-cutting");
+      const rowsC=writeAfterRows(p).filter(r=>r.type==="line" || (r.text||"").trim());
+      const list=document.createElement("div"); list.className="review-before-text rv-scene-items rv-cut-list";
+      rowsC.forEach((r,k)=>{
+        if(k>0){
+          const cut=document.createElement("button"); cut.type="button"; cut.className="rv-cut-line"; cut.title="여기서 칸을 둘로 자릅니다";
+          cut.innerHTML=`<span>${ICONS.cut} 여기서 자르기</span>`;
+          cut.onclick=()=>{
+            p.after=writeRowsToText(rowsC.slice(0,k));
+            const np={ id:"fbw-"+uid(), label:"교수님이 추가한 칸", kind:"write", added:true,
+              group:p.group||null, subgroup:p.subgroup||null, before:"", after:writeRowsToText(rowsC.slice(k)),
+              items:null, meta:{backgrounds:[], characters:[]} };
+            pairs.splice(pairs.indexOf(p)+1, 0, np);
+            if(!p.added && p.after!==p.before) splitIds.add(p.id);
+            splitIds.add(np.id);
+            rerender();
+          };
+          list.appendChild(cut);
+        }
+        const row=document.createElement("div");
+        if(r.type==="line"){
+          row.className="rv-sub rv-line";
+          const who=document.createElement("span"); who.className="dlg-who"; who.textContent=(r.char||"(미지정)")+":";
+          const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=r.text||"";
+          row.append(who, tx);
+        }else{ row.className="rv-sub rv-text"; row.textContent=r.text||""; }
+        list.appendChild(row);
+      });
+      if(rowsC.length<2){ const em=document.createElement("p"); em.className="sub-empty"; em.textContent="줄이 2개 이상이어야 자를 수 있습니다."; list.appendChild(em); }
+      wrap.appendChild(list);
+      memoTargetEl=list;
+    }else if(!split && isScene){
       /* 학생 화면의 칸처럼 라벨 상자 없이 지문/대사 칸만 (지운 칸은 CSS로 흐리게) */
       const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
       renderBeforeBody(txt, p, mine, numMap, colorMap);
@@ -12706,7 +12818,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       wrap.append(prev, cur);
       memoTargetEl=prevText;
     }
-    if(editable && !p.deleted){
+    if(editable && !p.deleted && !cutView){
       wrap.addEventListener("contextmenu", e=>{
         e.preventDefault(); e.stopPropagation();
         const memoRange = memoOpts.canAdd ? captureMemoSelection(memoTargetEl) : null;

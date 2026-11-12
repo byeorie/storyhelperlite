@@ -1371,6 +1371,22 @@ canvas.draw-layer-canvas.is-base{position:relative}
 .rv-drop-after{box-shadow:0 3px 0 0 var(--accent)}
 .rv-zone-over{outline:2px dashed var(--accent);outline-offset:2px}
 .rv-scene.rv-row-target{outline:2px dashed var(--accent);outline-offset:1px}
+/* 2026-11-12: [칸 자르기] — 줄 사이의 가위 선 (마우스를 올리면 진하게) */
+.rv-tool-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+.rv-tool-bar .hint{margin:0}
+.rv-cut-list .rv-sub{margin-top:0}
+.rv-cut-line{display:flex;align-items:center;width:100%;height:16px;margin:1px 0;padding:0;border:none;background:transparent;
+  cursor:pointer;position:relative;color:var(--muted)}
+.rv-cut-line::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed #cfc4ad}
+.rv-cut-line span{position:relative;margin:0 auto;display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;
+  background:var(--card);padding:0 8px;opacity:.55}
+.rv-cut-line span .icon{width:11px;height:11px}
+.rv-cut-line:hover{color:var(--accent)}
+.rv-cut-line:hover::before{border-top:2px dashed var(--accent)}
+.rv-cut-line:hover span{opacity:1}
+.scene-items .rv-cut-line{margin:-3px 0}
+.rv-act.rv-merge-btn{color:var(--accent);border-color:var(--accent2)}
+.scene-head .rv-merge-btn{margin-top:2px;flex-shrink:0}
 .rv-after-item .sub-handle{align-self:center;padding-top:0}
 
 /* 2026-09-15: 파일 과제 — 고른 파일 목록 / 제출된 clip 파일 줄 */
