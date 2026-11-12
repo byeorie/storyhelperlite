@@ -1347,6 +1347,23 @@ canvas.draw-layer-canvas.is-base{position:relative}
 .rv-scene .ta-wrap textarea.rv-after-text{min-height:0;line-height:1.5}
 .rv-scene .memo-block-list{margin-top:6px}
 .rv-write-group .write-blockgroup:last-child{margin-bottom:0}
+/* 2026-11-12: 교수가 칸/지문·대사를 직접 추가·삭제 */
+.rv-scene-acts{display:flex;gap:4px;flex-shrink:0;margin-left:4px}
+.rv-act{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;background:transparent;border:1px solid var(--line);
+  border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;padding:3px 8px;color:var(--muted)}
+.rv-act .icon{width:12px;height:12px}
+.rv-act:hover{border-color:var(--accent);color:var(--accent);background:var(--accent2)}
+.rv-act.rv-act-del:hover{border-color:#e05050;color:#e05050;background:#fdeeee}
+.rv-scene-tag.is-del{color:#b3503a;background:#fbe3df}
+.rv-scene.rv-added{border-style:dashed;border-left-style:solid}
+.rv-scene.rv-deleted{opacity:.6;background:#f7f4ee}
+.rv-scene.rv-deleted .rv-scene-items{text-decoration:line-through;text-decoration-color:#b3503a}
+.rv-scene .rv-after-item{align-items:center}
+.rv-after-del{flex-shrink:0;background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px;line-height:0}
+.rv-after-del .icon{width:12px;height:12px}
+.rv-after-del:hover{color:#e05050}
+.rv-after-add{margin-top:6px}
+@media (max-width:640px){ .rv-act{padding:3px 6px} .rv-scene .scene-head{flex-wrap:wrap} }
 
 /* 2026-09-15: 파일 과제 — 고른 파일 목록 / 제출된 clip 파일 줄 */
 .file-pick-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}

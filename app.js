@@ -11480,7 +11480,8 @@ function bulkPdfSectionsHtml(sub){
     if(!pairs.length) secs.push('<p style="color:#999">제출된 내용이 없습니다.</p>');
     pairs.forEach(p=>secs.push(`<div style="font-weight:700;margin-bottom:6px">${esc((p.group?p.group.name+" · ":"")+(p.subgroup?p.subgroup.name+" · ":"")+p.label)}</div>
       <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
-      ${(p.after && p.after!==p.before) ? `<div style="margin-top:8px;padding:8px 10px;background:#f3f7f4;border-left:3px solid #5a8f6b;white-space:pre-wrap"><b>첨삭:</b> ${esc(p.after)}</div>` : ""}${memoHtml(p.id)}`));
+      ${p.deleted ? `<div style="margin-top:8px;padding:8px 10px;background:#fbeeee;border-left:3px solid #b3503a"><b>첨삭:</b> (교수님이 이 칸을 삭제)</div>`
+        : (p.after && p.after!==p.before) ? `<div style="margin-top:8px;padding:8px 10px;background:#f3f7f4;border-left:3px solid #5a8f6b;white-space:pre-wrap"><b>첨삭:</b> ${esc(p.after)}</div>` : ""}${memoHtml(p.id)}`));
   }
   return secs;
 }
@@ -11699,7 +11700,7 @@ async function rProfSubmissionReview(id, version){
       if(pid!=null && byId[pid]) byId[pid].after=ta.value;
     });
     const afterList=pairs.map(p=>p.after);
-    const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList);
+    const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList, pairs);
     const payload={id, feedback, memos:reviewMemos};
     if(evalTa) payload.evaluation=evalTa.value;   /* 평가도 함께 저장 */
     const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify(payload)});
@@ -11752,6 +11753,44 @@ function buildReviewPairs(type, data, feedback){
   if(type==="write"){
     const blocks=Array.isArray(data)?data:[];
     const fbArr=Array.isArray(feedback)?feedback:[];
+    /* 2026-11-12: 교수가 칸을 새로 넣거나(added) 지운(deleted) 첨삭 — 첨삭 배열이 "화면 순서대로의 칸 목록"이 된다.
+       학생 칸은 id로 짝을 찾고, 첨삭에 없는 학생 칸은 원래 자리(앞 칸 뒤)에 그대로 끼운다.
+       added/deleted가 하나도 없는 예전 첨삭은 아래 예전 방식(순서 = 제출 칸 순서) 그대로다. */
+    if(fbArr.some(f=>f && (f.added || f.deleted))){
+      const seq=[], used=new Set();
+      fbArr.forEach(f=>{
+        if(!f) return;
+        if(f.added){ seq.push({f}); return; }
+        const bi=blocks.findIndex(b=>b && b.id===f.id);
+        if(bi>=0 && !used.has(bi)){ used.add(bi); seq.push({bi, f}); }
+      });
+      blocks.forEach((b,bi)=>{
+        if(used.has(bi)) return;
+        let at=0; seq.forEach((s,k)=>{ if(s.bi!=null && s.bi<bi) at=k+1; });
+        seq.splice(at, 0, {bi, f:null});
+      });
+      return seq.map(s=>{
+        if(s.f && s.f.added){
+          const f=s.f;
+          return { id:f.id, label:"교수님이 추가한 칸", kind:"write", added:true,
+            group: f.sectionId ? {id:f.sectionId, name:f.sectionName||"섹션"} : null,
+            subgroup: f.groupId ? {id:f.groupId, name:f.groupName||"그룹"} : null,
+            before:"", after: typeof f.text==="string" ? f.text : "", items:null,
+            meta:{backgrounds:[], characters:[]} };
+        }
+        const b=blocks[s.bi], f=s.f;
+        return {
+          id:b.id||("i"+s.bi), label:`${s.bi+1}. ${b.title||"(제목 없음)"}`, kind:"write",
+          group: b.sectionId ? {id:b.sectionId, name:b.sectionName||"섹션"} : null,
+          subgroup: b.groupId ? {id:b.groupId, name:b.groupName||"그룹"} : null,
+          before:b.text||"",
+          after: f && f.deleted ? "" : (f && typeof f.text==="string" ? f.text : (b.text||"")),
+          deleted: !!(f && f.deleted),
+          items: Array.isArray(b.items) ? b.items : null,
+          meta: {backgrounds:Array.isArray(b.backgrounds)?b.backgrounds:[], characters:Array.isArray(b.characters)?b.characters:[]},
+        };
+      });
+    }
     return blocks.map((b,i)=>{
       const fbItem=fbArr[i];
       return {
@@ -12254,23 +12293,41 @@ function writeRowsToText(rows){
    않는다) 저장 쪽에서는 이 블록을 건너뛴다(.review-pair[data-itemized]). */
 function renderWriteAfterItems(cur, p, onChange){
   const rows=writeAfterRows(p);
+  /* 아무것도 없는 칸(교수가 새로 넣은 칸 등)은 빈 지문 한 줄로 시작 — 이미 [""]로 나오므로 그대로 둔다 */
   const box=document.createElement("div"); box.className="rv-after-items";
   const sync=()=>{ p.after=writeRowsToText(rows); if(onChange) onChange(); };
-  rows.forEach(r=>{
-    const row=document.createElement("div"); row.className="rv-after-item"+(r.type==="line"?" is-line":" is-text");
-    if(r.type==="line"){
-      const ci=document.createElement("input"); ci.type="text"; ci.className="rv-after-char"; ci.value=r.char; ci.placeholder="캐릭터";
-      ci.oninput=()=>{ r.char=ci.value; sync(); };
-      row.appendChild(ci);
-    }
-    const ta=document.createElement("textarea"); ta.className="rv-after-text"; ta.value=r.text;
-    ta.placeholder = r.type==="line" ? "대사" : "지문";
-    ta.oninput=()=>{ r.text=ta.value; autoGrowTextarea(ta); sync(); };
-    row.appendChild(ta);
-    box.appendChild(row);
-    requestAnimationFrame(()=>autoGrowTextarea(ta));
-  });
-  cur.appendChild(box);
+  /* 2026-11-12: 교수가 지문/대사 줄을 직접 넣고(아래 점선 버튼) 지울(×) 수 있다 — 학생 글쓰기 화면과 같은 방식 */
+  const draw=(focusIdx)=>{
+    box.innerHTML="";
+    rows.forEach((r,idx)=>{
+      const row=document.createElement("div"); row.className="rv-after-item"+(r.type==="line"?" is-line":" is-text");
+      let first=null;
+      if(r.type==="line"){
+        const ci=document.createElement("input"); ci.type="text"; ci.className="rv-after-char"; ci.value=r.char==="(미지정)"?"":r.char; ci.placeholder="캐릭터";
+        ci.setAttribute("list","rvCharList");
+        ci.oninput=()=>{ r.char=ci.value.trim()||"(미지정)"; sync(); };
+        row.appendChild(ci); first=ci;
+      }
+      const ta=document.createElement("textarea"); ta.className="rv-after-text"; ta.value=r.text; ta.rows=1;
+      ta.placeholder = r.type==="line" ? "대사" : "지문";
+      ta.oninput=()=>{ r.text=ta.value; autoGrowTextarea(ta); sync(); };
+      row.appendChild(ta);
+      const del=document.createElement("button"); del.type="button"; del.className="sub-del rv-after-del"; del.title=(r.type==="line"?"대사":"지문")+" 줄 삭제";
+      del.innerHTML=ICONS.close;
+      del.onclick=()=>{ rows.splice(idx,1); sync(); draw(); };
+      row.appendChild(del);
+      box.appendChild(row);
+      requestAnimationFrame(()=>autoGrowTextarea(ta));
+      if(focusIdx===idx) requestAnimationFrame(()=>(first||ta).focus());
+    });
+    if(!rows.length){ const em=document.createElement("p"); em.className="sub-empty"; em.textContent="지문/대사가 없습니다. 아래 버튼으로 추가하세요."; box.appendChild(em); }
+  };
+  draw();
+  const addRow=document.createElement("div"); addRow.className="scene-dashed-row rv-after-add";
+  const mkAdd=(label,type)=>{ const b=document.createElement("button"); b.type="button"; b.className="scene-dashed-add"; b.innerHTML=ICONS.plus+" "+label;
+    b.onclick=()=>{ rows.push({type, char:type==="line"?"(미지정)":"", text:""}); sync(); draw(rows.length-1); }; addRow.appendChild(b); };
+  mkAdd("지문추가","text"); mkAdd("대사추가","line");
+  cur.append(box, addRow);
 }
 function renderBeforeBody(el, p, mine, numMap, colorMap){
   if(p.kind==="write" || p.kind==="character") renderStyledBeforeText(el, p.kind, p.before, mine, numMap, colorMap, p.items);
@@ -12351,7 +12408,16 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
      칸(.scene-block: 번호 배지 + 배경/캐릭터) → 지문/대사 칸. 예전에는 단계를 띠 머리말, 섹션 블럭을
      작은 알약, 칸을 "1. 제목" 라벨 상자로 그려서 학생이 쓰던 화면과 모양이 많이 달랐다. */
   const isWrite=pairs.some(p=>p.kind==="write");
-  let wList=null, wParent=null, wSecNo=0;
+  let wList=null, wParent=null, wSecNo=0, wBlockNo=0;
+  /* 대사 칸 캐릭터 입력의 자동완성 목록 — 이 제출물에 나온 캐릭터 이름들 */
+  if(isWrite && editable){
+    const names=new Set();
+    pairs.forEach(p=>{ (p.items||[]).forEach(it=>{ if(it && it.type==="line" && it.char) names.add(it.char); });
+      ((p.meta&&p.meta.characters)||[]).forEach(n=>n&&names.add(n)); });
+    const dl=document.createElement("datalist"); dl.id="rvCharList";
+    names.forEach(n=>{ const o=document.createElement("option"); o.value=n; dl.appendChild(o); });
+    container.appendChild(dl);
+  }
   pairs.forEach(p=>{
     if(isWrite){
       const gid=p.group?p.group.id:null, sid=p.subgroup?p.subgroup.id:null;
@@ -12399,15 +12465,18 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       }
     }
     const changed=p.after!==p.before;
-    const split = editable ? splitIds.has(p.id) : changed;
+    /* 2026-11-12: 교수가 추가한 칸은 늘 첨삭 입력(이전 버전 없음), 지운 칸은 원본만 흐리게 */
+    const split = p.deleted ? false : p.added ? true : (editable ? splitIds.has(p.id) : changed);
     const {mine, numMap, colorMap}=computePairMemoNumbering(memos, p.id);
     const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":"")+(p.kind?" kind-"+p.kind:""); wrap.dataset.id=p.id;
     const isScene=isWrite && p.kind==="write";
     if(isScene){
       wrap.classList.add("scene-block","rv-scene");
+      if(p.added) wrap.classList.add("rv-added");
+      if(p.deleted) wrap.classList.add("rv-deleted");
       if(p.group && p.group.id) wrap.style.borderLeftColor=getSectionColor(p.group.id);  /* 글쓰기 화면처럼 단계별 색 띠 */
       const head=document.createElement("div"); head.className="scene-head";
-      const num=document.createElement("span"); num.className="scene-num"; num.textContent=String(p.num||"");
+      const num=document.createElement("span"); num.className="scene-num"; num.textContent=p.deleted?"–":String(++wBlockNo);
       const sp=document.createElement("div"); sp.className="scene-title-spacer";
       const meta=p.meta||{};
       const mrow=document.createElement("div"); mrow.className="scene-meta-row";
@@ -12420,12 +12489,42 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       });
       if(mrow.children.length) sp.appendChild(mrow);
       head.append(num, sp);
-      if(split){ const tag=document.createElement("span"); tag.className="rv-scene-tag"; tag.textContent="첨삭"; head.appendChild(tag); }
+      const tagText = p.added ? (editable?"새 칸":"교수님이 추가") : p.deleted ? (editable?"삭제됨":"교수님이 삭제") : (split?"첨삭":"");
+      if(tagText){ const tag=document.createElement("span"); tag.className="rv-scene-tag"+(p.deleted?" is-del":""); tag.textContent=tagText; head.appendChild(tag); }
+      /* 교수: 칸마다 [첨삭]/[원본으로] · [+ 칸] · [삭제]/[되돌리기] — 예전엔 우클릭 메뉴로만 첨삭을 열 수 있었고
+         칸을 새로 넣거나 지울 방법이 없었다 */
+      if(editable){
+        const acts=document.createElement("div"); acts.className="rv-scene-acts";
+        const mk=(html,title,fn,cls)=>{ const b=document.createElement("button"); b.type="button"; b.className="rv-act"+(cls?" "+cls:""); b.innerHTML=html; b.title=title; b.onclick=e=>{ e.stopPropagation(); fn(); }; acts.appendChild(b); };
+        if(p.deleted){
+          mk(ICONS.refresh+" 되돌리기","지운 칸을 다시 살립니다",()=>{ p.deleted=false; p.after=p.before; splitIds.delete(p.id); rerender(); });
+        }else{
+          if(!p.added){
+            if(split) mk(ICONS.eraser+" 원본으로","첨삭 입력을 접고 원본 보기로(고친 내용은 남아 있음)",()=>{ splitIds.delete(p.id); rerender(); });
+            else mk(ICONS.edit+" 첨삭","이 칸의 지문/대사를 고칩니다",()=>{ splitIds.add(p.id); rerender(); });
+          }
+          mk(ICONS.plus+" 칸","이 칸 아래에 새 칸을 넣습니다",()=>{
+            const np={ id:"fbw-"+uid(), label:"교수님이 추가한 칸", kind:"write", added:true,
+              group:p.group||null, subgroup:p.subgroup||null, before:"", after:"", items:null, meta:{backgrounds:[], characters:[]} };
+            pairs.splice(pairs.indexOf(p)+1, 0, np); splitIds.add(np.id); rerender();
+            const el=container.querySelector(`.review-pair[data-id="${np.id}"] textarea`); if(el) el.focus();
+          });
+          mk(ICONS.trash,"이 칸 삭제",()=>{
+            if(p.added){
+              if((p.after||"").trim() && !confirm("새로 넣은 이 칸을 지울까요? 쓴 내용도 함께 사라집니다.")) return;
+              pairs.splice(pairs.indexOf(p),1);
+              for(let k=memos.length-1;k>=0;k--) if(memos[k].pairId===p.id) memos.splice(k,1);
+            }else p.deleted=true;
+            splitIds.delete(p.id); rerender();
+          },"rv-act-del");
+        }
+        head.appendChild(acts);
+      }
       wrap.appendChild(head);
     }
     let memoTargetEl;
     if(!split && isScene){
-      /* 학생 화면의 칸처럼 라벨 상자 없이 지문/대사 칸만 */
+      /* 학생 화면의 칸처럼 라벨 상자 없이 지문/대사 칸만 (지운 칸은 CSS로 흐리게) */
       const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
       renderBeforeBody(txt, p, mine, numMap, colorMap);
       wrap.appendChild(txt);
@@ -12448,6 +12547,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       const prevText=document.createElement("div"); prevText.className="version-prev-text"+(isScene?" review-before-text rv-scene-items":"");
       setToggleLabel();
       prev.append(toggle, prevText);
+      if(p.added) prev.hidden=true;   /* 교수가 새로 넣은 칸 — 비교할 원본이 없다 */
 
       const cur=document.createElement("div"); cur.className="ta-wrap version-current";
       const lbl=document.createElement("label");
@@ -12462,7 +12562,7 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
       if(editable && p.kind==="write"){
         /* 2026-09-15: 글쓰기는 지문/대사 칸을 합치지 않고 칸마다 따로 고친다 */
         wrap.dataset.itemized="1";
-        renderWriteAfterItems(cur, p, ()=>{ if(!mine.length) drawPrevDiff(p.after); });
+        renderWriteAfterItems(cur, p, ()=>{ if(!mine.length && !p.added) drawPrevDiff(p.after); });
         getAfter=()=>p.after;
       }else if(!editable && isScene){
         const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
@@ -12484,11 +12584,11 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
          보여준다 — 같은 텍스트 위에 두 강조를 함께 표시하기 어려워, 메모가 달린 블록은 메모 표시를 우선한다 */
       if(mine.length) renderBeforeBody(prevText, p, mine, numMap, colorMap);
       else drawPrevDiff(getAfter());
-      renderMemoCardsInto(prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
+      renderMemoCardsInto(p.added?cur:prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
       wrap.append(prev, cur);
       memoTargetEl=prevText;
     }
-    if(editable){
+    if(editable && !p.deleted){
       wrap.addEventListener("contextmenu", e=>{
         e.preventDefault(); e.stopPropagation();
         const memoRange = memoOpts.canAdd ? captureMemoSelection(memoTargetEl) : null;
@@ -12533,7 +12633,19 @@ function openReviewBlockCtxMenu(x, y, p, wrap, pairs, splitIds, editable, memos,
   m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
 }
 /* 화면에서 편집한 첨삭 텍스트 배열 → 저장용 feedback 구조로 재조립 (buildReviewPairs와 순서가 항상 같음) */
-function buildFeedbackFromPairs(type, data, afterList){
+function buildFeedbackFromPairs(type, data, afterList, pairs){
+  /* 2026-11-12: 글쓰기에서 교수가 칸을 추가/삭제했으면 화면 순서대로의 칸 목록으로 저장한다
+     (buildReviewPairs가 다시 읽는 형식). 추가/삭제가 없으면 예전과 똑같은 모양으로 저장해 옛 화면과도 호환. */
+  if(type==="write" && Array.isArray(pairs) && pairs.some(p=>p.added || p.deleted)){
+    return pairs.map((p,i)=>{
+      const text=afterList[i]||"";
+      if(p.added) return { id:p.id, text, added:true,
+        sectionId:p.group?p.group.id:"", sectionName:p.group?p.group.name:"",
+        groupId:p.subgroup?p.subgroup.id:"", groupName:p.subgroup?p.subgroup.name:"" };
+      if(p.deleted) return { id:p.id, text:"", deleted:true };
+      return { id:p.id, text };
+    });
+  }
   if(type==="plan"){
     const fb={};
     PLAN_FIELDS.forEach((f,i)=>{ fb[f.k]=afterList[i]||""; });
@@ -12644,12 +12756,37 @@ function applyWriteFeedback(feedback, memos, data){
   if(!P.writeDoc || typeof P.writeDoc!=="object") P.writeDoc={blocks:[], groups:[]};
   if(!Array.isArray(P.writeDoc.blocks)) P.writeDoc.blocks=[];
   if(!Array.isArray(P.writeDoc.groups)) P.writeDoc.groups=[];
-  const subBlocks=Array.isArray(data)?data:[];
+  let subBlocks=Array.isArray(data)?data:[];
   const fbArr=Array.isArray(feedback)?feedback:[];
 
+  /* 2026-11-12: 교수가 넣은 칸(added)·지운 칸(deleted) — 새 형식에서는 첨삭 배열 순서가 화면 순서다 */
+  const v2=fbArr.some(f=>f && (f.added || f.deleted));
+  let prevBlockId=null;
   fbArr.forEach((fb,i)=>{
     if(!fb) return;
-    const src=subBlocks.find(b=>b&&b.id===fb.id) || subBlocks[i] || null;
+    if(fb.deleted){
+      P.writeDoc.blocks=P.writeDoc.blocks.filter(b=>b.id!==fb.id);
+      return;
+    }
+    if(fb.added){
+      let bl=P.writeDoc.blocks.find(b=>b.id===fb.id);   /* 두 번 반영해도 칸이 늘어나지 않게 */
+      if(!bl){
+        const gid=fb.groupId||"";
+        if(gid && !P.writeDoc.groups.some(g=>g.id===gid))
+          P.writeDoc.groups.push({id:gid, name:fb.groupName||"그룹", fromIdea:"", sectionId:fb.sectionId||""});
+        bl={id:fb.id||uid(), sectionId:fb.sectionId||"", fromIdea:"", title:"",
+            items:[], groupId:gid, backgrounds:[], characters:[], storyboard:null};
+        const at=prevBlockId ? P.writeDoc.blocks.findIndex(b=>b.id===prevBlockId) : -1;
+        if(at>=0) P.writeDoc.blocks.splice(at+1, 0, bl); else P.writeDoc.blocks.push(bl);
+        if(fb.sectionName) subBlocks=subBlocks.concat([{sectionId:fb.sectionId, sectionName:fb.sectionName}]);
+      }
+      bl.items=(fb.text||"").trim() ? parseFeedbackTextToItems(fb.text) : [];
+      setAppliedMemos("write", fb.id, memos);
+      prevBlockId=bl.id;
+      return;
+    }
+    const src=subBlocks.find(b=>b&&b.id===fb.id) || (v2 ? null : subBlocks[i]) || null;
+    prevBlockId=fb.id;
     let bl=P.writeDoc.blocks.find(b=>b.id===fb.id);
     if(!bl && src){
       /* 제출 당시의 그룹(섹션 블럭)이 지금 없으면 그것도 함께 되살린다 */
