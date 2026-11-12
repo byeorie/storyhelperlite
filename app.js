@@ -12300,37 +12300,42 @@ function renderWriteAfterItems(cur, p, onChange){
   const box=document.createElement("div"); box.className="rv-after-items";
   const sync=()=>{ p.after=writeRowsToText(rows); if(onChange) onChange(); };
   /* 2026-11-12: 교수가 지문/대사 줄을 직접 넣고(아래 점선 버튼) 지울(×) 수 있다 — 학생 글쓰기 화면과 같은 방식 */
-  /* 2026-11-12: 줄 손잡이로 끌어 같은 칸 안에서 순서 바꾸기 */
-  let dragIdx=null;
+  /* 2026-11-12: 줄 손잡이로 끌어 순서 바꾸기 — 같은 칸 안은 물론 다른 칸으로도(rvRowDrag가 출발 칸을 기억).
+     첨삭이 열린 칸의 줄 위에 놓으면 그 자리로, 칸의 다른 곳(닫힌 칸 포함)에 놓으면 그 칸 맨 끝으로 간다
+     (칸 쪽 처리는 renderReviewPairs). */
   const draw=(focusIdx)=>{
     box.innerHTML="";
     rows.forEach((r,idx)=>{
       const row=document.createElement("div"); row.className="rv-after-item"+(r.type==="line"?" is-line":" is-text");
-      const hd=document.createElement("span"); hd.className="sub-handle"; hd.innerHTML=ICONS.grip; hd.title="끌어서 줄 이동";
+      const hd=document.createElement("span"); hd.className="sub-handle"; hd.innerHTML=ICONS.grip; hd.title="끌어서 줄 이동 (다른 칸으로도)";
       hd.addEventListener("mousedown", ()=>{ row.draggable=true; });
       hd.addEventListener("mouseup", ()=>{ row.draggable=false; });
       row.appendChild(hd);
       row.addEventListener("dragstart", e=>{
-        e.stopPropagation(); dragIdx=idx; e.dataTransfer.effectAllowed="move";
+        e.stopPropagation(); rvRowDrag={p, rows, idx, sync, draw}; e.dataTransfer.effectAllowed="move";
         try{ e.dataTransfer.setData("text/plain", "rv-row"); }catch(_){}
         setTimeout(()=>row.classList.add("dragging"),0);
       });
-      row.addEventListener("dragend", e=>{ e.stopPropagation(); row.draggable=false; row.classList.remove("dragging"); dragIdx=null;
-        box.querySelectorAll(".rv-drop-before,.rv-drop-after").forEach(el=>el.classList.remove("rv-drop-before","rv-drop-after")); });
+      row.addEventListener("dragend", e=>{ e.stopPropagation(); row.draggable=false; row.classList.remove("dragging"); rvRowDrag=null; rvClearDropMarks(); });
+      const isSelf=()=>rvRowDrag && rvRowDrag.p===p && rvRowDrag.idx===idx;
       row.addEventListener("dragover", e=>{
-        if(dragIdx==null || dragIdx===idx) return;
+        if(!rvRowDrag || isSelf()) return;
         e.preventDefault(); e.stopPropagation();
         const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
         row.classList.toggle("rv-drop-after", after); row.classList.toggle("rv-drop-before", !after);
       });
       row.addEventListener("dragleave", e=>{ if(!row.contains(e.relatedTarget)) row.classList.remove("rv-drop-before","rv-drop-after"); });
       row.addEventListener("drop", e=>{
-        if(dragIdx==null || dragIdx===idx) return;
+        if(!rvRowDrag || isSelf()) return;
         e.preventDefault(); e.stopPropagation();
         const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
-        const [m]=rows.splice(dragIdx,1);
-        let at=idx-(dragIdx<idx?1:0)+(after?1:0);
-        rows.splice(at,0,m); dragIdx=null; sync(); draw();
+        const src=rvRowDrag; rvRowDrag=null; rvClearDropMarks();
+        const [m]=src.rows.splice(src.idx,1);
+        let at=idx+(after?1:0);
+        if(src.p===p && src.idx<idx) at--;     /* 같은 칸 안에서 아래로 옮길 때 */
+        rows.splice(at,0,m);
+        if(src.p!==p){ src.sync(); src.draw(); }
+        sync(); draw();
       });
       let first=null;
       if(r.type==="line"){
@@ -12426,6 +12431,10 @@ function renderMemoCardsInto(container, mine, numMap, opts, colorMap){
    옮긴 칸은 moved=true가 되고 놓인 자리의 단계/섹션 블럭(group/subgroup)을 따라간다.
    target이 없으면(섹션 블럭 빈 자리에 놓음) 그 묶음의 마지막 칸 뒤로 간다. */
 let rvDragPid=null;
+let rvRowDrag=null;   /* 끄는 중인 지문/대사 줄 {p, rows, idx, sync, draw} — renderWriteAfterItems가 채운다 */
+function rvClearDropMarks(){
+  document.querySelectorAll(".rv-drop-before,.rv-drop-after,.rv-row-target").forEach(el=>el.classList.remove("rv-drop-before","rv-drop-after","rv-row-target"));
+}
 function moveReviewPair(pairs, dragId, target, after, group, subgroup){
   const from=pairs.findIndex(x=>x.id===dragId); if(from<0) return;
   const [d]=pairs.splice(from,1);
@@ -12553,6 +12562,23 @@ function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts
         });
         wrap.addEventListener("dragend", ()=>{ wrap.draggable=false; wrap.classList.remove("dragging"); rvDragPid=null;
           container.querySelectorAll(".rv-drop-before,.rv-drop-after").forEach(el=>el.classList.remove("rv-drop-before","rv-drop-after")); });
+        /* 다른 칸에서 끌어온 지문/대사 줄 — 줄 위가 아닌 칸의 아무 곳에 놓으면 이 칸 맨 끝으로(닫혀 있으면 첨삭을 연다) */
+        wrap.addEventListener("dragover", e=>{
+          if(!rvRowDrag || p.deleted) return;
+          e.preventDefault(); e.stopPropagation();
+          rvClearDropMarks(); wrap.classList.add("rv-row-target");
+        });
+        wrap.addEventListener("drop", e=>{
+          if(!rvRowDrag || p.deleted) return;
+          e.preventDefault(); e.stopPropagation();
+          const src=rvRowDrag; rvRowDrag=null; rvClearDropMarks();
+          const [m]=src.rows.splice(src.idx,1);
+          if(src.p===p){ src.rows.push(m); src.sync(); src.draw(); return; }
+          src.sync();
+          const r=writeAfterRows(p).filter(x=>x.type==="line" || (x.text||"").trim());   /* 빈 지문 줄은 버림 */
+          r.push(m); p.after=writeRowsToText(r);
+          splitIds.add(p.id); rerender();
+        });
         wrap.addEventListener("dragover", e=>{
           if(!rvDragPid || rvDragPid===p.id) return;
           e.preventDefault(); e.stopPropagation();

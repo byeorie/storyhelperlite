@@ -1370,6 +1370,7 @@ canvas.draw-layer-canvas.is-base{position:relative}
 .rv-drop-before{box-shadow:0 -3px 0 0 var(--accent)}
 .rv-drop-after{box-shadow:0 3px 0 0 var(--accent)}
 .rv-zone-over{outline:2px dashed var(--accent);outline-offset:2px}
+.rv-scene.rv-row-target{outline:2px dashed var(--accent);outline-offset:1px}
 .rv-after-item .sub-handle{align-self:center;padding-top:0}
 
 /* 2026-09-15: 파일 과제 — 고른 파일 목록 / 제출된 clip 파일 줄 */
