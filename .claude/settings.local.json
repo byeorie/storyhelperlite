@@ -5,7 +5,12 @@
       "Bash(node --check index.html)",
       "Bash(node \"C:\\\\Users\\\\byeor\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-byeor-Claude-Projects--------\\\\c17c1f40-32ea-4760-be64-7c3bb65e2d13\\\\scratchpad\\\\test_export.js\")",
       "Bash(node \"C:\\\\Users\\\\byeor\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-byeor-Claude-Projects--------\\\\c17c1f40-32ea-4760-be64-7c3bb65e2d13\\\\scratchpad\\\\test_export2.js\")",
-      "Bash(node -e \"console.log\\(process.version\\)\")"
+      "Bash(node -e \"console.log\\(process.version\\)\")",
+      "Read(//c/Users/byeor/Claude/Projects/TRPG 스토리텔링/**)",
+      "Bash(cp scenarios/island-escape/build/pack.json /tmp/pack-before.json)",
+      "Bash(node tools/build-scenario.js island-escape)",
+      "Bash(node -e ' *)",
+      "Bash(node tools/quest-editor.js --no-open)"
     ]
   }
 }
