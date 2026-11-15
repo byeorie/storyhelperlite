@@ -1801,3 +1801,101 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 .wpp-name em{font-style:normal;font-size:10px;font-weight:700;padding:1px 7px;margin-left:4px;border-radius:999px;background:var(--accent2);color:var(--accent)}
 .wpp-sub{font-size:12px;color:var(--muted);margin-top:2px}
 .wpp-secs{font-size:12px;color:var(--ink);margin-top:4px;line-height:1.5}
+
+/* ===== 2026-11-15: 첨삭 화면 좌(학생 원본) / 우(피드백) 비교 — 교수 첨삭 · 학생 피드백 공통 =====
+   바뀐 곳은 양쪽에 같은 색(.dc0~.dc5): 왼쪽은 취소선, 오른쪽은 새로 쓴 글자. 글자가 없는 쪽에는 세로 표시(.dh-mark). */
+.rv-compare{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:860px){ .rv-compare{grid-template-columns:minmax(0,1fr)} }
+.rv-col{min-width:0}
+.rv-col [data-align]{box-sizing:border-box}
+.rv-col-head{margin:0 0 12px;padding:0 0 8px;border-bottom:2px solid var(--line)}
+.rv-col-fb .rv-col-head{border-bottom-color:var(--accent)}
+.rv-col-title{font-weight:800;font-size:14px;display:flex;align-items:center;gap:6px}
+.rv-col-title .icon,.rv-col-title svg{width:15px;height:15px}
+.rv-col-hint{margin:4px 0 0}
+.rv-col-head .rv-tool-bar{margin:8px 0 0}
+.rv-col-head .review-eval{margin:10px 0 0}
+.rv-ver-pick{display:flex;align-items:center;gap:6px;margin:8px 0 0}
+.rv-ver-pick select{font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px}
+
+.dc0{--dh-bg:#ffe0da;--dh-bar:#e0583f}
+.dc1{--dh-bg:#dbe8ff;--dh-bar:#3d78d8}
+.dc2{--dh-bg:#daf1d2;--dh-bar:#3f9a35}
+.dc3{--dh-bg:#eedffb;--dh-bar:#8b4fd0}
+.dc4{--dh-bg:#ffe7c4;--dh-bar:#d9861a}
+.dc5{--dh-bg:#d2f0eb;--dh-bar:#23917f}
+.dh{background:var(--dh-bg);box-shadow:inset 0 -2px 0 var(--dh-bar);border-radius:2px;transition:background .12s}
+.dh-del{text-decoration:line-through;text-decoration-color:var(--dh-bar);text-decoration-thickness:1.5px}
+.dh-mark{position:relative;display:inline}
+.dh-mark::after{content:"";position:absolute;left:-1px;top:-.15em;width:3px;height:1.35em;background:var(--dh-bar);border-radius:2px}
+.dh.hk-on{background:var(--dh-bar);color:#fff}
+.dh-mark.hk-on::after{width:5px;left:-2px}
+.dh-input{background:var(--dh-bg)!important;box-shadow:inset 0 -2px 0 var(--dh-bar);border-radius:4px}
+mark.memo-hl .dh{background:transparent}
+
+/* 입력칸 뒤 배경층 — 글자는 투명, 바뀐 곳만 색이 보인다 */
+.hl-wrap{position:relative;display:block;min-width:0}
+.hl-backdrop{position:absolute;inset:0;pointer-events:none;overflow:hidden;white-space:pre-wrap;
+  overflow-wrap:break-word;color:transparent;border-style:solid;border-color:transparent;margin:0;z-index:0}
+.hl-backdrop .dh,.hl-backdrop .dh.hk-on{color:transparent}
+.hl-wrap>textarea{position:relative;z-index:1;display:block;width:100%;overflow-y:hidden}
+.rv-after-item>.hl-wrap,.rv-idea-edit>.hl-wrap,.rv-field-edit>.hl-wrap{flex:1;min-width:0}
+
+/* 블록 모양 */
+.rv-col .review-pair{margin-bottom:10px}
+.rv-col .review-pair.rv-scene{margin-bottom:0}
+.rv-col .plan-block{margin:0}
+.rv-field-box{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;min-height:38px;font-size:13px;line-height:1.6}
+.rv-col-orig .review-before .rv-field-box{background:#fbfaf7}
+.rv-fb-ta{width:100%;box-sizing:border-box;min-height:38px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+  font:inherit;font-size:13px;line-height:1.6;resize:none;background:#fff}
+.rv-fb-ta:focus{outline:2px solid var(--accent2);border-color:var(--accent)}
+.review-pair.rv-idea{background:#fff;border:1px solid var(--line);border-left:4px solid var(--accent2);border-radius:8px;padding:8px 10px;gap:4px}
+.rv-idea-text{font-weight:600}
+.rv-idea-edit{display:flex;align-items:flex-start;gap:6px}
+.rv-idea-ta{border:none;background:transparent;resize:none;font:inherit;font-weight:600;font-size:13px;line-height:1.6;padding:0;margin:0;min-height:0}
+.rv-idea-ta:focus{outline:none}
+.review-pair.rv-char-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;gap:6px}
+.rv-card-head{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
+.rv-card-head .rv-card-title{flex:1;min-width:0}
+.rv-field-edit{display:flex;align-items:flex-start;gap:8px;padding:2px 0;border-bottom:1px dashed var(--line)}
+.rv-field-edit:last-of-type{border-bottom:none}
+.rv-field-edit .rv-field-label{font-weight:700;color:var(--accent);flex-shrink:0;min-width:82px;white-space:nowrap;font-size:13px;line-height:1.6;padding-top:2px}
+.rv-char-ta{border:none;background:transparent;resize:none;font:inherit;font-size:13px;line-height:1.6;padding:2px 4px;margin:0;min-height:0}
+.rv-char-ta:focus{outline:none;background:#fffdf6}
+.rv-char-add{margin-top:6px;font-size:12px;padding:3px 6px;border:1px dashed var(--line);border-radius:6px;background:#fff;color:var(--muted)}
+.rv-add-char{width:100%;margin-top:4px}
+.rv-plot-head{display:flex;align-items:center;gap:8px}
+.rv-plot-head .rv-add-btn{margin-left:auto;font-size:11px;padding:2px 8px}
+.rv-ph{border:1px dashed var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--muted);background:#fbfaf7}
+.rv-ghost{background:repeating-linear-gradient(135deg,#faf8f3 0 8px,#f3efe6 8px 16px)!important;border-style:dashed!important}
+.rv-ghost-note{font-size:12px;color:var(--muted);padding:6px 2px}
+.rv-deleted .review-before-text{text-decoration:line-through;text-decoration-color:#b3503a;opacity:.65}
+.rv-scene-tag.is-add{color:#2c7a4b;background:#dff2e5}
+.rv-col-orig .rv-changed:not(.rv-scene):not(.rv-ghost){box-shadow:inset 3px 0 0 var(--accent)}
+.rv-write-preview .wp-page{padding:8px}
+
+/* 학생 피드백 화면 — 왼쪽 원본 / 오른쪽 탭 패널. 피드백 탭일 때는 반반으로 나누고 오른쪽도 함께 스크롤 */
+.rv-fb-split.fb-mode .setting-main{flex:1 1 50%}
+.rv-fb-split.fb-mode .setting-planview{flex:1 1 50%;position:static;max-height:none;overflow:visible}
+@media(max-width:1023px){
+  .rv-fb-split{flex-direction:column;align-items:stretch}
+  .rv-fb-split .setting-planview{display:block;min-width:0;position:static;max-height:none;overflow:visible}
+}
+.plan-block textarea.rv-fb-ta{min-height:38px}
+.rv-col textarea.rv-after-text,.rv-col textarea.rv-idea-ta,.rv-col textarea.rv-char-ta{min-height:0}
+.rv-ver-pick{white-space:nowrap}
+.rv-ver-pick select{width:auto;max-width:100%}
+.review-pair.rv-del-ghost:not(.rv-scene){border:1px dashed #c9b9a8!important;border-radius:10px;padding:8px 12px;color:var(--muted)}
+.rv-del-ghost .rv-card-title{font-weight:600;font-size:13px}
+/* 2026-11-15: 글쓰기 대사 — 이름을 눌러 인물 바꾸기 / 새 이름 등록 */
+.dlg-who-pick{cursor:pointer;border-radius:5px;padding:0 3px;margin-left:-3px}
+.dlg-who-pick:hover{background:var(--accent2);text-decoration:underline;text-underline-offset:2px}
+.wchar-row{display:flex;align-items:center}
+.wchar-row .wchar-pick{flex:1;min-width:0}
+.wchar-pick.on{font-weight:700;color:var(--accent)}
+.wchar-sub{font-size:10px;color:var(--muted);font-weight:400;margin-left:4px}
+.wchar-row .wchar-del{flex:0 0 auto;width:auto;padding:4px 8px;color:var(--muted)}
+.wchar-row .wchar-del .icon{width:11px;height:11px}
+.wchar-row .wchar-del:hover{color:#e05050}
+.dlg-new-char{margin-top:6px}

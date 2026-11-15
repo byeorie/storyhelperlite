@@ -1025,7 +1025,9 @@ function render(){
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
     app.classList.toggle("wide", activeTab==="home"||(activeTab==="plot" && plotEditOpen && !feedbackPage && P && !!plotCompareTarget())||activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
-      ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance"||practiceFor==="twist") && !feedbackPage));  // 실습 화면: 오른쪽에 예시 패널
+      ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance"||practiceFor==="twist") && !feedbackPage)
+      /* 2026-11-15: 첨삭 화면(교수)·피드백 상세(학생)는 왼쪽 원본 / 오른쪽 피드백 두 열이라 넓게 */
+      ||(activeTab==="profClasses" && !!profReviewId)||(!!feedbackPage && feedbackPage.mode==="detail"));  // 실습 화면: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
@@ -6542,11 +6544,63 @@ function metaCol(label, list, onRemoveAt){
   });
   return col;
 }
-/* [+캐릭터] 버튼 — 캐릭터 설정에 등록된 인물 드롭다운(+직접입력) */
+/* ===== 2026-11-15: 글쓰기에서 바로 등록하는 캐릭터 이름 =====
+   캐릭터 설정에 없는 인물(행인, 선생님 등)도 대사 블럭에서 이름을 한 번 등록하면 작품에 저장되어(P.writeCharNames)
+   다음부터 대사 추가 · 대사 인물 바꾸기 · 칸의 [+캐릭터]에서 목록으로 고를 수 있다. 캐릭터 설정의 인물이 먼저 나온다. */
+function writeCharChoices(){
+  const out=[], seen=new Set();
+  (P.characters||[]).forEach(c=>{ const n=(c.name||"").trim(); if(n && !seen.has(n)){ seen.add(n); out.push({name:n, role:c.role||"", fromSettings:true}); } });
+  (Array.isArray(P.writeCharNames)?P.writeCharNames:[]).forEach(n=>{ n=(n||"").trim(); if(n && !seen.has(n)){ seen.add(n); out.push({name:n, fromSettings:false}); } });
+  return out;
+}
+function registerWriteCharName(name){
+  name=(name||"").trim(); if(!name) return "";
+  if(writeCharChoices().some(c=>c.name===name)) return name;
+  if(!Array.isArray(P.writeCharNames)) P.writeCharNames=[];
+  P.writeCharNames.push(name);
+  return name;
+}
+function unregisterWriteCharName(name){
+  if(!Array.isArray(P.writeCharNames)) return;
+  P.writeCharNames=P.writeCharNames.filter(n=>n!==name);
+}
+/* 대사 인물 고르기 메뉴 — 목록 + [새 이름 등록] (+ 글쓰기에서 등록한 이름은 목록에서 빼기) */
+function openWriteCharMenu(x, y, current, onPick){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  const draw=()=>{
+    m.innerHTML="";
+    const list=writeCharChoices();
+    list.forEach(c=>{
+      const row=document.createElement("div"); row.className="wchar-row";
+      const b=document.createElement("button"); b.className="wchar-pick"+(c.name===current?" on":"");
+      b.innerHTML=esc(c.name)+(c.fromSettings?(c.role?` <span class="wchar-sub">${esc(c.role)}</span>`:""):` <span class="wchar-sub">글쓰기 등록</span>`);
+      b.onclick=()=>{ hideCtxMenu(); onPick(c.name); };
+      row.appendChild(b);
+      if(!c.fromSettings){
+        const x2=document.createElement("button"); x2.className="wchar-del"; x2.innerHTML=ICONS.close; x2.title="목록에서 빼기 (이미 쓴 대사는 그대로)";
+        x2.onclick=e=>{ e.stopPropagation(); unregisterWriteCharName(c.name); save(); draw(); };
+        row.appendChild(x2);
+      }
+      m.appendChild(row);
+    });
+    const none=document.createElement("button"); none.textContent="(미지정)"; none.onclick=()=>{ hideCtxMenu(); onPick(""); };
+    m.appendChild(none);
+    m.appendChild(document.createElement("hr"));
+    const add=document.createElement("button"); add.innerHTML=ICONS.plus+" 새 이름 등록";
+    add.onclick=()=>{ hideCtxMenu(); const nm=prompt("등록할 캐릭터 이름 (다음부터 목록에서 고를 수 있습니다):"); const v=registerWriteCharName(nm); if(v){ save(); onPick(v); } };
+    m.appendChild(add);
+    m.hidden=false;
+    const vw=window.innerWidth, vh=window.innerHeight;
+    m.style.left=Math.min(x, vw-210)+"px";
+    m.style.top=Math.max(8, Math.min(y, vh-((list.length+3)*36+20)))+"px";
+  };
+  draw();
+}
+/* [+캐릭터] 버튼 — 캐릭터 설정에 등록된 인물 + 글쓰기에서 등록한 이름 드롭다운(+직접입력) */
 function openCharacterPicker(btn, bl){
   const m=document.getElementById("ctxMenu"); if(!m) return;
   m.innerHTML="";
-  const names=(P.characters||[]).map(c=>c.name).filter(Boolean);
+  const names=writeCharChoices().map(c=>c.name);
   names.forEach(name=>{
     const b=document.createElement("button"); b.textContent=name;
     b.onclick=()=>{ hideCtxMenu(); bl.characters=bl.characters||[]; if(!bl.characters.includes(name)) bl.characters.push(name); save(); render(); };
@@ -6554,7 +6608,7 @@ function openCharacterPicker(btn, bl){
   });
   if(names.length){ const hr=document.createElement("hr"); m.appendChild(hr); }
   const custom=document.createElement("button"); custom.innerHTML=ICONS.edit+" 직접 입력";
-  custom.onclick=()=>{ hideCtxMenu(); const nm=prompt("캐릭터 이름:"); if(nm&&nm.trim()){ bl.characters=bl.characters||[]; bl.characters.push(nm.trim()); save(); render(); } };
+  custom.onclick=()=>{ hideCtxMenu(); const nm=registerWriteCharName(prompt("캐릭터 이름 (다음부터 목록에서 고를 수 있습니다):")); if(nm){ bl.characters=bl.characters||[]; if(!bl.characters.includes(nm)) bl.characters.push(nm); save(); render(); } };
   m.appendChild(custom);
   m.hidden=false;
   const rect=btn.getBoundingClientRect();
@@ -6788,7 +6842,14 @@ function subBlockEl(bl, it, liveRefresh, main){
   del.onclick=()=>{ bl.items=(bl.items||[]).filter(x=>x.id!==it.id); save(); render(); };
 
   if(it.type==="line"){
-    const who=document.createElement("span"); who.className="dlg-who"; who.textContent=it.char||"(미지정)";
+    const who=document.createElement("span"); who.className="dlg-who dlg-who-pick"; who.textContent=it.char||"(미지정)";
+    /* 2026-11-15: 이름을 누르면 인물 바꾸기 — 목록에 없으면 [새 이름 등록]으로 바로 등록 */
+    who.title="눌러서 인물 바꾸기 / 새 이름 등록";
+    who.addEventListener("click", e=>{
+      e.stopPropagation();
+      const r=who.getBoundingClientRect();
+      openWriteCharMenu(r.left, r.bottom+4, it.char||"", name=>{ it.char=name; save(); render(); });
+    });
     /* 대사 텍스트 — 클릭하면 바로 편집(플롯/제목과 동일한 방식) */
     const tx=document.createElement("span"); tx.className="dlg-text"; tx.contentEditable="false"; tx.spellcheck=false;
     tx.textContent=it.text;
@@ -6953,6 +7014,7 @@ function commitBranchOrder(container, it){
 }
 
 /* 대사 추가 팝업 */
+let dialogueLastChar="";
 function dialogueModal(bl){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay){ writeDlgFor=null; render(); } };
@@ -6963,17 +7025,25 @@ function dialogueModal(bl){
   top.append(ttl, closeBtn);
   box.appendChild(top);
 
-  const chars=(P.characters||[]).filter(c=>c.name && c.name.trim());
+  /* 2026-11-15: 캐릭터 설정의 인물 + 글쓰기에서 등록한 이름을 목록으로. 맨 아래 [＋ 새 이름 등록…]을 고르면
+     입력칸이 열리고, 추가할 때 그 이름이 작품에 등록되어 다음부터 목록에 나온다. 직전에 고른 인물을 기억한다. */
+  const chars=writeCharChoices();
   const lbl1=document.createElement("label"); lbl1.textContent="캐릭터";
   box.appendChild(lbl1);
-  let charInput;
-  if(chars.length){
-    charInput=document.createElement("select");
-    charInput.innerHTML=`<option value="">(미지정)</option>`+chars.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}${c.role?` (${esc(c.role)})`:""}</option>`).join("");
-  }else{
-    charInput=document.createElement("input"); charInput.type="text"; charInput.placeholder="캐릭터 이름 (캐릭터 설정에서 미리 등록하면 목록으로 선택됩니다)";
-  }
-  box.appendChild(charInput);
+  const NEW="__new__";
+  const charSel=document.createElement("select");
+  charSel.innerHTML=`<option value="">(미지정)</option>`
+    +chars.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}${c.fromSettings?(c.role?` (${esc(c.role)})`:""):" (글쓰기 등록)"}</option>`).join("")
+    +`<option value="${NEW}">＋ 새 이름 등록…</option>`;
+  const newInput=document.createElement("input"); newInput.type="text"; newInput.className="dlg-new-char";
+  newInput.placeholder="새 캐릭터 이름 — 등록하면 다음부터 목록에서 고를 수 있습니다";
+  const syncNew=()=>{ newInput.hidden=charSel.value!==NEW; if(!newInput.hidden) newInput.focus(); };
+  if(!chars.length) charSel.value=NEW;
+  else if(dialogueLastChar && chars.some(c=>c.name===dialogueLastChar)) charSel.value=dialogueLastChar;
+  charSel.onchange=syncNew;
+  box.append(charSel, newInput);
+  newInput.hidden=charSel.value!==NEW;
+  const charInput={ get value(){ return charSel.value===NEW ? newInput.value : charSel.value; } };
 
   const lbl2=document.createElement("label"); lbl2.textContent="대사"; box.appendChild(lbl2);
   const ta=document.createElement("textarea"); ta.className="dlg-input-text"; ta.placeholder="대사를 입력하세요"; box.appendChild(ta);
@@ -6983,7 +7053,9 @@ function dialogueModal(bl){
   const addMore=document.createElement("button"); addMore.className="btn ghost"; addMore.textContent="추가하고 계속";
   function doAdd(keepOpen){
     const text=ta.value.trim(); if(!text){ ta.focus(); return; }
-    const char=charInput.value.trim();
+    let char=charInput.value.trim();
+    if(char) char=registerWriteCharName(char);   /* 목록에 없던 이름이면 등록 */
+    dialogueLastChar=char;
     bl.items=bl.items||[]; bl.items.push({id:uid(), type:"line", char, text});
     save();
     if(keepOpen){ ta.value=""; ta.focus(); /* 팝업 유지 */ render(); setTimeout(()=>{ const m=document.querySelector(".dlg-modal .dlg-input-text"); if(m) m.focus(); },0); }
@@ -9413,7 +9485,6 @@ let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — n
 let profReviewVersion=null;  // 과제 관리 목록의 버전 드롭다운으로 옛 버전을 골랐을 때 그 버전 번호 — null이면 최신(=이어서 편집 가능)
 let profClassId=null;        // 2026-08-24: 열려있는 수업 id — null이면 수업 목록 화면, "none"이면 수업 미지정(전체 공개) 과제함
 let profClassTab="assignments"; // 수업 상세 화면에서 활성 탭: "notices"(공지) | "assignments"(과제 관리) | "students"(수강 학생)
-let reviewSplitIds=new Set();// 첨삭 화면에서 "이전 버전 / 첨삭"으로 위아래 분리된 블록 id 모음
 /* 학생 계정의 [첨삭 보기] — 팝업 대신 그 탭(기획서/플롯/글쓰기) 안에서 페이지로 전환.
    null이면 평소 탭 화면, {type, mode:'list'}면 그 타입의 제출 목록, {type, mode:'detail', id}면 상세 */
 let feedbackPage=null;
@@ -9997,35 +10068,73 @@ async function rFeedbackDetail(type, id, version){
   const mismatch = sub.projectName && P.name && sub.projectName!==P.name;
   const memos=Array.isArray(sub.memos)?sub.memos:[];
   const memoNote = memos.length ? ` 교수님이 남긴 메모(${memos.length}개)도 해당 항목 끝에 "[교수님 메모]"로 함께 반영됩니다.` : "";
+  /* 2026-11-15: 왼쪽 = 내가 제출한 원본, 오른쪽 = 탭 패널([피드백] + 그 탭에서 원래 오른쪽에 두던 참고 보기
+     — 기획서 미리보기 · 다른 사건 · 다른 플롯 · 글쓰기 미리보기). 피드백 탭 맨 위에서 첨삭 버전을 고른다. */
   const versionPicker=(sub.versions && sub.versions.length>1)
-    ? `<label class="hint" style="display:inline-flex;align-items:center;gap:5px;margin:0 0 10px">버전
-        <select id="feedbackVersionSelect" style="font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:6px">
+    ? `<label class="hint rv-ver-pick">피드백 버전
+        <select class="feedbackVersionSelect">
           ${sub.versions.slice().reverse().map(v=>`<option value="${v.version}"${v.version===sub.viewingVersion?" selected":""}>버전 ${v.version}${v.version===sub.latestVersion?" (최신)":""}</option>`).join("")}
         </select></label>`
     : "";
   /* 2026-10-08: 스토리텔링 실습은 작품에 딸린 내용이 아니라 [내 작업물에 반영]이 없다 — 첨삭과 메모만 본다 */
-  if(sub.type==="practice"){
-    wrap.innerHTML=`${evalHtml}${versionPicker}<div id="feedbackPairs"></div>`;
-    const vs=document.getElementById("feedbackVersionSelect");
-    if(vs) vs.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(vs.value)}; render(); };
-    renderReviewPairs(document.getElementById("feedbackPairs"), buildReviewPairs(sub.type, sub.data, sub.feedback), false, null, memos, {
-      canDelete:true,
-      onDelete:(m)=>{ apiFetch("student-submission-memo", {method:"POST", body:JSON.stringify({id, version:sub.viewingVersion, memoId:m.id})}); },
-    });
-    return;
-  }
-  wrap.innerHTML=`${evalHtml}${versionPicker}<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat}${memoNote} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
+  const isPractice=sub.type==="practice";
+  wrap.innerHTML = isPractice ? "" : `<p class="hint">이 첨삭 내용을 지금 작업 중인 <b>${esc(P.name||"")}</b>의 ${esc(TYPE_LABEL[sub.type])}에 그대로 반영할 수 있습니다.${caveat}${memoNote} 지금 작업물의 해당 내용을 덮어쓰므로, 제출 이후 더 수정한 내용이 있다면 먼저 백업해두세요.
     ${mismatch?`<br><b style="color:#b3503a">※ 이 과제는 "${esc(sub.projectName)}" 작품에서 제출했는데, 지금 열려있는 작품은 "${esc(P.name)}"입니다. 다른 작품에 반영될 수 있으니 확인해주세요.</b>`:""}</p>
-    <button class="btn" id="applyFeedbackBtn" style="margin-bottom:14px;width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>
-    <div id="feedbackPairs"></div>`;
-  const verSel=document.getElementById("feedbackVersionSelect");
-  if(verSel) verSel.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(verSel.value)}; render(); };
+    <button class="btn" id="applyFeedbackBtn" style="width:100%">${ICONS.download} 이 첨삭 내용을 내 작업물에 반영</button>`;
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  renderReviewPairs(document.getElementById("feedbackPairs"), pairs, false, null, memos, {
+  const ctx=makeReviewCtx({type:sub.type, pairs, editable:false, memos, memoOpts:{
     canDelete:true,
     onDelete:(m)=>{ apiFetch("student-submission-memo", {method:"POST", body:JSON.stringify({id, version:sub.viewingVersion, memoId:m.id})}); },
-  });
-  document.getElementById("applyFeedbackBtn").onclick=()=>{
+  }});
+  const layout=document.createElement("div"); layout.className="setting-split rv-fb-split";
+  const main=document.createElement("div"); main.className="setting-main";
+  const leftCard=document.createElement("div"); leftCard.className="card";
+  const colL=document.createElement("div");
+  leftCard.appendChild(colL); main.appendChild(leftCard);
+  const side=document.createElement("div"); side.className="setting-planview";
+  const tabs=document.createElement("div"); tabs.className="side-view-tabs";
+  const panel=document.createElement("div");
+  side.append(tabs, panel);
+  layout.append(main, side);
+  c.after(layout);
+  ctx.left=colL;
+  ctx.headRender=(head, s)=>{
+    if(s==="orig"){
+      head.innerHTML=`<div class="rv-col-title">${ICONS.file} 내가 제출한 원본</div>
+        <p class="hint rv-col-hint">제출한 그대로입니다. 교수님이 고친 곳은 오른쪽 피드백과 같은 색으로 표시됩니다(색에 마우스를 올리면 짝이 진해집니다).</p>`;
+      return;
+    }
+    head.innerHTML=`<div class="rv-col-title">${ICONS.chat} 교수님 피드백</div>${versionPicker}${evalHtml}`;
+    const vs=head.querySelector(".feedbackVersionSelect");
+    if(vs) vs.onchange=()=>{ feedbackPage={type, mode:"detail", id, version:Number(vs.value)}; render(); };
+  };
+  const views=[{key:"fb", label:"피드백", render:el=>{
+    const card=document.createElement("div"); card.className="card";
+    const colR=document.createElement("div"); card.appendChild(colR); el.appendChild(card);
+    ctx.right=colR; renderReviewSide(colR, "fb", ctx);
+  }}].concat(fbExtraViews(sub.type));
+  let mode="fb";
+  const show=()=>{
+    tabs.innerHTML="";
+    views.forEach(v=>{
+      const b=document.createElement("button"); b.type="button";
+      b.className="side-view-tab"+(v.key===mode?" active":"")+(v.cls?" "+v.cls:"");
+      b.textContent=v.label; if(v.title) b.title=v.title;
+      b.onclick=()=>{ mode=v.key; show(); };
+      tabs.appendChild(b);
+    });
+    tabs.hidden=views.length<2;
+    panel.innerHTML=""; ctx.right=null;
+    const fbOn=mode==="fb";
+    side.classList.toggle("rv-fb-on", fbOn); layout.classList.toggle("fb-mode", fbOn);
+    (views.find(v=>v.key===mode)||views[0]).render(panel);
+    rvObserve(ctx); rvAlign(ctx);
+  };
+  renderReviewSide(colL, "orig", ctx);
+  show();
+  rvWatch(ctx, layout);
+  const applyBtn=document.getElementById("applyFeedbackBtn");
+  if(applyBtn) applyBtn.onclick=()=>{
     const kindNeed=sub.type==="plot"?"plot":sub.type==="write"?"write":"";
     const actE=activePlot();
     const plotLbl=!kindNeed ? "" : (actE && actE.kind===kindNeed ? ` (${actE.name})` : ` (새 ${kindNeed==="plot"?"플롯":"글쓰기"} 카드로)`);
@@ -10039,6 +10148,49 @@ async function rFeedbackDetail(type, id, version){
     if(sub.type==="write") writeEditOpen=true;
     feedbackPage=null; render();
   };
+}
+/* 학생 피드백 화면 오른쪽 탭 — 그 탭의 평소 화면에서 오른쪽에 두던 참고 보기를 그대로 탭으로 */
+function fbExtraViews(type){
+  const plan={key:"plan", label:"기획서 미리보기", render:renderPlanViewerInto};
+  if(type==="background" || type==="character") return [plan];
+  if(type==="event") return [plan].concat(Array.from({length:eventPageCount()}, (_,i)=>({
+    key:"ev"+i, label:"사건 "+(i+1), title:eventPageTitle(i), render:el=>renderEventViewInto(el,i) })));
+  if(type==="plot") return [{key:"plots", label:"다른 플롯", render:renderFbPlotView}];
+  if(type==="write") return [{key:"preview", label:"글쓰기 미리보기", render:renderFbWritePreview}];
+  return [];
+}
+let fbPlotViewId=null;
+function renderFbPlotView(el){
+  const plots=(Array.isArray(P.plots)?P.plots:[]).filter(x=>x.kind==="plot");
+  const card=document.createElement("div"); card.className="card plan-viewer-card";
+  el.appendChild(card);
+  if(!plots.length){ card.innerHTML=`<p class="hint">이 작품에는 아직 만든 플롯이 없습니다.</p>`; return; }
+  const cur=plots.find(x=>x.id===fbPlotViewId) || plots.find(x=>x.id===plotCompareId) || plots.find(x=>x.id===P.activePlotId) || plots[0];
+  const sel=document.createElement("select"); sel.className="plot-switch-select";
+  sel.innerHTML=plots.map(x=>`<option value="${esc(x.id)}"${x.id===cur.id?" selected":""}>${esc(x.name)}</option>`).join("");
+  const box=document.createElement("div");
+  const draw=(pl)=>{
+    box.innerHTML="";
+    renderPlotCompareInto(box, pl);
+    box.querySelectorAll(".plot-compare-head button").forEach(b=>b.remove());   /* 열기·닫기 버튼은 플롯 화면에서만 */
+  };
+  sel.onchange=()=>{ fbPlotViewId=sel.value; const pl=plots.find(x=>x.id===sel.value); if(pl) draw(pl); };
+  card.innerHTML=`<h3>${ICONS.file} 내 플롯 보기</h3><p class="hint">지금 작품의 플롯을 참고용으로 보여드립니다. 여기서는 수정할 수 없습니다.</p>`;
+  card.append(sel, box);
+  draw(cur);
+}
+function renderFbWritePreview(el){
+  const card=document.createElement("div"); card.className="card plan-viewer-card";
+  el.appendChild(card);
+  const a=activePlot();
+  if(!a || a.kind!=="write"){
+    card.innerHTML=`<h3>${ICONS.file} 글쓰기 미리보기</h3><p class="hint">[글쓰기]에서 글쓰기 카드를 열어 두면, 지금 쓰고 있는 글을 여기서 함께 볼 수 있습니다.</p>`;
+    return;
+  }
+  card.innerHTML=`<h3>${ICONS.file} 글쓰기 미리보기 — ${esc(a.name||"")}</h3><p class="hint">지금 쓰고 있는 글을 문서 모양으로 보여드립니다(읽기 전용).</p>`;
+  const pv=document.createElement("div"); pv.className="rv-write-preview";
+  card.appendChild(pv);
+  renderPreviewInto(pv);
 }
 
 /* ===== 교수 — 학생 관리 ===== */
@@ -11584,7 +11736,7 @@ function bulkPdfSectionsHtml(sub){
         <div style="display:flex;gap:12px;align-items:flex-start">${imgBox(b.key,"학생 원본")}${hasFb?imgBox(fb.afterKey,fb.blank?"피드백(빈 캔버스)":"피드백"):""}</div>${memoHtml(b.id)}`);
     });
   }else{
-    const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
+    const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback).filter(p=>!p.placeholder);
     if(!pairs.length) secs.push('<p style="color:#999">제출된 내용이 없습니다.</p>');
     pairs.forEach(p=>secs.push(`<div style="font-weight:700;margin-bottom:6px">${esc((p.group?p.group.name+" · ":"")+(p.subgroup?p.subgroup.name+" · ":"")+p.label)}</div>
       <div style="white-space:pre-wrap">${esc(p.before)||'<span style="color:#999">(내용 없음)</span>'}</div>
@@ -11645,7 +11797,7 @@ async function rProfSubmissionReview(id, version){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} 제출함으로</button>
     <h2 id="reviewTitle">${ICONS.edit} 불러오는 중…</h2>
-    <p class="hint" id="reviewHint">원본 블록을 <b>우클릭</b>해 <b>첨삭</b>(위/아래로 분리) 또는 <b>메모</b>(텍스트를 드래그해 선택한 채 우클릭하면 그 범위에 각주로, 그냥 우클릭하면 블록 전체에 표시)를 달 수 있습니다. 다 마쳤으면 아래 버튼으로 학생에게 피드백을 돌려주세요.</p>
+    <p class="hint" id="reviewHint">왼쪽은 학생 원본, 오른쪽은 피드백 입력칸입니다. 오른쪽에서 바로 고치거나 블록을 넣고 지울 수 있고, 고친 곳은 양쪽에 같은 색으로 표시됩니다. 왼쪽 원본을 <b>우클릭</b>하면 <b>메모</b>(글자를 드래그해 선택한 채면 그 범위에 각주로, 아니면 블록 전체에)를 답니다. 다 마쳤으면 맨 아래 [피드백 전달]로 학생에게 돌려주세요.</p>
     <div id="reviewCheckBar"></div>
     <div id="reviewVersionBanner"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
@@ -11793,23 +11945,34 @@ async function rProfSubmissionReview(id, version){
     }
     return;
   }
+  /* 2026-11-15: 왼쪽 학생 원본 / 오른쪽 피드백 입력 — 모든 블록이 처음부터 입력칸으로 열려 있고,
+     고친 곳은 양쪽에 같은 색으로 표시된다(위/아래 분리 방식 폐기) */
   const pairs=buildReviewPairs(sub.type, sub.data, sub.feedback);
-  reviewSplitIds=new Set(pairs.filter(p=>p.after!==p.before).map(p=>p.id));
   rvCutMode=false;
   const reviewMemos=Array.isArray(sub.memos)?sub.memos.slice():[];
-  renderReviewPairs(pairsEl, pairs, isLatest, reviewSplitIds, reviewMemos, {canAdd:isLatest, canDelete:isLatest, canEdit:isLatest});
+  const ctx=makeReviewCtx({type:sub.type, pairs, editable:isLatest, memos:reviewMemos,
+    memoOpts:{canAdd:isLatest, canDelete:isLatest, canEdit:isLatest}});
+  pairsEl.innerHTML="";
+  const grid=document.createElement("div"); grid.className="rv-compare";
+  const colL=document.createElement("div"), colR=document.createElement("div");
+  grid.append(colL, colR); pairsEl.appendChild(grid);
+  ctx.left=colL; ctx.right=colR;
+  ctx.headRender=(head, side)=>{
+    head.innerHTML = side==="orig"
+      ? `<div class="rv-col-title">${ICONS.file} 학생 원본</div>
+         <p class="hint rv-col-hint">${isLatest?"글자를 드래그해 선택한 채 <b>우클릭</b>하면 그 부분에, 그냥 우클릭하면 블록 전체에 메모를 답니다.":"제출 당시 원본입니다."}</p>`
+      : `<div class="rv-col-title">${ICONS.edit} ${isLatest?"피드백 입력":"피드백"}</div>
+         <p class="hint rv-col-hint">${isLatest?"고친 곳은 왼쪽 원본과 같은 색으로 표시됩니다(색에 마우스를 올리면 짝이 진해집니다).":"이 버전에서 고친 곳이 왼쪽과 같은 색으로 표시됩니다."}</p>`;
+  };
+  ctx.rerender();
+  rvWatch(ctx, grid);
   if(saveBtn) saveBtn.style.display=isLatest?"":"none";
 
   if(saveBtn) saveBtn.onclick=async ()=>{
-    const byId={}; pairs.forEach(p=>byId[p.id]=p);
-    /* 칸별로 고치는 글쓰기 블록(data-itemized)은 입력할 때마다 p.after가 갱신되므로 제외한다 */
-    pairsEl.querySelectorAll(".review-pair.split:not([data-itemized]) textarea").forEach(ta=>{
-      const wrap=ta.closest(".review-pair");
-      const pid=wrap && wrap.dataset.id;
-      if(pid!=null && byId[pid]) byId[pid].after=ta.value;
-    });
-    const afterList=pairs.map(p=>p.after);
-    const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList, pairs);
+    /* 입력칸은 고칠 때마다 p.after를 바로 맞추므로 화면을 다시 훑지 않는다. 플롯의 빈 섹션 자리표시는 저장에서 뺀다 */
+    const live=pairs.filter(p=>!p.placeholder);
+    const afterList=live.map(p=>p.after);
+    const feedback=buildFeedbackFromPairs(sub.type, sub.data, afterList, live);
     const payload={id, feedback, memos:reviewMemos};
     if(evalTa) payload.evaluation=evalTa.value;   /* 평가도 함께 저장 */
     const r=await apiFetch("professor-submission", {method:"POST", body:JSON.stringify(payload)});
@@ -11851,13 +12014,40 @@ function buildReviewPairs(type, data, feedback){
     }));
   }
   if(type==="plot"){
+    /* 2026-11-15: 교수가 아이디어 카드를 새로 넣거나(added) 지울(deleted) 수 있다. 아이디어가 없는 섹션도
+       자리표시(placeholder)로 보여줘서 거기에도 카드를 넣을 수 있게 한다(자리표시는 저장하지 않음). */
     const items=plotReviewItems(data);
-    const byId={}; (Array.isArray(feedback)?feedback:[]).forEach(f=>{ if(f&&f.id!=null) byId[String(f.id)]=f; });
-    return items.map(it=>{
+    const fbArr=Array.isArray(feedback)?feedback:[];
+    const byId={}; fbArr.forEach(f=>{ if(f&&f.id!=null) byId[String(f.id)]=f; });
+    const secList=((data&&data.sections)||[]).map((s,i)=>({id:String(s.id||("s"+i)), name:s.name||`섹션 ${i+1}`}));
+    const secIdx={}; secList.forEach((g,i)=>{ secIdx[g.id]=i; });
+    let out=items.map(it=>{
       const f=byId[it.id];
-      return { id:it.id, label:it.label, group:it.group, kind:it.kind, before:it.before,
-               after: f&&typeof f.text==="string" ? f.text : it.before };
+      return { id:it.id, label:it.label, group:it.group, kind:it.kind, before:it.before, deleted:!!(f&&f.deleted),
+               after: f&&f.deleted ? "" : (f&&typeof f.text==="string" ? f.text : it.before) };
     });
+    let lastId=null;
+    fbArr.forEach(f=>{
+      if(!f) return;
+      if(f.added){
+        const sid=String(f.sectionId||"");
+        const g=secList.find(x=>x.id===sid) || {id:sid||"added", name:f.sectionName||"섹션"};
+        const np={ id:String(f.id), label:"교수님이 추가한 아이디어", group:g, kind:"plotIdea", added:true,
+                   before:"", after: typeof f.text==="string" ? f.text : "" };
+        let at=lastId!=null ? out.findIndex(x=>x.id===lastId) : -1;
+        if(at<0 || !out[at].group || out[at].group.id!==g.id){ at=out.findIndex(x=>x.group && x.group.id===g.id)-1; }
+        out.splice(at+1, 0, np);
+      }
+      if(f.id!=null) lastId=String(f.id);
+    });
+    const res=[];
+    secList.forEach(g=>{
+      const its=out.filter(x=>x.group && x.group.id===g.id);
+      if(its.length) res.push(...its);
+      else res.push({id:"ph::"+g.id, placeholder:true, group:g, kind:"plotIdea", label:"", before:"", after:""});
+    });
+    out.filter(x=>!x.group || secIdx[x.group.id]==null).forEach(x=>res.push(x));
+    return res;
   }
   if(type==="write"){
     const blocks=Array.isArray(data)?data:[];
@@ -11930,14 +12120,47 @@ function buildReviewPairs(type, data, feedback){
   }
   if(type==="event"){
     const fb=feedback||{};
-    return eventFieldsFor(eventPagesInData(data)).map(f=>({
-      id:f.k, label:f.label, before:(data&&data[f.k])||"",
-      after: Object.prototype.hasOwnProperty.call(fb,f.k) ? fb[f.k] : ((data&&data[f.k])||""),
-    }));
+    /* 2026-11-15: 학생 사건 설정 화면처럼 "사건 개요" 같은 묶음 머리말 아래에 항목을 놓는다 */
+    const n=eventPagesInData(data);
+    const secOf={}, baseLabel={};
+    EVENT_SECTIONS.forEach((s,si)=>s.fields.forEach(f=>{ secOf[f.k]=si; baseLabel[f.k]=f.label; }));
+    return eventFieldsFor(n).map(f=>{
+      const si=secOf[f.fk];
+      return {
+        id:f.k, label:baseLabel[f.fk]||f.label,
+        group: si!=null ? {id:`ev${f.page}:${si}`, name:(n>1?`사건 ${f.page+1} · `:"")+EVENT_SECTIONS[si].title} : null,
+        before:(data&&data[f.k])||"",
+        after: Object.prototype.hasOwnProperty.call(fb,f.k) ? fb[f.k] : ((data&&data[f.k])||""),
+      };
+    });
   }
   if(type==="character"){
     const chars=Array.isArray(data)?data:[];
     const fbArr=Array.isArray(feedback)?feedback:[];
+    /* 2026-11-15: 교수가 캐릭터를 새로 넣거나(added) 지운(deleted) 첨삭 — id로 짝을 찾고 첨삭 순서를 따른다 */
+    if(fbArr.some(f=>f && (f.added || f.deleted))){
+      const seq=[], used=new Set();
+      fbArr.forEach(f=>{
+        if(!f) return;
+        if(f.added){ seq.push({f}); return; }
+        const ci=chars.findIndex(c=>c && c.id===f.id);
+        if(ci>=0 && !used.has(ci)){ used.add(ci); seq.push({ci, f}); }
+      });
+      chars.forEach((c,ci)=>{
+        if(used.has(ci)) return;
+        let at=0; seq.forEach((s,k)=>{ if(s.ci!=null && s.ci<ci) at=k+1; });
+        seq.splice(at, 0, {ci, f:null});
+      });
+      return seq.map(s=>{
+        if(s.f && s.f.added){
+          const t=typeof s.f.text==="string" ? s.f.text : "";
+          return { id:s.f.id, label:(parseCharFeedbackText(t).name||"").trim()||"새 캐릭터", kind:"character", added:true, before:"", after:t };
+        }
+        const ch=chars[s.ci], f=s.f;
+        return { id:ch.id||("i"+s.ci), label:ch.name||`캐릭터 ${s.ci+1}`, kind:"character", before:ch.text||"",
+                 deleted:!!(f&&f.deleted), after: f&&f.deleted ? "" : (f&&typeof f.text==="string" ? f.text : (ch.text||"")) };
+      });
+    }
     return chars.map((ch,i)=>{
       const fbItem=fbArr[i];
       return { id:ch.id||("i"+i), label:ch.name||`캐릭터 ${i+1}`, kind:"character", before:ch.text||"", after: fbItem&&typeof fbItem.text==="string" ? fbItem.text : (ch.text||"") };
@@ -12228,36 +12451,41 @@ function computePairMemoNumbering(memos, pairId){
    다시 그리고, 끝에 "일반 메모"(범위 없음) 개수만큼 *를 붙인다. */
 /* rawText의 [from,to) 구간을 el 안에 그린다 — 그 구간과 겹치는 메모는 <mark>로 강조하고,
    메모가 그 구간에서 끝나면 각주 번호(sup)를 붙인다. (줄 단위로 나눠 그려도 쓸 수 있도록 구간 방식) */
+/* 2026-11-15: 메모 범위와 첨삭 비교 범위(diff:true — hunkRanges)가 겹쳐도 함께 그린다.
+   구간을 경계마다 잘라 [메모 <mark>] 안에 [바뀐 곳 <span class="dh">]을 넣는다. 글자가 없는 비교 범위(start===end)는
+   그 자리에 세로 표시(dh-mark, 글자 위치 계산에서 빠짐)를 남긴다. */
 function appendMemoRange(el, rawText, from, to, ranged, numMap, colorMap, cls){
-  let cur=from;
-  ranged.forEach(m=>{
-    const s=Math.min(Math.max(m.start,from),to), en=Math.min(Math.max(m.end,from),to);
-    if(en<=cur) return;
-    const ss=Math.max(cur,s);
-    if(ss>cur) el.appendChild(document.createTextNode(rawText.slice(cur,ss)));
-    if(m.diff){
-      /* 첨삭 비교용 가짜 범위(diffRemovedRanges) — 메모가 아니라 각주 번호 없이 붉은 바탕만 */
-      if(en>ss){ const sp=document.createElement("span"); sp.className="diff-bg"; sp.textContent=rawText.slice(ss,en); el.appendChild(sp); }
-      cur=Math.max(cur,en); return;
-    }
-    if(en>ss){
-      const mark=document.createElement("mark"); mark.className="memo-hl "+cls(m.id); mark.dataset.memoId=m.id;
-      mark.textContent=rawText.slice(ss,en);
-      el.appendChild(mark);
-    }
-    if(m.end<=to){
-      const sup=document.createElement("sup"); sup.className="memo-fn-num "+cls(m.id); sup.dataset.memoSynthetic="1";
-      sup.textContent=String(numMap.get(m.id)||"");
+  const memos=[], diffs=[];
+  ranged.forEach(m=>{ if(m.diff) diffs.push(m); else memos.push(m); });
+  const cuts=new Set([from,to]);
+  const add=v=>{ if(v>from && v<to) cuts.add(v); };
+  memos.forEach(m=>{ add(m.start); add(m.end); });
+  diffs.forEach(d=>{ add(d.start); add(d.end); });
+  const pts=[...cuts].sort((a,b)=>a-b);
+  const atEnd = to>=(rawText||"").length;
+  const markersAt=x=>diffs.forEach(d=>{ if(d.start===x && d.end===x) el.appendChild(diffMarkEl(d)); });
+  for(let i=0;i<pts.length-1;i++){
+    const x=pts[i], y=pts[i+1];
+    markersAt(x);
+    const m=memos.find(mm=>mm.start<=x && mm.end>=y);
+    const d=diffs.find(dd=>dd.end>dd.start && dd.start<=x && dd.end>=y);
+    let node=document.createTextNode(rawText.slice(x,y));
+    if(d){ const sp=diffSpanEl(d); sp.appendChild(node); node=sp; }
+    if(m){ const mark=document.createElement("mark"); mark.className="memo-hl "+cls(m.id); mark.dataset.memoId=m.id; mark.appendChild(node); node=mark; }
+    el.appendChild(node);
+    memos.forEach(mm=>{
+      if(mm.end!==y) return;
+      const sup=document.createElement("sup"); sup.className="memo-fn-num "+cls(mm.id); sup.dataset.memoSynthetic="1";
+      sup.textContent=String(numMap.get(mm.id)||"");
       el.appendChild(sup);
-    }
-    cur=Math.max(cur,en);
-  });
-  if(cur<to) el.appendChild(document.createTextNode(rawText.slice(cur,to)));
+    });
+  }
+  if(atEnd || rawText[to]==="\n") markersAt(to);   /* 줄바꿈 자리는 앞 줄 끝에 */
 }
 function renderMemoTargetText(el, rawText, mine, numMap, colorMap){
   const cls=(id)=>(colorMap&&colorMap.get(id))||"memo-c0";
   el.textContent="";
-  const ranged=mine.filter(m=>m.start!=null && m.end!=null && m.end>m.start).sort((a,b)=>a.start-b.start);
+  const ranged=mine.filter(m=>m.start!=null && m.end!=null && (m.diff ? m.end>=m.start : m.end>m.start)).sort((a,b)=>a.start-b.start);
   const general=mine.filter(m=>m.start==null);
   if(rawText && rawText.trim()){
     appendMemoRange(el, rawText, 0, rawText.length, ranged, numMap, colorMap, cls);
@@ -12301,7 +12529,7 @@ function writeItemSegments(items, rawText){
 function renderStyledBeforeText(el, kind, rawText, mine, numMap, colorMap, items){
   const cls=(id)=>(colorMap&&colorMap.get(id))||"memo-c0";
   el.textContent="";
-  const ranged=mine.filter(m=>m.start!=null && m.end!=null && m.end>m.start).sort((a,b)=>a.start-b.start);
+  const ranged=mine.filter(m=>m.start!=null && m.end!=null && (m.diff ? m.end>=m.start : m.end>m.start)).sort((a,b)=>a.start-b.start);
   const general=mine.filter(m=>m.start==null);
   const addGeneral=()=>general.forEach(m=>{
     const sup=document.createElement("sup"); sup.className="memo-star "+cls(m.id); sup.dataset.memoSynthetic="1"; sup.textContent="*";
@@ -12401,79 +12629,6 @@ function writeAfterRows(p){
 function writeRowsToText(rows){
   return rows.map(r=> r.type==="line" ? `${(r.char||"(미지정)")}: ${r.text}` : r.text).join("\n");
 }
-/* 칸별 입력칸을 cur 안에 그린다. 고칠 때마다 p.after를 곧바로 맞춰두므로(저장 시 DOM을 다시 훑지
-   않는다) 저장 쪽에서는 이 블록을 건너뛴다(.review-pair[data-itemized]). */
-function renderWriteAfterItems(cur, p, onChange){
-  const rows=writeAfterRows(p);
-  /* 아무것도 없는 칸(교수가 새로 넣은 칸 등)은 빈 지문 한 줄로 시작 — 이미 [""]로 나오므로 그대로 둔다 */
-  const box=document.createElement("div"); box.className="rv-after-items";
-  const sync=()=>{ p.after=writeRowsToText(rows); if(onChange) onChange(); };
-  /* 2026-11-12: 교수가 지문/대사 줄을 직접 넣고(아래 점선 버튼) 지울(×) 수 있다 — 학생 글쓰기 화면과 같은 방식 */
-  /* 2026-11-12: 줄 손잡이로 끌어 순서 바꾸기 — 같은 칸 안은 물론 다른 칸으로도(rvRowDrag가 출발 칸을 기억).
-     첨삭이 열린 칸의 줄 위에 놓으면 그 자리로, 칸의 다른 곳(닫힌 칸 포함)에 놓으면 그 칸 맨 끝으로 간다
-     (칸 쪽 처리는 renderReviewPairs). */
-  const draw=(focusIdx)=>{
-    box.innerHTML="";
-    rows.forEach((r,idx)=>{
-      const row=document.createElement("div"); row.className="rv-after-item"+(r.type==="line"?" is-line":" is-text");
-      const hd=document.createElement("span"); hd.className="sub-handle"; hd.innerHTML=ICONS.grip; hd.title="끌어서 줄 이동 (다른 칸으로도)";
-      hd.addEventListener("mousedown", ()=>{ row.draggable=true; });
-      hd.addEventListener("mouseup", ()=>{ row.draggable=false; });
-      row.appendChild(hd);
-      row.addEventListener("dragstart", e=>{
-        e.stopPropagation(); rvRowDrag={p, rows, idx, sync, draw}; e.dataTransfer.effectAllowed="move";
-        try{ e.dataTransfer.setData("text/plain", "rv-row"); }catch(_){}
-        setTimeout(()=>row.classList.add("dragging"),0);
-      });
-      row.addEventListener("dragend", e=>{ e.stopPropagation(); row.draggable=false; row.classList.remove("dragging"); rvRowDrag=null; rvClearDropMarks(); });
-      const isSelf=()=>rvRowDrag && rvRowDrag.p===p && rvRowDrag.idx===idx;
-      row.addEventListener("dragover", e=>{
-        if(!rvRowDrag || isSelf()) return;
-        e.preventDefault(); e.stopPropagation();
-        const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
-        row.classList.toggle("rv-drop-after", after); row.classList.toggle("rv-drop-before", !after);
-      });
-      row.addEventListener("dragleave", e=>{ if(!row.contains(e.relatedTarget)) row.classList.remove("rv-drop-before","rv-drop-after"); });
-      row.addEventListener("drop", e=>{
-        if(!rvRowDrag || isSelf()) return;
-        e.preventDefault(); e.stopPropagation();
-        const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
-        const src=rvRowDrag; rvRowDrag=null; rvClearDropMarks();
-        const [m]=src.rows.splice(src.idx,1);
-        let at=idx+(after?1:0);
-        if(src.p===p && src.idx<idx) at--;     /* 같은 칸 안에서 아래로 옮길 때 */
-        rows.splice(at,0,m);
-        if(src.p!==p){ src.sync(); src.draw(); }
-        sync(); draw();
-      });
-      let first=null;
-      if(r.type==="line"){
-        const ci=document.createElement("input"); ci.type="text"; ci.className="rv-after-char"; ci.value=r.char==="(미지정)"?"":r.char; ci.placeholder="캐릭터";
-        ci.setAttribute("list","rvCharList");
-        ci.oninput=()=>{ r.char=ci.value.trim()||"(미지정)"; sync(); };
-        row.appendChild(ci); first=ci;
-      }
-      const ta=document.createElement("textarea"); ta.className="rv-after-text"; ta.value=r.text; ta.rows=1;
-      ta.placeholder = r.type==="line" ? "대사" : "지문";
-      ta.oninput=()=>{ r.text=ta.value; autoGrowTextarea(ta); sync(); };
-      row.appendChild(ta);
-      const del=document.createElement("button"); del.type="button"; del.className="sub-del rv-after-del"; del.title=(r.type==="line"?"대사":"지문")+" 줄 삭제";
-      del.innerHTML=ICONS.close;
-      del.onclick=()=>{ rows.splice(idx,1); sync(); draw(); };
-      row.appendChild(del);
-      box.appendChild(row);
-      requestAnimationFrame(()=>autoGrowTextarea(ta));
-      if(focusIdx===idx) requestAnimationFrame(()=>(first||ta).focus());
-    });
-    if(!rows.length){ const em=document.createElement("p"); em.className="sub-empty"; em.textContent="지문/대사가 없습니다. 아래 버튼으로 추가하세요."; box.appendChild(em); }
-  };
-  draw();
-  const addRow=document.createElement("div"); addRow.className="scene-dashed-row rv-after-add";
-  const mkAdd=(label,type)=>{ const b=document.createElement("button"); b.type="button"; b.className="scene-dashed-add"; b.innerHTML=ICONS.plus+" "+label;
-    b.onclick=()=>{ rows.push({type, char:type==="line"?"(미지정)":"", text:""}); sync(); draw(rows.length-1); }; addRow.appendChild(b); };
-  mkAdd("지문추가","text"); mkAdd("대사추가","line");
-  cur.append(box, addRow);
-}
 function renderBeforeBody(el, p, mine, numMap, colorMap){
   if(p.kind==="write" || p.kind==="character") renderStyledBeforeText(el, p.kind, p.before, mine, numMap, colorMap, p.items);
   else renderMemoTargetText(el, p.before, mine, numMap, colorMap);
@@ -12528,14 +12683,6 @@ function renderMemoCardsInto(container, mine, numMap, opts, colorMap){
   container.appendChild(list);
 }
 
-/* 첨삭 화면 공통 렌더러 — editable=true(교수: 원본 블록 우클릭으로 첨삭 분리·메모 추가, textarea로 입력)
-   editable=false(학생: 읽기전용, 원본과 다른 블록만 자동으로 위/아래 분리해서 보여줌)
-   memos: 이 제출물(버전)에 달린 메모 배열(모든 pair 공통, pairId로 구분됨) — 없으면 [].
-   memoOpts: {canAdd, canDelete, canEdit, onDelete(memo), onEdit(memo)} — canAdd면 우클릭 메뉴에 [메모]가
-   추가되고, canDelete면 메모 카드에 삭제 버튼이 붙는다(눌리면 로컬에서 지우고 onDelete로 알려줌 — 교수
-   초안 편집 중엔 저장 전이라 onDelete 없이 로컬 배열만 바뀌고, 학생 화면에선 onDelete로 즉시 서버에
-   반영). canEdit이면 메모 카드 텍스트를 클릭해 바로 수정할 수 있다(textarea로 바뀌고 Enter/포커스
-   해제 시 저장, Esc면 취소 — onEdit은 교수 화면에서 저장 전 로컬 배열만 바꾸는 용도로 지금은 안 씀). */
 /* ===== 2026-11-12: 교수 첨삭 화면 — 글쓰기 칸 끌어 옮기기 =====
    옮긴 칸은 moved=true가 되고 놓인 자리의 단계/섹션 블럭(group/subgroup)을 따라간다.
    target이 없으면(섹션 블럭 빈 자리에 놓음) 그 묶음의 마지막 칸 뒤로 간다. */
@@ -12558,369 +12705,808 @@ function moveReviewPair(pairs, dragId, target, after, group, subgroup){
   pairs.splice(at,0,d);
   d.group=group||null; d.subgroup=subgroup||null; d.moved=true;
 }
-function renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts){
-  memos = memos || [];
-  memoOpts = memoOpts || {};
-  container.innerHTML="";
-  if(!pairs.length){ container.innerHTML=`<p class="hint">내용이 없습니다.</p>`; return; }
-  const rerender=()=>renderReviewPairs(container, pairs, editable, splitIds, memos, memoOpts);
-  const onDeleteMemo=(m)=>{
-    const idx=memos.indexOf(m); if(idx>-1) memos.splice(idx,1);
-    if(memoOpts.onDelete) memoOpts.onDelete(m);
-    rerender();
+/* ===== 2026-11-15: 첨삭 화면 좌(학생 원본) / 우(피드백) 비교 — 교수·학생 공통 =====
+   예전에는 첨삭한 블록만 "이전 버전(위) / 첨삭(아래)"으로 나눠 보여줬다. 이제는 두 화면 모두
+   왼쪽 열에 학생 원본, 오른쪽 열에 피드백(교수 화면에서는 입력칸)을 학생 입력 화면과 같은 모양으로 나란히 둔다.
+   - 바뀐 곳은 양쪽에 같은 색(dc0~dc5)으로 칠한다: 왼쪽은 빠지거나 바뀐 글자(취소선), 오른쪽은 새로 쓴 글자.
+     한쪽에만 글자가 있는 변경(순수 추가·삭제)은 반대쪽 그 자리에 같은 색의 세로 표시(dh-mark)를 남긴다.
+   - 색칠한 곳에 마우스를 올리면 반대쪽 짝도 진하게 보인다(rvHoverSet).
+   - 교수 입력칸은 textarea 뒤에 같은 글자를 투명하게 깐 배경층(hlTextarea)으로 색을 보여준다 — 입력하면서도 색이 바로 바뀐다.
+   - 두 열의 블록 높이는 rvAlign이 맞춘다(data-align 키가 같은 요소끼리). 맨 위 머리(head)는 아래 끝을 맞춘다.
+   ctx = makeReviewCtx(...) 하나를 왼쪽·오른쪽 열이 함께 쓴다(pairs 배열을 공유). */
+const DIFF_COLOR_COUNT=6;
+const RV_HUNK_CACHE=new WeakMap();
+/* 단어 단위 비교 → 바뀐 덩어리 [{bs,be,as,ae,c}] (b=원본 글자 위치, a=피드백 글자 위치, c=색 번호) */
+function diffHunks(before, after){
+  before=before||""; after=after||"";
+  if(before===after) return [];
+  const a=before.split(/(\s+)/).filter(t=>t!==""), b=after.split(/(\s+)/).filter(t=>t!=="");
+  const n=a.length, m=b.length;
+  const raw=[];
+  if(n*m>3000000){ raw.push({bs:0,be:before.length,as:0,ae:after.length}); }
+  else{
+    const W=m+1, dp=new Uint32Array((n+1)*W);
+    for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) dp[i*W+j]= a[i]===b[j] ? dp[(i+1)*W+j+1]+1 : Math.max(dp[(i+1)*W+j], dp[i*W+j+1]);
+    let i=0, j=0, pa=0, pb=0, cur=null;
+    const open=()=>{ if(!cur) cur={bs:pa,be:pa,as:pb,ae:pb}; };
+    const close=()=>{ if(cur){ raw.push(cur); cur=null; } };
+    while(i<n || j<m){
+      if(i<n && j<m && a[i]===b[j]){ close(); pa+=a[i].length; pb+=b[j].length; i++; j++; }
+      else if(j>=m || (i<n && dp[(i+1)*W+j]>=dp[i*W+j+1])){ open(); pa+=a[i].length; cur.be=pa; i++; }
+      else{ open(); pb+=b[j].length; cur.ae=pb; j++; }
+    }
+    close();
+  }
+  /* 앞뒤 공백은 칠하지 않고, 공백만 바뀐 덩어리는 버린다 */
+  const trim=(s,st,en)=>{ while(st<en && /\s/.test(s[st])) st++; while(en>st && /\s/.test(s[en-1])) en--; return [st,en]; };
+  const out=[];
+  raw.forEach(h=>{
+    let [bs,be]=trim(before,h.bs,h.be), [as,ae]=trim(after,h.as,h.ae);
+    if(be<=bs && ae<=as) return;
+    if(be<bs) be=bs; if(ae<as) ae=as;
+    out.push({bs,be,as,ae,c:out.length%DIFF_COLOR_COUNT});
+  });
+  return out;
+}
+function pairHunks(p){
+  if(!p || p.placeholder || p.added || p.deleted) return [];
+  const c=RV_HUNK_CACHE.get(p);
+  if(c && c.b===p.before && c.a===p.after) return c.h;
+  const h=diffHunks(p.before, p.after);
+  RV_HUNK_CACHE.set(p, {b:p.before, a:p.after, h});
+  return h;
+}
+/* side "b" = 원본 쪽 범위(취소선), "a" = 피드백 쪽 범위 — appendMemoRange가 diff:true 범위로 받아 칠한다 */
+function hunkRanges(hunks, side){
+  return hunks.map((h,k)=> side==="b"
+    ? {start:h.bs, end:h.be, diff:true, c:h.c, hk:k, del:true}
+    : {start:h.as, end:h.ae, diff:true, c:h.c, hk:k});
+}
+function diffSpanEl(r){
+  const sp=document.createElement("span");
+  sp.className="dh dc"+((r.c||0)%DIFF_COLOR_COUNT)+(r.del?" dh-del":"");
+  if(r.hk!=null) sp.dataset.hk=r.hk;
+  return sp;
+}
+/* 글자가 없는 쪽에 남기는 세로 표시 — 메모 글자 위치 계산에서 빠지도록 data-memo-synthetic */
+function diffMarkEl(r){
+  const sp=document.createElement("span");
+  sp.className="dh-mark dc"+((r.c||0)%DIFF_COLOR_COUNT);
+  sp.dataset.memoSynthetic="1";
+  if(r.hk!=null) sp.dataset.hk=r.hk;
+  sp.title=r.del?"이 자리에 글이 새로 들어갔습니다":"이 자리의 글이 지워졌습니다";
+  return sp;
+}
+/* textarea 뒤에 같은 글자를 투명하게 깐 배경층을 두어 바뀐 곳을 색으로 보여준다(입력 중에도 유지).
+   getRanges()는 textarea 값 기준 [{start,end,c,hk}]. 돌려준 paint()를 값이 바뀔 때마다 부른다. */
+function hlTextarea(ta, getRanges){
+  const wrap=document.createElement("div"); wrap.className="hl-wrap";
+  const bd=document.createElement("div"); bd.className="hl-backdrop"; bd.setAttribute("aria-hidden","true");
+  wrap.append(bd, ta);
+  let styled=false;
+  const copy=()=>{
+    if(styled || !ta.isConnected) return;
+    const cs=getComputedStyle(ta);
+    ["fontFamily","fontSize","fontWeight","fontStyle","lineHeight","letterSpacing","wordSpacing","textIndent","textTransform",
+     "textAlign","tabSize","wordBreak","overflowWrap","paddingTop","paddingRight","paddingBottom","paddingLeft",
+     "borderTopWidth","borderRightWidth","borderBottomWidth","borderLeftWidth","borderTopLeftRadius","borderTopRightRadius",
+     "borderBottomLeftRadius","borderBottomRightRadius","boxSizing","backgroundColor"].forEach(k=>{ bd.style[k]=cs[k]; });
+    ["marginTop","marginRight","marginBottom","marginLeft"].forEach(k=>{ wrap.style[k]=cs[k]; });
+    ta.style.margin="0"; ta.style.background="transparent";
+    styled=true;
   };
-  let curGroup=null, curSub=null;
-  /* 2026-11-12: 글쓰기는 학생 글쓰기 화면과 똑같은 틀로 그린다 —
-     단계(.write-group: 번호 원 + 단계 이름) → 섹션 블럭(.write-blockgroup: 베이지 상자 "1화") →
-     칸(.scene-block: 번호 배지 + 배경/캐릭터) → 지문/대사 칸. 예전에는 단계를 띠 머리말, 섹션 블럭을
-     작은 알약, 칸을 "1. 제목" 라벨 상자로 그려서 학생이 쓰던 화면과 모양이 많이 달랐다. */
-  const isWrite=pairs.some(p=>p.kind==="write");
-  let wList=null, wParent=null, wSecNo=0, wBlockNo=0;
-  /* 칸이 아닌 빈 자리(섹션 블럭 상자 · 단계 목록)에 놓으면 그 묶음 끝으로 */
-  const dropZone=(el, group, subgroup)=>{
-    if(!editable) return;
-    el.addEventListener("dragover", e=>{ if(!rvDragPid) return; e.preventDefault(); el.classList.add("rv-zone-over"); });
-    el.addEventListener("dragleave", e=>{ if(!el.contains(e.relatedTarget)) el.classList.remove("rv-zone-over"); });
-    el.addEventListener("drop", e=>{
-      el.classList.remove("rv-zone-over");
-      if(!rvDragPid) return;
-      e.preventDefault(); e.stopPropagation();
-      moveReviewPair(pairs, rvDragPid, null, true, group, subgroup);
-      rvDragPid=null; rerender();
+  const paint=()=>{
+    copy();
+    const v=ta.value;
+    bd.textContent="";
+    const rs=(getRanges()||[]).slice().sort((x,y)=>x.start-y.start);
+    let cur=0;
+    rs.forEach(r=>{
+      const s=Math.max(cur, Math.min(r.start, v.length)), e=Math.min(r.end, v.length);
+      if(s>cur) bd.appendChild(document.createTextNode(v.slice(cur,s)));
+      if(e>s){ const sp=diffSpanEl(r); sp.textContent=v.slice(s,e); bd.appendChild(sp); cur=e; }
+      else{ if(r.end===r.start) bd.appendChild(diffMarkEl(r)); cur=Math.max(cur,s); }
     });
+    if(cur<v.length) bd.appendChild(document.createTextNode(v.slice(cur)));
+    bd.appendChild(document.createTextNode("​"));   /* 끝 줄바꿈도 높이를 갖도록 */
+    if(ta.isConnected) autoGrowTextarea(ta);
+    bd.scrollTop=ta.scrollTop;
   };
-  /* 대사 칸 캐릭터 입력의 자동완성 목록 — 이 제출물에 나온 캐릭터 이름들 */
-  if(isWrite && editable){
-    /* [칸 자르기] 토글 — 켜면 모든 칸이 "줄 + 자르는 선" 보기로 바뀐다 */
+  ta.addEventListener("scroll", ()=>{ bd.scrollTop=ta.scrollTop; });
+  requestAnimationFrame(paint);
+  return {wrap, paint};
+}
+/* 여러 줄(지문/대사, 캐릭터 항목)을 "머리말+내용"을 \n으로 이어붙인 텍스트의 바뀐 범위를 줄별 내용 기준으로 나눠준다.
+   headHit: 머리말(캐릭터 이름 등)이 바뀐 덩어리 — 그 입력칸에 색을 입힌다 */
+function rowLocalRanges(rows, headOf, hunks){
+  let pos=0; const out=[];
+  rows.forEach(r=>{
+    const head=headOf(r), ts=pos+head.length, te=ts+(r.text||"").length;
+    const rr=[]; let headHit=null;
+    hunks.forEach((h,k)=>{
+      const R={diff:true, c:h.c, hk:k};
+      if(h.ae>h.as){
+        const s=Math.max(h.as,ts), e=Math.min(h.ae,te);
+        if(e>s) rr.push(Object.assign({start:s-ts, end:e-ts}, R));
+        if(h.as<ts && h.ae>pos) headHit=headHit||R;
+      }else if(h.as>=pos && h.as<=te){
+        const at=Math.max(0, h.as-ts); rr.push(Object.assign({start:at, end:at}, R));
+      }
+    });
+    out.push({ranges:rr, headHit});
+    pos=te+1;
+  });
+  return out;
+}
+function writeRowHead(r){ return r.type==="line" ? `${(r.char||"(미지정)")}: ` : ""; }
+function setDiffInputTint(el, hit){
+  for(let i=0;i<DIFF_COLOR_COUNT;i++) el.classList.remove("dc"+i);
+  el.classList.toggle("dh-input", !!hit);
+  if(hit){ el.classList.add("dc"+hit.c); el.dataset.hk=hit.hk; } else delete el.dataset.hk;
+}
+
+/* 글쓰기 첨삭 입력 — 칸 안의 지문/대사를 줄마다 고친다(저장 형식은 "이름: 대사" 줄을 이어붙인 한 덩어리 그대로).
+   고칠 때마다 p.after를 바로 맞추고 onChange()로 알린다(왼쪽 원본의 색 표시를 다시 그림).
+   줄 손잡이로 같은 칸 안은 물론 다른 칸으로도 끌어 옮길 수 있다(rvRowDrag가 출발 칸을 기억). */
+function renderWriteAfterItems(cur, p, onChange){
+  const rows=writeAfterRows(p);
+  const box=document.createElement("div"); box.className="rv-after-items";
+  let painters=[], charEls=[], local=[];
+  const repaint=()=>{
+    local=rowLocalRanges(rows, writeRowHead, pairHunks(p));
+    painters.forEach(f=>f());
+    charEls.forEach((ci,i)=>{ if(ci) setDiffInputTint(ci, local[i] && local[i].headHit); });
+  };
+  const sync=()=>{ p.after=writeRowsToText(rows); repaint(); if(onChange) onChange(); };
+  const draw=(focusIdx)=>{
+    box.innerHTML=""; painters=[]; charEls=[];
+    local=rowLocalRanges(rows, writeRowHead, pairHunks(p));
+    rows.forEach((r,idx)=>{
+      const row=document.createElement("div"); row.className="rv-after-item"+(r.type==="line"?" is-line":" is-text");
+      const hd=document.createElement("span"); hd.className="sub-handle"; hd.innerHTML=ICONS.grip; hd.title="끌어서 줄 이동 (다른 칸으로도)";
+      hd.addEventListener("mousedown", ()=>{ row.draggable=true; });
+      hd.addEventListener("mouseup", ()=>{ row.draggable=false; });
+      row.appendChild(hd);
+      row.addEventListener("dragstart", e=>{
+        e.stopPropagation(); rvRowDrag={p, rows, idx, sync, draw}; e.dataTransfer.effectAllowed="move";
+        try{ e.dataTransfer.setData("text/plain", "rv-row"); }catch(_){}
+        setTimeout(()=>row.classList.add("dragging"),0);
+      });
+      row.addEventListener("dragend", e=>{ e.stopPropagation(); row.draggable=false; row.classList.remove("dragging"); rvRowDrag=null; rvClearDropMarks(); });
+      const isSelf=()=>rvRowDrag && rvRowDrag.p===p && rvRowDrag.idx===idx;
+      row.addEventListener("dragover", e=>{
+        if(!rvRowDrag || isSelf()) return;
+        e.preventDefault(); e.stopPropagation();
+        const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
+        row.classList.toggle("rv-drop-after", after); row.classList.toggle("rv-drop-before", !after);
+      });
+      row.addEventListener("dragleave", e=>{ if(!row.contains(e.relatedTarget)) row.classList.remove("rv-drop-before","rv-drop-after"); });
+      row.addEventListener("drop", e=>{
+        if(!rvRowDrag || isSelf()) return;
+        e.preventDefault(); e.stopPropagation();
+        const rc=row.getBoundingClientRect(), after=e.clientY>rc.top+rc.height/2;
+        const src=rvRowDrag; rvRowDrag=null; rvClearDropMarks();
+        const [m]=src.rows.splice(src.idx,1);
+        let at=idx+(after?1:0);
+        if(src.p===p && src.idx<idx) at--;     /* 같은 칸 안에서 아래로 옮길 때 */
+        rows.splice(at,0,m);
+        if(src.p!==p){ src.sync(); src.draw(); }
+        sync(); draw();
+      });
+      let first=null, ci=null;
+      if(r.type==="line"){
+        ci=document.createElement("input"); ci.type="text"; ci.className="rv-after-char"; ci.value=r.char==="(미지정)"?"":r.char; ci.placeholder="캐릭터";
+        ci.setAttribute("list","rvCharList");
+        ci.oninput=()=>{ r.char=ci.value.trim()||"(미지정)"; sync(); };
+        row.appendChild(ci); first=ci;
+        setDiffInputTint(ci, local[idx] && local[idx].headHit);
+      }
+      charEls.push(ci);
+      const ta=document.createElement("textarea"); ta.className="rv-after-text"; ta.value=r.text; ta.rows=1;
+      ta.placeholder = r.type==="line" ? "대사" : "지문";
+      const hl=hlTextarea(ta, ()=>(local[idx]&&local[idx].ranges)||[]);
+      painters.push(hl.paint);
+      ta.oninput=()=>{ r.text=ta.value; sync(); };
+      row.appendChild(hl.wrap);
+      const del=document.createElement("button"); del.type="button"; del.className="sub-del rv-after-del"; del.title=(r.type==="line"?"대사":"지문")+" 줄 삭제";
+      del.innerHTML=ICONS.close;
+      del.onclick=()=>{ rows.splice(idx,1); sync(); draw(); };
+      row.appendChild(del);
+      box.appendChild(row);
+      if(focusIdx===idx) requestAnimationFrame(()=>(first||ta).focus());
+    });
+    if(!rows.length){ const em=document.createElement("p"); em.className="sub-empty"; em.textContent="지문/대사가 없습니다. 아래 버튼으로 추가하세요."; box.appendChild(em); }
+  };
+  draw();
+  const addRow=document.createElement("div"); addRow.className="scene-dashed-row rv-after-add";
+  const mkAdd=(label,type)=>{ const b=document.createElement("button"); b.type="button"; b.className="scene-dashed-add"; b.innerHTML=ICONS.plus+" "+label;
+    b.onclick=()=>{ rows.push({type, char:type==="line"?"(미지정)":"", text:""}); sync(); draw(rows.length-1); }; addRow.appendChild(b); };
+  mkAdd("지문추가","text"); mkAdd("대사추가","line");
+  cur.append(box, addRow);
+}
+/* 캐릭터 첨삭 입력 — 학생 캐릭터 화면처럼 항목(라벨)마다 입력칸. 저장은 예전과 같은 "항목: 값" 줄 텍스트 */
+function renderCharAfterFields(box, p, onChange){
+  const labelOf={}; CHAR_FIELDS.forEach(f=>{ labelOf[f.k]=f.label; });
+  const pa=parseCharFeedbackText(p.after), pb=parseCharFeedbackText(p.before);
+  const keys=CHAR_FIELDS.map(f=>f.k).filter(k=>pa[k]!=null || pb[k]!=null);
+  if(!keys.length) keys.push("name");
+  const vals={}; keys.forEach(k=>{ vals[k]=pa[k]!=null?pa[k]:""; });
+  const present=()=>CHAR_FIELDS.filter(f=>keys.includes(f.k) && (vals[f.k]||"").trim()).map(f=>f.k);
+  let byKey={}, tints={};
+  const recompute=()=>{
+    byKey={}; tints={};
+    if(p.after===p.before && !p.added) return;
+    const pk=present();
+    const lr=rowLocalRanges(pk.map(k=>({k, text:vals[k]})), r=>labelOf[r.k]+": ", pairHunks(p));
+    pk.forEach((k,i)=>{ byKey[k]=lr[i].ranges; tints[k]=lr[i].headHit; });
+  };
+  const painters={};
+  const draw=(focusKey)=>{
+    box.innerHTML="";
+    recompute();
+    CHAR_FIELDS.filter(f=>keys.includes(f.k)).forEach(f=>{
+      const row=document.createElement("div"); row.className="rv-field-edit";
+      const lb=document.createElement("span"); lb.className="rv-field-label"; lb.textContent=f.label;
+      setDiffInputTint(lb, tints[f.k]);
+      const ta=document.createElement("textarea"); ta.className="rv-char-ta"; ta.rows=1; ta.value=vals[f.k]||""; ta.placeholder="(비어 있음)";
+      const hl=hlTextarea(ta, ()=>byKey[f.k]||[]);
+      painters[f.k]=hl.paint;
+      ta.oninput=()=>{
+        vals[f.k]=ta.value;
+        p.after=present().map(k=>`${labelOf[k]}: ${vals[k]}`).join("\n");
+        recompute();
+        Object.values(painters).forEach(fn=>fn());
+        if(onChange) onChange(vals);
+      };
+      row.append(lb, hl.wrap);
+      box.appendChild(row);
+      if(focusKey===f.k) requestAnimationFrame(()=>ta.focus());
+    });
+    const rest=CHAR_FIELDS.filter(f=>!keys.includes(f.k));
+    if(rest.length){
+      const sel=document.createElement("select"); sel.className="rv-char-add";
+      sel.innerHTML=`<option value="">＋ 항목 추가…</option>`+rest.map(f=>`<option value="${esc(f.k)}">${esc(f.label)}</option>`).join("");
+      sel.onchange=()=>{ if(!sel.value) return; keys.push(sel.value); draw(sel.value); };
+      box.appendChild(sel);
+    }
+  };
+  draw();
+}
+
+/* ---- 두 열 높이 맞추기 ---- */
+function rvAlign(ctx){
+  const L=ctx.left, R=ctx.right;
+  const lAll=L&&L.isConnected ? [...L.querySelectorAll("[data-align]")] : [];
+  const rAll=R&&R.isConnected ? [...R.querySelectorAll("[data-align]")] : [];
+  lAll.concat(rAll).forEach(e=>{ e.style.minHeight=""; });
+  if(!lAll.length || !rAll.length) return;
+  const lr=L.getBoundingClientRect(), rr=R.getBoundingClientRect();
+  if(rr.left < lr.right-4) return;            /* 좁은 화면에서 위아래로 쌓였을 때는 맞추지 않는다 */
+  const rmap=new Map(); rAll.forEach(e=>rmap.set(e.dataset.align, e));
+  const lh=L.querySelector('[data-align="head"]'), rh=rmap.get("head");
+  if(lh && rh){
+    const a=lh.getBoundingClientRect().bottom, b=rh.getBoundingClientRect().bottom;
+    if(a<b-0.5) lh.style.minHeight=(lh.getBoundingClientRect().height+(b-a))+"px";
+    else if(b<a-0.5) rh.style.minHeight=(rh.getBoundingClientRect().height+(a-b))+"px";
+  }
+  const jobs=[];
+  lAll.forEach(e=>{
+    const k=e.dataset.align; if(k==="head") return;
+    const o=rmap.get(k); if(!o) return;
+    jobs.push([e, o, e.getBoundingClientRect().height, o.getBoundingClientRect().height]);
+  });
+  jobs.forEach(([e,o,h1,h2])=>{ if(h1<h2-0.5) e.style.minHeight=h2+"px"; else if(h2<h1-0.5) o.style.minHeight=h1+"px"; });
+}
+function rvAlignSoon(ctx){
+  if(ctx._raf) return;
+  ctx._raf=requestAnimationFrame(()=>{ ctx._raf=0; rvAlign(ctx); });
+}
+function rvObserve(ctx){
+  if(typeof ResizeObserver==="undefined") return;
+  if(!ctx._ro) ctx._ro=new ResizeObserver(()=>rvAlignSoon(ctx));
+  ctx._ro.disconnect();
+  [ctx.left, ctx.right].forEach(el=>{ if(el && el.isConnected) ctx._ro.observe(el); });
+}
+function rvHoverSet(root, t){
+  root.querySelectorAll(".hk-on").forEach(x=>x.classList.remove("hk-on"));
+  if(!t) return;
+  const cell=t.closest("[data-pid]"); if(!cell || t.dataset.hk==null) return;
+  const sel=`[data-pid="${CSS.escape(cell.dataset.pid)}"] [data-hk="${t.dataset.hk}"]`;
+  root.querySelectorAll(sel).forEach(x=>x.classList.add("hk-on"));
+}
+function rvWatch(ctx, root){
+  rvObserve(ctx);
+  root.addEventListener("input", ()=>rvAlignSoon(ctx));
+  root.addEventListener("mouseover", e=>{ rvHoverSet(root, e.target.closest ? e.target.closest("[data-hk]") : null); });
+  root.addEventListener("mouseleave", ()=>rvHoverSet(root, null));
+  rvAlignSoon(ctx);
+  setTimeout(()=>rvAlignSoon(ctx), 300);   /* 글꼴·그림이 늦게 잡히는 경우 */
+}
+
+/* o: {type, pairs, editable, memos, memoOpts} */
+function makeReviewCtx(o){
+  const ctx={type:o.type, pairs:o.pairs, editable:!!o.editable, memos:o.memos||[], memoOpts:o.memoOpts||{},
+             left:null, right:null, headRender:null, nums:new Map()};
+  ctx.rerender=()=>{
+    if(ctx.left && ctx.left.isConnected) renderReviewSide(ctx.left, "orig", ctx);
+    if(ctx.right && ctx.right.isConnected) renderReviewSide(ctx.right, "fb", ctx);
+    rvObserve(ctx); rvAlignSoon(ctx);
+    setTimeout(()=>rvAlignSoon(ctx), 150);   /* 입력칸 높이가 다음 프레임에 잡히는 경우 */
+  };
+  ctx.refreshOrig=(p)=>{
+    if(!ctx.left || !ctx.left.isConnected) return;
+    const old=ctx.left.querySelector(`[data-align="p:${CSS.escape(String(p.id))}"]`);
+    if(old) old.replaceWith(buildOrigCell(p, ctx, ctx.nums.get(p.id)));
+    rvAlignSoon(ctx);
+  };
+  ctx.onEdit=(p)=>ctx.refreshOrig(p);
+  ctx.deleteMemo=(m)=>{
+    const i=ctx.memos.indexOf(m); if(i>-1) ctx.memos.splice(i,1);
+    if(ctx.memoOpts.onDelete) ctx.memoOpts.onDelete(m);
+    const p=ctx.pairs.find(x=>x.id===m.pairId); if(p) ctx.refreshOrig(p);
+  };
+  /* 교수가 넣은 블록을 빼거나(added) 학생 블록을 지움 표시(deleted). 빈 플롯 섹션에는 자리표시를 되돌려 둔다 */
+  ctx.removePair=(p)=>{
+    const pairs=ctx.pairs;
+    if(p.added){
+      const at=pairs.indexOf(p); if(at<0) return;
+      pairs.splice(at,1);
+      for(let k=ctx.memos.length-1;k>=0;k--) if(ctx.memos[k].pairId===p.id) ctx.memos.splice(k,1);
+      if(ctx.type==="plot" && p.group && !pairs.some(x=>x.group && x.group.id===p.group.id))
+        pairs.splice(at,0,{id:"ph::"+p.group.id, placeholder:true, group:p.group, kind:"plotIdea", label:"", before:"", after:""});
+    }else p.deleted=true;
+    ctx.rerender();
+  };
+  return ctx;
+}
+
+function rvScrollFocus(ctx, pid){
+  requestAnimationFrame(()=>{
+    const el=ctx.right && ctx.right.querySelector(`[data-pid="${CSS.escape(String(pid))}"] textarea, [data-pid="${CSS.escape(String(pid))}"] input`);
+    if(el) el.focus();
+  });
+}
+/* 칸이 아닌 빈 자리(섹션 블럭 상자 · 단계 목록)에 칸을 놓으면 그 묶음 끝으로 */
+function rvDropZone(el, ctx, group, subgroup){
+  el.addEventListener("dragover", e=>{ if(!rvDragPid) return; e.preventDefault(); el.classList.add("rv-zone-over"); });
+  el.addEventListener("dragleave", e=>{ if(!el.contains(e.relatedTarget)) el.classList.remove("rv-zone-over"); });
+  el.addEventListener("drop", e=>{
+    el.classList.remove("rv-zone-over");
+    if(!rvDragPid) return;
+    e.preventDefault(); e.stopPropagation();
+    moveReviewPair(ctx.pairs, rvDragPid, null, true, group, subgroup);
+    rvDragPid=null; ctx.rerender();
+  });
+}
+
+/* 한 열(원본 "orig" / 피드백 "fb")을 그린다 — 묶음(단계·섹션 블럭·플롯 섹션) 구조는 두 열이 똑같다 */
+function renderReviewSide(col, side, ctx){
+  const isFb=side==="fb", can=isFb && ctx.editable, pairs=ctx.pairs;
+  col.innerHTML="";
+  col.className="rv-col "+(isFb?"rv-col-fb":"rv-col-orig");
+  const head=document.createElement("div"); head.className="rv-col-head"; head.dataset.align="head";
+  if(ctx.headRender) ctx.headRender(head, side);
+  col.appendChild(head);
+  const isWrite=ctx.type==="write";
+  if(isWrite && can){
+    /* [칸 자르기·합치기] 토글 — 켜면 모든 칸이 "줄 + 자르는 선" 보기로 바뀐다 */
     const bar=document.createElement("div"); bar.className="rv-tool-bar";
     const cutBtn=document.createElement("button"); cutBtn.type="button";
     cutBtn.className="btn ghost sm icon-btn rv-cut-toggle"+(rvCutMode?" wt-selecting":"");
     cutBtn.innerHTML=ICONS.cut+(rvCutMode?" 자르기·합치기 끝내기":" 칸 자르기·합치기");
     cutBtn.title="켜고 칸 안의 줄과 줄 사이를 누르면 칸이 둘로 나뉘고, 칸 머리의 [합치기]로 위 칸과 하나로 합칩니다";
-    cutBtn.onclick=()=>{ rvCutMode=!rvCutMode; rerender(); };
+    cutBtn.onclick=()=>{ rvCutMode=!rvCutMode; ctx.rerender(); };
     bar.appendChild(cutBtn);
     if(rvCutMode){ const h=document.createElement("span"); h.className="hint"; h.textContent="줄 사이 가위 선 → 그 아래 줄들을 새 칸으로 / 칸 머리 [합치기] → 위 칸에 붙이기"; bar.appendChild(h); }
-    container.appendChild(bar);
+    head.appendChild(bar);
     const names=new Set();
     pairs.forEach(p=>{ (p.items||[]).forEach(it=>{ if(it && it.type==="line" && it.char) names.add(it.char); });
       ((p.meta&&p.meta.characters)||[]).forEach(n=>n&&names.add(n)); });
     const dl=document.createElement("datalist"); dl.id="rvCharList";
-    names.forEach(n=>{ const o=document.createElement("option"); o.value=n; dl.appendChild(o); });
-    container.appendChild(dl);
+    names.forEach(n=>{ const op=document.createElement("option"); op.value=n; dl.appendChild(op); });
+    col.appendChild(dl);
   }
+  if(!pairs.length){ const em=document.createElement("p"); em.className="hint"; em.dataset.align="empty"; em.textContent="내용이 없습니다."; col.appendChild(em); }
+  const nums=new Map(); let no=0;
+  pairs.forEach(p=>{ if(p.kind==="write" && !p.deleted) nums.set(p.id, ++no); });
+  ctx.nums=nums;
+  let started=false, curGroup=null, curSub=null, wList=null, wParent=null, gNo=0, sNo=0, secNo=0;
   pairs.forEach(p=>{
     if(isWrite){
       const gid=p.group?p.group.id:null, sid=p.subgroup?p.subgroup.id:null;
-      if(!wList || gid!==curGroup){
-        curGroup=gid; curSub=null;
+      if(!started || gid!==curGroup){
+        started=true; curGroup=gid; curSub=null;
         const g=document.createElement("div"); g.className="write-group rv-write-group";
         if(gid){
-          const dv=document.createElement("div"); dv.className="write-divider";
-          const num=document.createElement("span"); num.className="wd-num"; num.textContent=String(++wSecNo);
+          const dv=document.createElement("div"); dv.className="write-divider"; dv.dataset.align="g"+(++gNo);
+          const num=document.createElement("span"); num.className="wd-num"; num.textContent=String(++secNo);
           const nm=document.createElement("span"); nm.className="wd-name"; nm.textContent=p.group.name||"";
           dv.append(num, nm); g.appendChild(dv);
         }
         wList=document.createElement("div"); wList.className="write-blocklist";
-        g.appendChild(wList); container.appendChild(g);
-        dropZone(g, p.group||null, null);
+        g.appendChild(wList); col.appendChild(g);
+        if(can) rvDropZone(g, ctx, p.group||null, null);
         wParent=wList;
       }
       if(sid!==curSub){
         curSub=sid;
         if(sid){
           const bg=document.createElement("div"); bg.className="write-blockgroup";
-          const hd=document.createElement("div"); hd.className="wg-head";
+          const hd=document.createElement("div"); hd.className="wg-head"; hd.dataset.align="s"+(++sNo);
           const tt=document.createElement("span"); tt.className="wg-title"; tt.textContent=p.subgroup.name||"그룹";
           hd.appendChild(tt);
           const body=document.createElement("div"); body.className="wg-body";
           bg.append(hd, body); wList.appendChild(bg);
-          dropZone(bg, p.group||null, p.subgroup);
+          if(can) rvDropZone(bg, ctx, p.group||null, p.subgroup);
           wParent=body;
         }else wParent=wList;
       }
-    }else
-    /* 원본 화면과 같은 묶음 구조를 보여주기 위한 머리말
-       (플롯: 섹션 / 글쓰기: 플롯 섹션 + 그 안의 섹션 블럭(그룹)) */
-    if(p.group && p.group.id!==curGroup){
-      curGroup=p.group.id; curSub=null;
-      const gh=document.createElement("div"); gh.className="review-group-head";
-      gh.textContent=p.group.name||"";
-      container.appendChild(gh);
-    }else if(!p.group){ curGroup=null; curSub=null; }
-    const subId=p.subgroup?p.subgroup.id:null;
-    if(subId!==curSub){
-      curSub=subId;
-      if(subId){
-        const sh=document.createElement("div"); sh.className="review-subgroup-head";
-        sh.textContent=p.subgroup.name||"그룹";
-        container.appendChild(sh);
-      }
-    }
-    const changed=p.after!==p.before;
-    /* 2026-11-12: 교수가 추가한 칸은 늘 첨삭 입력(이전 버전 없음), 지운 칸은 원본만 흐리게 */
-    const split = p.deleted ? false : p.added ? true : (editable ? splitIds.has(p.id) : changed);
-    const {mine, numMap, colorMap}=computePairMemoNumbering(memos, p.id);
-    const wrap=document.createElement("div"); wrap.className="review-pair"+(split?" split":"")+(p.kind?" kind-"+p.kind:""); wrap.dataset.id=p.id;
-    const isScene=isWrite && p.kind==="write";
-    if(isScene){
-      wrap.classList.add("scene-block","rv-scene");
-      if(p.added) wrap.classList.add("rv-added");
-      if(p.deleted) wrap.classList.add("rv-deleted");
-      if(p.group && p.group.id) wrap.style.borderLeftColor=getSectionColor(p.group.id);  /* 글쓰기 화면처럼 단계별 색 띠 */
-      const head=document.createElement("div"); head.className="scene-head";
-      /* 2026-11-12: 교수는 손잡이로 칸을 끌어 순서를 바꾸거나 다른 단계/섹션 블럭으로 옮길 수 있다 */
-      if(editable){
-        const handle=document.createElement("span"); handle.className="scene-handle"; handle.innerHTML=ICONS.grip; handle.title="끌어서 칸 이동";
-        handle.addEventListener("mousedown", ()=>{ wrap.draggable=true; });
-        handle.addEventListener("mouseup", ()=>{ wrap.draggable=false; });
-        head.appendChild(handle);
-        wrap.addEventListener("dragstart", e=>{
-          if(e.target!==wrap) return;           /* 안쪽 줄 끌기와 섞이지 않게 */
-          rvDragPid=p.id; e.dataTransfer.effectAllowed="move";
-          try{ e.dataTransfer.setData("text/plain", "rv-scene"); }catch(_){}
-          setTimeout(()=>wrap.classList.add("dragging"),0);
-        });
-        wrap.addEventListener("dragend", ()=>{ wrap.draggable=false; wrap.classList.remove("dragging"); rvDragPid=null;
-          container.querySelectorAll(".rv-drop-before,.rv-drop-after").forEach(el=>el.classList.remove("rv-drop-before","rv-drop-after")); });
-        /* 다른 칸에서 끌어온 지문/대사 줄 — 줄 위가 아닌 칸의 아무 곳에 놓으면 이 칸 맨 끝으로(닫혀 있으면 첨삭을 연다) */
-        wrap.addEventListener("dragover", e=>{
-          if(!rvRowDrag || p.deleted) return;
-          e.preventDefault(); e.stopPropagation();
-          rvClearDropMarks(); wrap.classList.add("rv-row-target");
-        });
-        wrap.addEventListener("drop", e=>{
-          if(!rvRowDrag || p.deleted) return;
-          e.preventDefault(); e.stopPropagation();
-          const src=rvRowDrag; rvRowDrag=null; rvClearDropMarks();
-          const [m]=src.rows.splice(src.idx,1);
-          if(src.p===p){ src.rows.push(m); src.sync(); src.draw(); return; }
-          src.sync();
-          const r=writeAfterRows(p).filter(x=>x.type==="line" || (x.text||"").trim());   /* 빈 지문 줄은 버림 */
-          r.push(m); p.after=writeRowsToText(r);
-          splitIds.add(p.id); rerender();
-        });
-        wrap.addEventListener("dragover", e=>{
-          if(!rvDragPid || rvDragPid===p.id) return;
-          e.preventDefault(); e.stopPropagation();
-          const r=wrap.getBoundingClientRect(), after=e.clientY>r.top+r.height/2;
-          wrap.classList.toggle("rv-drop-after", after); wrap.classList.toggle("rv-drop-before", !after);
-        });
-        wrap.addEventListener("dragleave", e=>{ if(!wrap.contains(e.relatedTarget)) wrap.classList.remove("rv-drop-before","rv-drop-after"); });
-        wrap.addEventListener("drop", e=>{
-          if(!rvDragPid || rvDragPid===p.id) return;
-          e.preventDefault(); e.stopPropagation();
-          const r=wrap.getBoundingClientRect();
-          moveReviewPair(pairs, rvDragPid, p, e.clientY>r.top+r.height/2, p.group, p.subgroup);
-          rvDragPid=null; rerender();
-        });
-      }
-      const num=document.createElement("span"); num.className="scene-num"; num.textContent=p.deleted?"–":String(++wBlockNo);
-      const sp=document.createElement("div"); sp.className="scene-title-spacer";
-      const meta=p.meta||{};
-      const mrow=document.createElement("div"); mrow.className="scene-meta-row";
-      [["배경",meta.backgrounds],["캐릭터",meta.characters]].forEach(([lb,list])=>{
-        if(!Array.isArray(list) || !list.length) return;
-        const col=document.createElement("div"); col.className="scene-meta-col";
-        const l=document.createElement("span"); l.className="scene-meta-label"; l.textContent=lb+": ";
-        const v=document.createElement("span"); v.className="scene-meta-item"; v.textContent=list.join(", ");
-        col.append(l, v); mrow.appendChild(col);
-      });
-      if(mrow.children.length) sp.appendChild(mrow);
-      head.append(num, sp);
-      const tagText = p.added ? (editable?"새 칸":"교수님이 추가") : p.deleted ? (editable?"삭제됨":"교수님이 삭제") : (split?"첨삭":"");
-      if(tagText){ const tag=document.createElement("span"); tag.className="rv-scene-tag"+(p.deleted?" is-del":""); tag.textContent=tagText; head.appendChild(tag); }
-      /* 교수: 칸마다 [첨삭]/[원본으로] · [+ 칸] · [삭제]/[되돌리기] — 예전엔 우클릭 메뉴로만 첨삭을 열 수 있었고
-         칸을 새로 넣거나 지울 방법이 없었다 */
-      if(editable){
-        const acts=document.createElement("div"); acts.className="rv-scene-acts";
-        const mk=(html,title,fn,cls)=>{ const b=document.createElement("button"); b.type="button"; b.className="rv-act"+(cls?" "+cls:""); b.innerHTML=html; b.title=title; b.onclick=e=>{ e.stopPropagation(); fn(); }; acts.appendChild(b); };
-        if(p.deleted){
-          mk(ICONS.refresh+" 되돌리기","지운 칸을 다시 살립니다",()=>{ p.deleted=false; p.after=p.before; splitIds.delete(p.id); rerender(); });
-        }else{
-          if(!p.added){
-            if(split) mk(ICONS.eraser+" 원본으로","첨삭 입력을 접고 원본 보기로(고친 내용은 남아 있음)",()=>{ splitIds.delete(p.id); rerender(); });
-            else mk(ICONS.edit+" 첨삭","이 칸의 지문/대사를 고칩니다",()=>{ splitIds.add(p.id); rerender(); });
-          }
-          /* [칸 자르기·합치기] 켜짐 — 같은 단계의 바로 위(지우지 않은) 칸과 합치기 */
-          if(rvCutMode){
-            let k=pairs.indexOf(p)-1; while(k>=0 && pairs[k].deleted) k--;
-            const prevP=k>=0 ? pairs[k] : null;
-            if(prevP && (prevP.group?prevP.group.id:null)===(p.group?p.group.id:null)){
-              mk(ICONS.group+" 합치기","위 칸과 합치기 — 이 칸의 지문/대사를 바로 위 칸 끝에 붙이고 이 칸은 없앱니다",()=>{
-                const keep=r=>r.type==="line" || (r.text||"").trim();
-                prevP.after=writeRowsToText(writeAfterRows(prevP).filter(keep).concat(writeAfterRows(p).filter(keep)));
-                if(!prevP.added && prevP.after!==prevP.before) splitIds.add(prevP.id);
-                if(p.added){
-                  pairs.splice(pairs.indexOf(p),1);
-                  for(let j=memos.length-1;j>=0;j--) if(memos[j].pairId===p.id) memos.splice(j,1);
-                }else p.deleted=true;
-                splitIds.delete(p.id); rerender();
-              }, "rv-merge-btn");
-            }
-          }
-          mk(ICONS.plus+" 칸","이 칸 아래에 새 칸을 넣습니다",()=>{
-            const np={ id:"fbw-"+uid(), label:"교수님이 추가한 칸", kind:"write", added:true,
-              group:p.group||null, subgroup:p.subgroup||null, before:"", after:"", items:null, meta:{backgrounds:[], characters:[]} };
-            pairs.splice(pairs.indexOf(p)+1, 0, np); splitIds.add(np.id); rerender();
-            const el=container.querySelector(`.review-pair[data-id="${np.id}"] textarea`); if(el) el.focus();
-          });
-          mk(ICONS.trash,"이 칸 삭제",()=>{
-            if(p.added){
-              if((p.after||"").trim() && !confirm("새로 넣은 이 칸을 지울까요? 쓴 내용도 함께 사라집니다.")) return;
-              pairs.splice(pairs.indexOf(p),1);
-              for(let k=memos.length-1;k>=0;k--) if(memos[k].pairId===p.id) memos.splice(k,1);
-            }else p.deleted=true;
-            splitIds.delete(p.id); rerender();
-          },"rv-act-del");
-        }
-        head.appendChild(acts);
-      }
-      wrap.appendChild(head);
-    }
-    let memoTargetEl;
-    const cutView = rvCutMode && editable && isScene && !p.deleted;
-    if(cutView){
-      /* 2026-11-12: [칸 자르기] 켜짐 — 지금 첨삭 내용(없으면 원본)의 지문/대사 줄을 보여주고, 줄과 줄 사이를
-         누르면 그 아래 줄들을 새 칸(교수가 추가한 칸)으로 떼어 바로 뒤에 넣는다 */
-      wrap.classList.add("rv-cutting");
-      const rowsC=writeAfterRows(p).filter(r=>r.type==="line" || (r.text||"").trim());
-      const list=document.createElement("div"); list.className="review-before-text rv-scene-items rv-cut-list";
-      rowsC.forEach((r,k)=>{
-        if(k>0){
-          const cut=document.createElement("button"); cut.type="button"; cut.className="rv-cut-line"; cut.title="여기서 칸을 둘로 자릅니다";
-          cut.innerHTML=`<span>${ICONS.cut} 여기서 자르기</span>`;
-          cut.onclick=()=>{
-            p.after=writeRowsToText(rowsC.slice(0,k));
-            const np={ id:"fbw-"+uid(), label:"교수님이 추가한 칸", kind:"write", added:true,
-              group:p.group||null, subgroup:p.subgroup||null, before:"", after:writeRowsToText(rowsC.slice(k)),
-              items:null, meta:{backgrounds:[], characters:[]} };
-            pairs.splice(pairs.indexOf(p)+1, 0, np);
-            if(!p.added && p.after!==p.before) splitIds.add(p.id);
-            splitIds.add(np.id);
-            rerender();
+    }else if(p.group && p.group.id!==curGroup){
+      curGroup=p.group.id;
+      const gh=document.createElement("div"); gh.className="review-group-head"; gh.dataset.align="g"+(++gNo);
+      if(ctx.type==="plot"){
+        gh.classList.add("rv-plot-head");
+        gh.style.borderLeftColor=getSectionColor(p.group.id);
+        const num=document.createElement("span"); num.className="plot-sec-num"; num.textContent=String(++secNo);
+        const nm=document.createElement("span"); nm.textContent=p.group.name||"";
+        gh.append(num, nm);
+        if(can){
+          const group=p.group;
+          const add=document.createElement("button"); add.type="button"; add.className="btn ghost sm rv-add-btn"; add.innerHTML=ICONS.plus+" 아이디어";
+          add.title="이 섹션 끝에 아이디어 카드를 새로 넣습니다";
+          add.onclick=()=>{
+            const np={id:group.id+"::fb-"+uid(), label:"교수님이 추가한 아이디어", group, kind:"plotIdea", added:true, before:"", after:""};
+            let last=-1; pairs.forEach((x,k)=>{ if(x.group && x.group.id===group.id) last=k; });
+            if(last>=0 && pairs[last].placeholder) pairs.splice(last,1,np); else pairs.splice(last+1,0,np);
+            ctx.rerender(); rvScrollFocus(ctx, np.id);
           };
-          list.appendChild(cut);
+          gh.appendChild(add);
         }
-        const row=document.createElement("div");
-        if(r.type==="line"){
-          row.className="rv-sub rv-line";
-          const who=document.createElement("span"); who.className="dlg-who"; who.textContent=(r.char||"(미지정)")+":";
-          const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=r.text||"";
-          row.append(who, tx);
-        }else{ row.className="rv-sub rv-text"; row.textContent=r.text||""; }
-        list.appendChild(row);
-      });
-      if(rowsC.length<2){ const em=document.createElement("p"); em.className="sub-empty"; em.textContent="줄이 2개 이상이어야 자를 수 있습니다."; list.appendChild(em); }
-      wrap.appendChild(list);
-      memoTargetEl=list;
-    }else if(!split && isScene){
-      /* 학생 화면의 칸처럼 라벨 상자 없이 지문/대사 칸만 (지운 칸은 CSS로 흐리게) */
-      const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
-      renderBeforeBody(txt, p, mine, numMap, colorMap);
-      wrap.appendChild(txt);
-      renderMemoCardsInto(wrap, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
-      memoTargetEl=txt;
-    }else if(!split){
-      const box=document.createElement("div"); box.className="plan-block review-before";
-      const lbl=document.createElement("label"); lbl.textContent=p.label;
-      const txt=document.createElement("div"); txt.className="review-before-text";
-      renderBeforeBody(txt, p, mine, numMap, colorMap);
-      box.append(lbl, txt);
-      renderMemoCardsInto(box, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
-      wrap.appendChild(box);
-      memoTargetEl=txt;
-    }else{
-      const prev=document.createElement("div"); prev.className="version-prev";
-      const toggle=document.createElement("div"); toggle.className="version-prev-toggle";
-      const setToggleLabel=()=>{ toggle.textContent=(prev.classList.contains("collapsed")?"▸":"▾")+" 이전 버전"+(isScene?"":" · "+p.label); };
-      toggle.onclick=()=>{ prev.classList.toggle("collapsed"); setToggleLabel(); };
-      const prevText=document.createElement("div"); prevText.className="version-prev-text"+(isScene?" review-before-text rv-scene-items":"");
-      setToggleLabel();
-      prev.append(toggle, prevText);
-      if(p.added) prev.hidden=true;   /* 교수가 새로 넣은 칸 — 비교할 원본이 없다 */
-
-      const cur=document.createElement("div"); cur.className="ta-wrap version-current";
-      const lbl=document.createElement("label");
-      lbl.textContent=isScene ? (editable?"첨삭":"교수님 첨삭") : p.label+(editable?" — 첨삭":" — 교수님 첨삭");
-      cur.appendChild(lbl);
-      let getAfter;
-      /* 글쓰기 "이전 버전"도 지문/대사 칸 모양 그대로 — 첨삭에서 빠진 단어만 붉게 칠한다 */
-      const drawPrevDiff=(after)=>{
-        if(isScene) renderStyledBeforeText(prevText, "write", p.before, diffRemovedRanges(p.before, after), new Map(), null, p.items);
-        else prevText.innerHTML=diffPrevHtml(p.before, after);
-      };
-      if(editable && p.kind==="write"){
-        /* 2026-09-15: 글쓰기는 지문/대사 칸을 합치지 않고 칸마다 따로 고친다 */
-        wrap.dataset.itemized="1";
-        renderWriteAfterItems(cur, p, ()=>{ if(!mine.length && !p.added) drawPrevDiff(p.after); });
-        getAfter=()=>p.after;
-      }else if(!editable && isScene){
-        const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
-        renderStyledBeforeText(txt, "write", p.after, [], new Map(), null, p.after===p.before?p.items:null);
-        cur.appendChild(txt);
-        getAfter=()=>p.after;
-      }else if(editable){
-        const ta=document.createElement("textarea"); ta.className="plan-ta-lg"; ta.value=p.after;
-        ta.oninput=()=>{ if(!mine.length) prevText.innerHTML=diffPrevHtml(p.before, ta.value); };
-        cur.appendChild(ta);
-        getAfter=()=>ta.value;
-      }else{
-        const txt=document.createElement("div"); txt.className="review-before-text";
-        if(p.after && p.after.trim()) txt.textContent=p.after; else txt.innerHTML='<span class="muted">(내용 없음)</span>';
-        cur.appendChild(txt);
-        getAfter=()=>p.after;
-      }
-      /* 이 블록에 메모가 있으면 "이전 버전" 패널은 첨삭 diff 강조 대신 메모 강조(하이라이트+각주번호)를
-         보여준다 — 같은 텍스트 위에 두 강조를 함께 표시하기 어려워, 메모가 달린 블록은 메모 표시를 우선한다 */
-      if(mine.length) renderBeforeBody(prevText, p, mine, numMap, colorMap);
-      else drawPrevDiff(getAfter());
-      renderMemoCardsInto(p.added?cur:prev, mine, numMap, {canDelete:memoOpts.canDelete, canEdit:memoOpts.canEdit, onDelete:onDeleteMemo, onEdit:memoOpts.onEdit}, colorMap);
-      wrap.append(prev, cur);
-      memoTargetEl=prevText;
-    }
-    if(editable && !p.deleted && !cutView){
-      wrap.addEventListener("contextmenu", e=>{
-        e.preventDefault(); e.stopPropagation();
-        const memoRange = memoOpts.canAdd ? captureMemoSelection(memoTargetEl) : null;
-        openReviewBlockCtxMenu(e.clientX, e.clientY, p, wrap, pairs, splitIds, editable, memos, memoOpts, memoRange, rerender);
-      });
-    }
-    (isWrite && wParent ? wParent : container).appendChild(wrap);
+      }else gh.textContent=p.group.name||"";
+      col.appendChild(gh);
+    }else if(!p.group) curGroup=null;
+    const cell = isFb ? buildFbCell(p, ctx, nums.get(p.id)) : buildOrigCell(p, ctx, nums.get(p.id));
+    (isWrite && wParent ? wParent : col).appendChild(cell);
   });
-}
-/* 첨삭 화면(교수) 블록 우클릭 메뉴 — 원본 블록이면 [첨삭](위/아래로 분리),
-   이미 분리된 블록이면 [원본 보기로 되돌리기](입력 중이던 첨삭 내용은 유지한 채 다시 원본 한 줄 보기로),
-   메모는 memoOpts.canAdd일 때 항상 추가 가능 — 우클릭 직전에 캡처한 memoRange가 있으면 드래그 선택
-   메모(각주번호), 없으면 범위 없는 일반 메모(*)가 된다. */
-function openReviewBlockCtxMenu(x, y, p, wrap, pairs, splitIds, editable, memos, memoOpts, memoRange, rerender){
-  if(!editable) return;
-  const m=document.getElementById("ctxMenu"); if(!m) return;
-  const split=splitIds.has(p.id);
-  const items = split
-    ? [["원본 보기로 되돌리기",ICONS.eraser,()=>{
-        if(!wrap.dataset.itemized){ const ta=wrap.querySelector("textarea"); if(ta) p.after=ta.value; }
-        splitIds.delete(p.id); rerender();
-      }]]
-    : [["첨삭",ICONS.edit,()=>{ splitIds.add(p.id); rerender(); }]];
-  if(memoOpts && memoOpts.canAdd){
-    items.push([memoRange?"메모":"메모 추가", ICONS.chat, ()=>{
-      const text=prompt("메모를 입력하세요:", "");
-      if(text===null || !text.trim()) return;
-      memos.push({ id:uidMemo(), pairId:p.id, start:memoRange?memoRange.start:null, end:memoRange?memoRange.end:null, text:text.trim() });
-      rerender();
-    }]);
+  if(can && ctx.type==="character"){
+    const add=document.createElement("button"); add.type="button"; add.className="btn ghost sm rv-add-char"; add.innerHTML=ICONS.plus+" 캐릭터 추가";
+    add.onclick=()=>{
+      const np={id:"fbc-"+uid(), label:"새 캐릭터", kind:"character", added:true, before:"", after:"이름: "};
+      pairs.push(np); ctx.rerender(); rvScrollFocus(ctx, np.id);
+    };
+    col.appendChild(add);
   }
-  m.innerHTML="";
-  items.forEach(([label,icon,fn])=>{
-    const b=document.createElement("button");
-    b.innerHTML=icon+" "+label;
-    b.onclick=()=>{ hideCtxMenu(); fn(); };
-    m.appendChild(b);
+}
+
+function rvTag(head, text, cls){
+  if(!text) return;
+  const t=document.createElement("span"); t.className="rv-scene-tag"+(cls?" "+cls:""); t.textContent=text;
+  head.appendChild(t);
+}
+function rvGhostNote(text){ const d=document.createElement("div"); d.className="rv-ghost-note"; d.textContent=text; return d; }
+function rvPlaceholder(){ const d=document.createElement("div"); d.className="review-pair rv-ph"; d.textContent="아이디어 없음"; return d; }
+/* 글쓰기 칸 겉모양(학생 글쓰기 화면의 .scene-block) — 번호 배지 + 배경/캐릭터 줄 */
+function rvSceneShell(p, num){
+  const wrap=document.createElement("div"); wrap.className="review-pair kind-write scene-block rv-scene";
+  if(p.group && p.group.id) wrap.style.borderLeftColor=getSectionColor(p.group.id);
+  const head=document.createElement("div"); head.className="scene-head";
+  const n=document.createElement("span"); n.className="scene-num"; n.textContent=p.deleted?"–":String(num||"");
+  const sp=document.createElement("div"); sp.className="scene-title-spacer";
+  const meta=p.meta||{};
+  const mrow=document.createElement("div"); mrow.className="scene-meta-row";
+  [["배경",meta.backgrounds],["캐릭터",meta.characters]].forEach(([lb,list])=>{
+    if(!Array.isArray(list) || !list.length) return;
+    const c=document.createElement("div"); c.className="scene-meta-col";
+    const l=document.createElement("span"); l.className="scene-meta-label"; l.textContent=lb+": ";
+    const v=document.createElement("span"); v.className="scene-meta-item"; v.textContent=list.join(", ");
+    c.append(l, v); mrow.appendChild(c);
   });
+  if(mrow.children.length) sp.appendChild(mrow);
+  head.append(n, sp);
+  wrap.appendChild(head);
+  return {wrap, head};
+}
+function rvActs(head){
+  const acts=document.createElement("div"); acts.className="rv-scene-acts";
+  const mk=(html,title,fn,cls)=>{ const b=document.createElement("button"); b.type="button"; b.className="rv-act"+(cls?" "+cls:""); b.innerHTML=html; b.title=title; b.onclick=e=>{ e.stopPropagation(); fn(); }; acts.appendChild(b); return b; };
+  head.appendChild(acts);
+  return mk;
+}
+
+/* 왼쪽(학생 원본) 블록 하나 — 메모(하이라이트·각주)와 바뀐 곳 색 표시를 함께 그린다 */
+function buildOrigCell(p, ctx, num){
+  const mo=ctx.memoOpts||{};
+  const {mine, numMap, colorMap}=computePairMemoNumbering(ctx.memos, p.id);
+  const dr=hunkRanges(pairHunks(p), "b");
+  const cardOpts={canDelete:mo.canDelete, canEdit:mo.canEdit, onDelete:m=>ctx.deleteMemo(m), onEdit:mo.onEdit};
+  const marks=mine.concat(p.deleted?[]:dr);
+  let cell, target=null;
+  if(p.placeholder) cell=rvPlaceholder();
+  else if(p.kind==="write"){
+    const {wrap, head}=rvSceneShell(p, num); cell=wrap;
+    if(p.added){
+      cell.classList.add("rv-ghost"); rvTag(head, "원본에 없음", "is-add");
+      cell.appendChild(rvGhostNote(ctx.editable?"교수님이 새로 넣는 칸입니다 (오른쪽).":"교수님이 새로 넣은 칸입니다 → 오른쪽"));
+    }else{
+      if(p.deleted){ cell.classList.add("rv-deleted"); rvTag(head, "삭제됨", "is-del"); }
+      else if(p.moved) rvTag(head, "자리 옮김");
+      const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
+      renderStyledBeforeText(txt, "write", p.before, marks, numMap, colorMap, p.items);
+      cell.appendChild(txt);
+      renderMemoCardsInto(cell, mine, numMap, cardOpts, colorMap);
+      target=txt;
+    }
+  }else if(p.kind==="character"){
+    cell=document.createElement("div"); cell.className="review-pair kind-character rv-char-card";
+    const hd=document.createElement("div"); hd.className="rv-card-head";
+    const tt=document.createElement("span"); tt.className="rv-card-title"; tt.textContent=p.added?"(원본에 없음)":(p.label||"캐릭터");
+    hd.appendChild(tt); cell.appendChild(hd);
+    if(p.added){ cell.classList.add("rv-ghost"); cell.appendChild(rvGhostNote("교수님이 새로 넣은 캐릭터입니다.")); }
+    else{
+      if(p.deleted){ cell.classList.add("rv-deleted"); rvTag(hd, "삭제됨", "is-del"); }
+      const txt=document.createElement("div"); txt.className="review-before-text";
+      renderStyledBeforeText(txt, "character", p.before, marks, numMap, colorMap);
+      cell.appendChild(txt);
+      renderMemoCardsInto(cell, mine, numMap, cardOpts, colorMap);
+      target=txt;
+    }
+  }else if(p.kind==="plotIdea"){
+    cell=document.createElement("div"); cell.className="review-pair kind-plotIdea rv-idea";
+    if(p.group) cell.style.borderLeftColor=getSectionColor(p.group.id);
+    if(p.added){ cell.classList.add("rv-ghost"); cell.appendChild(rvGhostNote("교수님이 새로 넣은 아이디어입니다.")); }
+    else{
+      if(p.deleted) cell.classList.add("rv-deleted");
+      const txt=document.createElement("div"); txt.className="review-before-text rv-idea-text";
+      renderMemoTargetText(txt, p.before, marks, numMap, colorMap);
+      cell.appendChild(txt);
+      renderMemoCardsInto(cell, mine, numMap, cardOpts, colorMap);
+      target=txt;
+    }
+  }else{
+    cell=document.createElement("div"); cell.className="review-pair";
+    const box=document.createElement("div"); box.className="plan-block review-before";
+    const lbl=document.createElement("label"); lbl.textContent=p.label;
+    const txt=document.createElement("div"); txt.className="review-before-text rv-field-box";
+    renderMemoTargetText(txt, p.before, marks, numMap, colorMap);
+    box.append(lbl, txt);
+    renderMemoCardsInto(box, mine, numMap, cardOpts, colorMap);
+    cell.appendChild(box);
+    target=txt;
+  }
+  if(ctx.editable && mo.canAdd && target){
+    cell.addEventListener("contextmenu", e=>{
+      e.preventDefault(); e.stopPropagation();
+      openReviewMemoMenu(e.clientX, e.clientY, p, ctx, captureMemoSelection(target));
+    });
+  }
+  if(!p.placeholder && (p.added || p.deleted || dr.length)) cell.classList.add("rv-changed");
+  cell.dataset.align="p:"+p.id; cell.dataset.pid=p.id;
+  return cell;
+}
+
+/* 오른쪽(피드백) 블록 하나 — 교수(editable)는 입력칸, 학생은 읽기 전용 */
+function buildFbCell(p, ctx, num){
+  const can=ctx.editable;
+  const ar=()=>hunkRanges(pairHunks(p), "a");
+  let cell;
+  if(p.placeholder) cell=rvPlaceholder();
+  else if(p.kind==="write") cell=buildFbScene(p, ctx, num);
+  else if(p.deleted){
+    cell=document.createElement("div"); cell.className="review-pair rv-ghost rv-del-ghost"+(p.kind?" kind-"+p.kind:"");
+    const what=p.kind==="character"?"캐릭터":p.kind==="plotIdea"?"아이디어":"항목";
+    const hd=document.createElement("div"); hd.className="rv-card-head";
+    const tt=document.createElement("span"); tt.className="rv-card-title"; tt.textContent=(p.kind==="character"?(p.label||"캐릭터")+" — ":"")+(can?`이 ${what}는 삭제됩니다`:`교수님이 이 ${what}를 삭제했습니다`);
+    hd.appendChild(tt);
+    if(can){ const mk=rvActs(hd); mk(ICONS.refresh+" 되돌리기", "지운 것을 다시 살립니다", ()=>{ p.deleted=false; p.after=p.before; ctx.rerender(); }); }
+    cell.appendChild(hd);
+  }else if(p.kind==="character"){
+    cell=document.createElement("div"); cell.className="review-pair kind-character rv-char-card"+(p.added?" rv-added":"");
+    const hd=document.createElement("div"); hd.className="rv-card-head";
+    const tt=document.createElement("span"); tt.className="rv-card-title";
+    const nameOf=()=>{ const v=parseCharFeedbackText(p.after).name; return (v&&v.trim()) || (p.added?"새 캐릭터":(p.label||"캐릭터")); };
+    tt.textContent=nameOf();
+    hd.appendChild(tt);
+    if(p.added) rvTag(hd, can?"새 캐릭터":"교수님이 추가", "is-add");
+    cell.appendChild(hd);
+    if(can){
+      const mk=rvActs(hd);
+      mk(ICONS.trash, p.added?"새로 넣은 캐릭터 빼기":"이 캐릭터 삭제", ()=>{
+        if(p.added && p.after.replace(/^이름:\s*$/,"").trim() && !confirm("새로 넣은 이 캐릭터를 뺄까요? 쓴 내용도 함께 사라집니다.")) return;
+        ctx.removePair(p);
+      }, "rv-act-del");
+      const box=document.createElement("div"); box.className="rv-char-fields";
+      renderCharAfterFields(box, p, ()=>{ tt.textContent=nameOf(); ctx.onEdit(p); });
+      cell.appendChild(box);
+    }else{
+      const txt=document.createElement("div"); txt.className="review-before-text";
+      renderStyledBeforeText(txt, "character", p.after, ar(), new Map(), null);
+      cell.appendChild(txt);
+    }
+  }else if(p.kind==="plotIdea"){
+    cell=document.createElement("div"); cell.className="review-pair kind-plotIdea rv-idea"+(p.added?" rv-added":"");
+    if(p.group) cell.style.borderLeftColor=getSectionColor(p.group.id);
+    if(can){
+      const row=document.createElement("div"); row.className="rv-idea-edit";
+      const ta=document.createElement("textarea"); ta.className="rv-idea-ta"; ta.rows=1; ta.value=p.after; ta.placeholder="아이디어 내용";
+      const hl=hlTextarea(ta, ar);
+      ta.oninput=()=>{ p.after=ta.value; hl.paint(); ctx.onEdit(p); };
+      const del=document.createElement("button"); del.type="button"; del.className="rv-after-del"; del.innerHTML=ICONS.close;
+      del.title=p.added?"새로 넣은 아이디어 빼기":"이 아이디어 삭제";
+      del.onclick=()=>{
+        if(p.added && (p.after||"").trim() && !confirm("새로 넣은 이 아이디어를 뺄까요?")) return;
+        ctx.removePair(p);
+      };
+      row.append(hl.wrap, del);
+      cell.appendChild(row);
+    }else{
+      if(p.added){ const hd=document.createElement("div"); hd.className="rv-card-head"; rvTag(hd, "교수님이 추가", "is-add"); cell.appendChild(hd); }
+      const txt=document.createElement("div"); txt.className="review-before-text rv-idea-text";
+      renderMemoTargetText(txt, p.after, ar(), new Map(), null);
+      cell.appendChild(txt);
+    }
+  }else{
+    cell=document.createElement("div"); cell.className="review-pair";
+    const box=document.createElement("div"); box.className="plan-block review-after";
+    const lbl=document.createElement("label"); lbl.textContent=p.label;
+    box.appendChild(lbl);
+    if(can){
+      const ta=document.createElement("textarea"); ta.className="rv-fb-ta"; ta.rows=1; ta.value=p.after;
+      const hl=hlTextarea(ta, ar);
+      ta.oninput=()=>{ p.after=ta.value; hl.paint(); ctx.onEdit(p); };
+      box.appendChild(hl.wrap);
+    }else{
+      const txt=document.createElement("div"); txt.className="review-before-text rv-field-box";
+      renderMemoTargetText(txt, p.after, ar(), new Map(), null);
+      box.appendChild(txt);
+    }
+    cell.appendChild(box);
+  }
+  cell.dataset.align="p:"+p.id; cell.dataset.pid=p.id;
+  return cell;
+}
+
+/* 오른쪽 글쓰기 칸 — 교수: 칸 끌어 옮기기 · [원본으로] · [합치기] · [+ 칸] · [삭제], 지문/대사 줄 입력 */
+function buildFbScene(p, ctx, num){
+  const can=ctx.editable, pairs=ctx.pairs;
+  const {wrap, head}=rvSceneShell(p, num);
+  if(p.deleted){
+    wrap.classList.add("rv-ghost","rv-del-ghost");
+    rvTag(head, can?"삭제됨":"교수님이 삭제", "is-del");
+    if(can){ const mk=rvActs(head); mk(ICONS.refresh+" 되돌리기","지운 칸을 다시 살립니다",()=>{ p.deleted=false; p.after=p.before; ctx.rerender(); }); }
+    wrap.appendChild(rvGhostNote(can?"이 칸은 삭제됩니다.":"교수님이 이 칸을 삭제했습니다."));
+    return wrap;
+  }
+  if(p.added) wrap.classList.add("rv-added");
+  const changed=pairHunks(p).length>0;
+  rvTag(head, p.added?(can?"새 칸":"교수님이 추가"):(p.moved?"자리 옮김":(changed&&!can?"첨삭":"")), p.added?"is-add":"");
+  if(can){
+    /* 손잡이로 칸을 끌어 순서를 바꾸거나 다른 단계/섹션 블럭으로 옮긴다 */
+    const handle=document.createElement("span"); handle.className="scene-handle"; handle.innerHTML=ICONS.grip; handle.title="끌어서 칸 이동";
+    handle.addEventListener("mousedown", ()=>{ wrap.draggable=true; });
+    handle.addEventListener("mouseup", ()=>{ wrap.draggable=false; });
+    head.insertBefore(handle, head.firstChild);
+    wrap.addEventListener("dragstart", e=>{
+      if(e.target!==wrap) return;           /* 안쪽 줄 끌기와 섞이지 않게 */
+      rvDragPid=p.id; e.dataTransfer.effectAllowed="move";
+      try{ e.dataTransfer.setData("text/plain", "rv-scene"); }catch(_){}
+      setTimeout(()=>wrap.classList.add("dragging"),0);
+    });
+    wrap.addEventListener("dragend", ()=>{ wrap.draggable=false; wrap.classList.remove("dragging"); rvDragPid=null; rvClearDropMarks(); });
+    /* 다른 칸에서 끌어온 지문/대사 줄 — 줄 위가 아닌 칸의 아무 곳에 놓으면 이 칸 맨 끝으로 */
+    wrap.addEventListener("dragover", e=>{
+      if(!rvRowDrag) return;
+      e.preventDefault(); e.stopPropagation();
+      rvClearDropMarks(); wrap.classList.add("rv-row-target");
+    });
+    wrap.addEventListener("drop", e=>{
+      if(!rvRowDrag) return;
+      e.preventDefault(); e.stopPropagation();
+      const src=rvRowDrag; rvRowDrag=null; rvClearDropMarks();
+      const [m]=src.rows.splice(src.idx,1);
+      if(src.p===p){ src.rows.push(m); src.sync(); src.draw(); return; }
+      src.sync();
+      const r=writeAfterRows(p).filter(x=>x.type==="line" || (x.text||"").trim());   /* 빈 지문 줄은 버림 */
+      r.push(m); p.after=writeRowsToText(r);
+      ctx.rerender();
+    });
+    wrap.addEventListener("dragover", e=>{
+      if(!rvDragPid || rvDragPid===p.id) return;
+      e.preventDefault(); e.stopPropagation();
+      const r=wrap.getBoundingClientRect(), after=e.clientY>r.top+r.height/2;
+      wrap.classList.toggle("rv-drop-after", after); wrap.classList.toggle("rv-drop-before", !after);
+    });
+    wrap.addEventListener("dragleave", e=>{ if(!wrap.contains(e.relatedTarget)) wrap.classList.remove("rv-drop-before","rv-drop-after"); });
+    wrap.addEventListener("drop", e=>{
+      if(!rvDragPid || rvDragPid===p.id) return;
+      e.preventDefault(); e.stopPropagation();
+      const r=wrap.getBoundingClientRect();
+      moveReviewPair(pairs, rvDragPid, p, e.clientY>r.top+r.height/2, p.group, p.subgroup);
+      rvDragPid=null; ctx.rerender();
+    });
+    const mk=rvActs(head);
+    if(!p.added && changed) mk(ICONS.eraser+" 원본으로","이 칸의 첨삭을 지우고 학생 원본으로 되돌립니다",()=>{
+      if(!confirm("이 칸에서 고친 내용을 지우고 학생 원본으로 되돌릴까요?")) return;
+      p.after=p.before; ctx.rerender();
+    });
+    if(rvCutMode){
+      let k=pairs.indexOf(p)-1; while(k>=0 && pairs[k].deleted) k--;
+      const prevP=k>=0 ? pairs[k] : null;
+      if(prevP && (prevP.group?prevP.group.id:null)===(p.group?p.group.id:null)){
+        mk(ICONS.group+" 합치기","위 칸과 합치기 — 이 칸의 지문/대사를 바로 위 칸 끝에 붙이고 이 칸은 없앱니다",()=>{
+          const keep=r=>r.type==="line" || (r.text||"").trim();
+          prevP.after=writeRowsToText(writeAfterRows(prevP).filter(keep).concat(writeAfterRows(p).filter(keep)));
+          ctx.removePair(p);
+        }, "rv-merge-btn");
+      }
+    }
+    mk(ICONS.plus+" 칸","이 칸 아래에 새 칸을 넣습니다",()=>{
+      const np={ id:"fbw-"+uid(), label:"교수님이 추가한 칸", kind:"write", added:true,
+        group:p.group||null, subgroup:p.subgroup||null, before:"", after:"", items:null, meta:{backgrounds:[], characters:[]} };
+      pairs.splice(pairs.indexOf(p)+1, 0, np); ctx.rerender(); rvScrollFocus(ctx, np.id);
+    });
+    mk(ICONS.trash, p.added?"새로 넣은 칸 빼기":"이 칸 삭제", ()=>{
+      if(p.added && (p.after||"").trim() && !confirm("새로 넣은 이 칸을 뺄까요? 쓴 내용도 함께 사라집니다.")) return;
+      ctx.removePair(p);
+    },"rv-act-del");
+  }
+  if(can && rvCutMode){
+    /* [칸 자르기] 켜짐 — 지금 첨삭 내용의 줄 사이를 누르면 그 아래 줄들을 새 칸(교수가 추가한 칸)으로 떼어 바로 뒤에 넣는다 */
+    wrap.classList.add("rv-cutting");
+    const rowsC=writeAfterRows(p).filter(r=>r.type==="line" || (r.text||"").trim());
+    const list=document.createElement("div"); list.className="review-before-text rv-scene-items rv-cut-list";
+    rowsC.forEach((r,k)=>{
+      if(k>0){
+        const cut=document.createElement("button"); cut.type="button"; cut.className="rv-cut-line"; cut.title="여기서 칸을 둘로 자릅니다";
+        cut.innerHTML=`<span>${ICONS.cut} 여기서 자르기</span>`;
+        cut.onclick=()=>{
+          p.after=writeRowsToText(rowsC.slice(0,k));
+          const np={ id:"fbw-"+uid(), label:"교수님이 추가한 칸", kind:"write", added:true,
+            group:p.group||null, subgroup:p.subgroup||null, before:"", after:writeRowsToText(rowsC.slice(k)),
+            items:null, meta:{backgrounds:[], characters:[]} };
+          pairs.splice(pairs.indexOf(p)+1, 0, np);
+          ctx.rerender();
+        };
+        list.appendChild(cut);
+      }
+      const row=document.createElement("div");
+      if(r.type==="line"){
+        row.className="rv-sub rv-line";
+        const who=document.createElement("span"); who.className="dlg-who"; who.textContent=(r.char||"(미지정)")+":";
+        const tx=document.createElement("span"); tx.className="dlg-text"; tx.textContent=r.text||"";
+        row.append(who, tx);
+      }else{ row.className="rv-sub rv-text"; row.textContent=r.text||""; }
+      list.appendChild(row);
+    });
+    if(rowsC.length<2){ const em=document.createElement("p"); em.className="sub-empty"; em.textContent="줄이 2개 이상이어야 자를 수 있습니다."; list.appendChild(em); }
+    wrap.appendChild(list);
+  }else if(can){
+    renderWriteAfterItems(wrap, p, ()=>ctx.onEdit(p));
+  }else{
+    const txt=document.createElement("div"); txt.className="review-before-text rv-scene-items";
+    renderStyledBeforeText(txt, "write", p.after, hunkRanges(pairHunks(p),"a"), new Map(), null, p.after===p.before?p.items:null);
+    wrap.appendChild(txt);
+  }
+  return wrap;
+}
+
+/* 원본 블록 우클릭 → 메모. 우클릭 직전에 잡은 드래그 선택이 있으면 그 범위(각주 번호), 없으면 블록 전체(*) */
+function openReviewMemoMenu(x, y, p, ctx, memoRange){
+  const m=document.getElementById("ctxMenu"); if(!m) return;
+  m.innerHTML="";
+  const b=document.createElement("button");
+  b.innerHTML=ICONS.chat+" "+(memoRange?"선택한 부분에 메모":"블록 전체에 메모");
+  b.onclick=()=>{
+    hideCtxMenu();
+    const text=prompt("메모를 입력하세요:", "");
+    if(text===null || !text.trim()) return;
+    ctx.memos.push({ id:uidMemo(), pairId:p.id, start:memoRange?memoRange.start:null, end:memoRange?memoRange.end:null, text:text.trim() });
+    ctx.refreshOrig(p);
+  };
+  m.appendChild(b);
   m.hidden=false;
   const vw=window.innerWidth, vh=window.innerHeight;
-  m.style.left=Math.min(x, vw-190)+"px";
-  m.style.top=Math.min(y, vh-(items.length*36+20))+"px";
+  m.style.left=Math.min(x, vw-200)+"px";
+  m.style.top=Math.min(y, vh-60)+"px";
 }
 /* 화면에서 편집한 첨삭 텍스트 배열 → 저장용 feedback 구조로 재조립 (buildReviewPairs와 순서가 항상 같음) */
 function buildFeedbackFromPairs(type, data, afterList, pairs){
@@ -12944,6 +13530,14 @@ function buildFeedbackFromPairs(type, data, afterList, pairs){
     return fb;
   }
   if(type==="plot"){
+    /* 2026-11-15: 교수가 아이디어를 넣거나 지웠으면 화면 순서대로 저장(넣은 카드는 섹션 정보와 함께) */
+    if(Array.isArray(pairs) && pairs.some(p=>p.added || p.deleted)){
+      return pairs.filter(p=>!p.placeholder).map((p,i)=>{
+        if(p.added) return { id:p.id, text:afterList[i]||"", added:true, sectionId:p.group?p.group.id:"", sectionName:p.group?p.group.name:"" };
+        if(p.deleted) return { id:p.id, text:"", deleted:true };
+        return { id:p.id, text:afterList[i]||"" };
+      });
+    }
     return plotReviewItems(data).map((it,i)=>({ id:it.id, text:afterList[i]||"" }));
   }
   if(type==="write"){
@@ -12957,6 +13551,11 @@ function buildFeedbackFromPairs(type, data, afterList, pairs){
     const fb={}; eventFieldsFor(eventPagesInData(data)).forEach((f,i)=>{ fb[f.k]=afterList[i]||""; }); return fb;
   }
   if(type==="character"){
+    /* 2026-11-15: 캐릭터를 넣거나 지웠으면 화면 순서대로, id로 저장 */
+    if(Array.isArray(pairs) && pairs.some(p=>p.added || p.deleted)){
+      return pairs.map((p,i)=> p.added ? { id:p.id, text:afterList[i]||"", added:true }
+        : p.deleted ? { id:p.id, text:"", deleted:true } : { id:p.id, text:afterList[i]||"" });
+    }
     const chars=Array.isArray(data)?data:[];
     return chars.map((ch,i)=>({ id:ch.id, text:afterList[i]||"" }));
   }
@@ -13151,9 +13750,34 @@ function applyFeedbackToProject(type, feedback, memos, data){
     PLAN_FIELDS.forEach(f=>{ if(Object.prototype.hasOwnProperty.call(feedback,f.k)){ P.planDoc[f.k]=feedback[f.k]||""; setAppliedMemos("plan",f.k,memos); } });
   }else if(type==="plot"){
     if(!P.plotDoc || !Array.isArray(P.plotDoc.sections)) return;
+    let prevKey=null;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
       const key=String(fb.id||"");
       const sep=key.indexOf("::");
+      const lastKey=prevKey; prevKey=key;
+      /* 2026-11-15: 교수가 지운 아이디어 → 그 섹션에서 배치만 뺀다(아이디어 수집의 원본은 그대로) /
+         교수가 넣은 아이디어 → 아이디어를 새로 만들어 그 섹션(앞 카드 뒤)에 놓는다. 두 번 반영해도 늘지 않게 id를 그대로 쓴다 */
+      if(sep>=0 && (fb.deleted || fb.added)){
+        const sec=P.plotDoc.sections.find(s=>s.id===key.slice(0,sep));
+        const ideaId=key.slice(sep+2);
+        if(!sec) return;
+        sec.ideaIds=Array.isArray(sec.ideaIds)?sec.ideaIds:[];
+        if(fb.deleted){ sec.ideaIds=sec.ideaIds.filter(x=>x!==ideaId); setAppliedMemos("plot",key,memos); return; }
+        const store=ideaStore();
+        let idea=store.ideaBlocks.find(b=>b.id===ideaId);
+        if(!idea){ idea={id:ideaId, text:"", tags:[]}; store.ideaBlocks.push(idea); }
+        idea.text=fb.text||"";
+        if(P.plotDoc.ideaOverrides) delete P.plotDoc.ideaOverrides[ideaId];
+        if(!sec.ideaIds.includes(ideaId)){
+          const prevIdea=lastKey && lastKey.indexOf(sec.id+"::")===0 ? lastKey.slice(sec.id.length+2) : null;
+          const at=prevIdea ? sec.ideaIds.indexOf(prevIdea) : -1;
+          if(at>=0) sec.ideaIds.splice(at+1,0,ideaId);   /* 앞 카드 바로 뒤 */
+          else if(!prevIdea) sec.ideaIds.unshift(ideaId); /* 섹션의 첫 카드 */
+          else sec.ideaIds.push(ideaId);
+        }
+        setAppliedMemos("plot",key,memos);
+        return;
+      }
       if(sep<0){                       /* 섹션 설명 */
         const sec=P.plotDoc.sections.find(s=>s.id===key);
         if(sec){ sec.desc=fb.text||""; setAppliedMemos("plot",key,memos); }
@@ -13189,7 +13813,11 @@ function applyFeedbackToProject(type, feedback, memos, data){
   }else if(type==="character"){
     if(!Array.isArray(P.characters)) return;
     (Array.isArray(feedback)?feedback:[]).forEach(fb=>{
-      const ch=P.characters.find(c=>c.id===fb.id);
+      if(!fb) return;
+      /* 2026-11-15: 교수가 지운 캐릭터는 빼고, 새로 넣은 캐릭터는 만든다(같은 id라 두 번 반영해도 하나) */
+      if(fb.deleted){ P.characters=P.characters.filter(c=>c.id!==fb.id); return; }
+      let ch=P.characters.find(c=>c.id===fb.id);
+      if(!ch && fb.added){ ch=blankChar(); ch.id=fb.id; ch.role=""; P.characters.push(ch); }
       if(!ch) return;
       const parsed=parseCharFeedbackText(fb.text||"");
       /* 배열/객체 항목(역할의 변화 등)은 첨삭 텍스트로 덮어쓰지 않는다 — 구조가 깨지므로 */
