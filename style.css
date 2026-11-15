@@ -1899,3 +1899,7 @@ mark.memo-hl .dh{background:transparent}
 .wchar-row .wchar-del .icon{width:11px;height:11px}
 .wchar-row .wchar-del:hover{color:#e05050}
 .dlg-new-char{margin-top:6px}
+/* 2026-11-15 (2): 교수 첨삭 — [피드백 입력]을 누르기 전에는 원본 한 열만 */
+.rv-compare.rv-single{grid-template-columns:minmax(0,1fr)}
+.rv-col-head-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rv-col-head-row .rv-col-title{flex:1;min-width:0}

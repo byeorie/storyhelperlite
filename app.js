@@ -11797,7 +11797,7 @@ async function rProfSubmissionReview(id, version){
   const c=document.createElement("div"); c.className="card";
   c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} 제출함으로</button>
     <h2 id="reviewTitle">${ICONS.edit} 불러오는 중…</h2>
-    <p class="hint" id="reviewHint">왼쪽은 학생 원본, 오른쪽은 피드백 입력칸입니다. 오른쪽에서 바로 고치거나 블록을 넣고 지울 수 있고, 고친 곳은 양쪽에 같은 색으로 표시됩니다. 왼쪽 원본을 <b>우클릭</b>하면 <b>메모</b>(글자를 드래그해 선택한 채면 그 범위에 각주로, 아니면 블록 전체에)를 답니다. 다 마쳤으면 맨 아래 [피드백 전달]로 학생에게 돌려주세요.</p>
+    <p class="hint" id="reviewHint">학생 원본 옆의 <b>[피드백 입력]</b>을 누르면 오른쪽에 피드백 입력칸이 열립니다. 거기서 바로 고치거나 블록을 넣고 지울 수 있고, 고친 곳은 양쪽에 같은 색으로 표시됩니다. 왼쪽 원본을 <b>우클릭</b>하면 <b>메모</b>(글자를 드래그해 선택한 채면 그 범위에 각주로, 아니면 블록 전체에)를 답니다. 다 마쳤으면 맨 아래 [피드백 전달]로 학생에게 돌려주세요.</p>
     <div id="reviewCheckBar"></div>
     <div id="reviewVersionBanner"></div>
     <div id="reviewPairs"><p class="hint">불러오는 중…</p></div>
@@ -11955,16 +11955,30 @@ async function rProfSubmissionReview(id, version){
   pairsEl.innerHTML="";
   const grid=document.createElement("div"); grid.className="rv-compare";
   const colL=document.createElement("div"), colR=document.createElement("div");
-  grid.append(colL, colR); pairsEl.appendChild(grid);
-  ctx.left=colL; ctx.right=colR;
+  /* 2026-11-15 (2): 최신 버전에서는 오른쪽 피드백 입력 열을 처음엔 숨기고, 원본 머리의 [피드백 입력]을 눌러야 연다.
+     (닫아도 입력한 내용은 pairs에 남아 [피드백 전달] 때 함께 저장된다. 옛 버전 보기는 읽기 전용이라 늘 보여준다) */
+  let fbOpen=!isLatest;
+  grid.appendChild(colL); pairsEl.appendChild(grid);
+  ctx.left=colL;
+  const setFbOpen=(on)=>{
+    fbOpen=on;
+    grid.classList.toggle("rv-single", !on);
+    if(on){ grid.appendChild(colR); ctx.right=colR; }
+    else{ colR.remove(); ctx.right=null; }
+    ctx.rerender();
+  };
   ctx.headRender=(head, side)=>{
     head.innerHTML = side==="orig"
-      ? `<div class="rv-col-title">${ICONS.file} 학생 원본</div>
-         <p class="hint rv-col-hint">${isLatest?"글자를 드래그해 선택한 채 <b>우클릭</b>하면 그 부분에, 그냥 우클릭하면 블록 전체에 메모를 답니다.":"제출 당시 원본입니다."}</p>`
-      : `<div class="rv-col-title">${ICONS.edit} ${isLatest?"피드백 입력":"피드백"}</div>
+      ? `<div class="rv-col-head-row"><div class="rv-col-title">${ICONS.file} 학생 원본</div>
+           ${isLatest && !fbOpen ? `<button type="button" class="btn sm icon-btn rv-fb-open">${ICONS.edit} 피드백 입력</button>` : ""}</div>
+         <p class="hint rv-col-hint">${isLatest?"글자를 드래그해 선택한 채 <b>우클릭</b>하면 그 부분에, 그냥 우클릭하면 블록 전체에 메모를 답니다."+(fbOpen?"":" 원본을 고쳐 주려면 [피드백 입력]을 누르세요."):"제출 당시 원본입니다."}</p>`
+      : `<div class="rv-col-head-row"><div class="rv-col-title">${ICONS.edit} ${isLatest?"피드백 입력":"피드백"}</div>
+           ${isLatest ? `<button type="button" class="btn ghost sm icon-btn rv-fb-close" title="입력 열을 접습니다 (입력한 내용은 남아 있습니다)">${ICONS.close} 접기</button>` : ""}</div>
          <p class="hint rv-col-hint">${isLatest?"고친 곳은 왼쪽 원본과 같은 색으로 표시됩니다(색에 마우스를 올리면 짝이 진해집니다).":"이 버전에서 고친 곳이 왼쪽과 같은 색으로 표시됩니다."}</p>`;
+    const ob=head.querySelector(".rv-fb-open"); if(ob) ob.onclick=()=>setFbOpen(true);
+    const cb=head.querySelector(".rv-fb-close"); if(cb) cb.onclick=()=>setFbOpen(false);
   };
-  ctx.rerender();
+  setFbOpen(fbOpen);
   rvWatch(ctx, grid);
   if(saveBtn) saveBtn.style.display=isLatest?"":"none";
 
