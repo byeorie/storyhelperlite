@@ -9068,7 +9068,8 @@ function openStoryboardFeedbackDrawPage(title, sizeKey, refKey, onSave){
    제출한 콘티(직접 그린 것이든 업로드한 이미지든)를 클릭하면 화면 크기에 맞춰 크게 띄운다.
    교수 화면에서는 이 창에서 바로 [이 그림에 피드백 그리기]로 넘어갈 수 있다. */
 function openStoryboardImageViewer(title, key, onDraw){
-  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay";
+  /* 2026-11-17: 뷰어 창은 화면 전체를 채운다(sb-view-overlay) */
+  const overlay=document.createElement("div"); overlay.className="draw-modal-overlay sb-view-overlay";
   const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
   const box=document.createElement("div"); box.className="draw-modal sb-view-modal";

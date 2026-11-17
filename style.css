@@ -1159,16 +1159,19 @@ canvas.draw-layer-canvas.is-base{position:relative}
 }
 
 /* 콘티 이미지 크게 보기 (2026-09-11) — 업로드한 이미지도 원본 비율 그대로 화면에 맞춰 크게 띄운다 */
-.sb-view-modal{max-width:94vw}
-/* 2026-11-17: 크게 보기 창 확대·축소 — 고정 크기 무대 안에서 그림을 transform으로 확대·이동 */
-.sb-view-stage{position:relative;overflow:hidden;width:min(88vw,1100px);height:70vh;
+/* 2026-11-17: 크게 보기 창은 화면 전체를 채우고, 무대(그림 영역)가 남는 공간을 모두 차지한다 */
+.sb-view-overlay{padding:0}
+.sb-view-modal{width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;border-radius:0;overflow:hidden;gap:8px;padding:10px 12px}
+.sb-view-modal .plot-picker-top{margin-bottom:0}
+/* 2026-11-17: 크게 보기 창 확대·축소 — 무대 안에서 그림을 transform으로 확대·이동 */
+.sb-view-stage{position:relative;overflow:hidden;flex:1;min-height:0;width:100%;
   background:#f3f3f3;border:1px solid var(--line);border-radius:8px;touch-action:none;user-select:none;cursor:zoom-in}
 .sb-view-img{position:absolute;left:0;top:0;max-width:none;max-height:none;width:auto;height:auto;
   transform-origin:0 0;background:#fff;-webkit-user-drag:none;pointer-events:none}
 .sb-zoom-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .sb-zoom-pct{min-width:52px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
 .sb-zoom-hint{font-size:12px;color:var(--muted,#888);margin-left:auto}
-@media (max-width:600px){.sb-view-stage{height:62vh}.sb-zoom-hint{display:none}}
+@media (max-width:600px){.sb-zoom-hint{display:none}}
 .sb-fb-img-zoom{cursor:zoom-in}
 .sb-fb-img-zoom:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
 
