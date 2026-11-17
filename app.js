@@ -82,7 +82,7 @@ function onAuthChanged(){
   refreshProfNavVisibility();
   refreshProfBar();
   if(activeTab==="admin" && !isAdmin()) forceTab("idea");
-  if((activeTab==="profClasses" || activeTab==="profMaterials") && !isProfessor()) forceTab("idea");
+  if((activeTab==="profClasses" || activeTab==="profAssignHub" || activeTab==="profMaterials") && !isProfessor()) forceTab("idea");
   if(activeTab==="classBoard" && !currentUser) forceTab("idea");
   render();
   maybeShowWipeNotice();
@@ -941,6 +941,10 @@ document.querySelectorAll(".tab").forEach(t=>{
     /* 2026-11-05: 메뉴에서 [플롯 생성]/[글쓰기]를 누르면 항상 플롯 카드 목록부터 */
     if(t.dataset.tab==="plot") plotEditOpen=false;
     if(t.dataset.tab==="write") writeEditOpen=false;
+    /* 2026-11-17: [수업 관리] ↔ [과제 관리]는 제출함·첨삭 화면 상태를 같이 쓰므로, 서로 옮겨갈 때는 목록부터 */
+    if((t.dataset.tab==="profAssignHub"||t.dataset.tab==="profClasses") && t.dataset.tab!==activeTab){
+      profAssignFolderId=null; profReviewId=null; profReviewVersion=null;
+    }
     t.classList.add("active"); activeTab=t.dataset.tab; localStorage.setItem(TAB_KEY, activeTab); render();
     window.scrollTo(0,0);
     document.body.classList.remove("mobile-nav-open"); /* 모바일: 메뉴 선택 시 서랍 자동 닫힘 */
@@ -1027,7 +1031,7 @@ function render(){
     app.classList.toggle("wide", activeTab==="home"||(activeTab==="plot" && plotEditOpen && !feedbackPage && P && !!plotCompareTarget())||activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
       ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance"||practiceFor==="twist") && !feedbackPage)
       /* 2026-11-15: 첨삭 화면(교수)·피드백 상세(학생)는 왼쪽 원본 / 오른쪽 피드백 두 열이라 넓게 */
-      ||(activeTab==="profClasses" && !!profReviewId)||(!!feedbackPage && feedbackPage.mode==="detail"));  // 실습 화면: 오른쪽에 예시 패널
+      ||((activeTab==="profClasses"||activeTab==="profAssignHub") && !!profReviewId)||(!!feedbackPage && feedbackPage.mode==="detail"));  // 실습 화면: 오른쪽에 예시 패널
     if(!P) P=currentProject();
     if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[]; // 계정 단위 아이디어 저장소(과제 3) 방어적 초기화
     if(!P.idea) P.idea={protagonistType:"",protagonistMbti:"",genre:"",endingType:"",logline:""};
@@ -1035,7 +1039,7 @@ function render(){
     if(!P.planDoc) P.planDoc=blankPlanDoc();
     const renderers={home:rHome, idea:rIdea, explore:rExplore, plan:rPlan, character:rChar, background:rBg,
       event:rEvent, plot:rPlot, write:rWrite, storyboard:rStoryboard, admin:rAdmin,
-      profClasses:rProfClasses, profMaterials:rProfMaterials, classBoard:rClassBoard, rpgGame:rRpgGame, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
+      profClasses:rProfClasses, profAssignHub:rProfAssignHub, profMaterials:rProfMaterials, classBoard:rClassBoard, rpgGame:rRpgGame, sampleData:rSampleData, learn:rLearn, practice:rPractice, fileAssign:rFileAssign};
     (renderers[activeTab]||rIdea)();
     /* 저장된 긴 글이 있는 textarea들을 화면에 그린 직후 내용에 맞춰 높이를 맞춤(스크롤 대신 자동으로 늘어나게).
        숨겨진(접힌) 상태인 textarea는 높이를 잴 수 없으니 건너뜀 */
@@ -11281,6 +11285,96 @@ async function renderProfAssignList(classId){
     el.onclick=()=>{ profAssignFolderId=Number(el.dataset.id); render(); };
   });
 }
+/* ===== 교수 — 과제 관리 허브 (2026-11-17) =====
+   [수업 관리]가 "수업 → 과제" 순서라면, 여기는 "과제 → 분반" 순서로 본다.
+   과제명(앞뒤·연속 공백 무시)과 과제 종류가 같은 폴더를 한 묶음으로 보고, 묶음마다 모든 수업(분반)을 칸으로 보여준다.
+   - 폴더가 있는 분반 칸: 클릭하면 그 분반의 제출함(이 탭 안에서 열리고, [과제 목록으로]로 이 화면에 돌아온다)
+   - 폴더가 없는 분반 칸: 클릭하면 같은 과제명·종류·배점·제출기한으로 그 분반에 "따로" 새 폴더를 만든다(합치지 않음)
+   과제 폴더 자체는 예전과 똑같이 수업마다 하나씩이라 제출함·마감·설정 변경은 분반별로 독립. */
+const assignHubKey=a=>String(a.title||"").replace(/\s+/g," ").trim()+"\u0000"+(a.type||"");
+function rProfAssignHub(){
+  if(profReviewId){ rProfSubmissionReview(profReviewId, profReviewVersion); return; }
+  if(profAssignFolderId){ rProfAssignmentFolder(profAssignFolderId); return; }
+  const c=document.createElement("div"); c.className="card";
+  c.innerHTML=`<h2>${ICONS.book} 과제 관리</h2>
+    <p class="hint">과제 폴더를 중심으로, 같은 과제가 어느 분반에 있는지 한눈에 봅니다(과제명과 종류가 같으면 같은 과제로 묶습니다).
+      분반 칸을 누르면 그 분반의 제출함이 열리고, <b>＋ 칸</b>을 누르면 같은 설정(과제명·종류·배점·제출기한)의 과제 폴더가 그 분반에 <b>따로</b> 하나 생깁니다.
+      폴더는 분반마다 독립이라 제출함·마감·설정 변경은 분반별로 관리됩니다.</p>
+    <div class="assign-folder-actions">
+      <button class="btn" id="hubNewBtn">${ICONS.plus} 과제 등록</button>
+      <input type="search" id="hubFilter" class="hub-filter" placeholder="과제명 검색">
+    </div>
+    <div id="hubWrap"><p class="hint">불러오는 중…</p></div>`;
+  app.appendChild(c);
+  const reload=()=>loadProfAssignHub(c);
+  c.querySelector("#hubNewBtn").onclick=()=>openAssignmentModal(null, null, reload);
+  const f=c.querySelector("#hubFilter");
+  try{ f.value=sessionStorage.getItem("sh_hubFilter")||""; }catch(e){}
+  f.oninput=()=>{ try{ sessionStorage.setItem("sh_hubFilter", f.value); }catch(e){} applyHubFilter(c); };
+  reload();
+}
+function applyHubFilter(c){
+  const q=(c.querySelector("#hubFilter").value||"").trim().toLowerCase();
+  let shown=0;
+  c.querySelectorAll(".hub-group").forEach(g=>{ const on=!q || g.dataset.title.toLowerCase().includes(q); g.style.display=on?"":"none"; if(on) shown++; });
+  const empty=c.querySelector("#hubNoMatch"); if(empty) empty.style.display=(q && !shown)?"":"none";
+}
+async function loadProfAssignHub(c){
+  const wrap=c.querySelector("#hubWrap");
+  const [cres, ares]=await Promise.all([apiFetch("professor-classes"), apiFetch("professor-assignments")]);
+  if(!wrap.isConnected) return;
+  if(!cres.ok || !ares.ok){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+  const classes=(cres.body&&cres.body.classes)||[];
+  const assigns=(ares.body&&ares.body.assignments)||[];
+  if(!classes.length && !assigns.length){ wrap.innerHTML=`<p class="hint">아직 수업도 과제도 없습니다. [수업 관리]에서 수업을 먼저 만들어 주세요.</p>`; return; }
+  if(!assigns.length){ wrap.innerHTML=`<p class="hint">등록된 과제가 없습니다. [과제 등록]으로 첫 과제를 만들어 보세요.</p>`; return; }
+  /* 묶기 — 묶음 순서는 가장 최근에 만든 폴더 기준 */
+  const groups=new Map();
+  assigns.forEach(a=>{ const k=assignHubKey(a); if(!groups.has(k)) groups.set(k, []); groups.get(k).push(a); });
+  const list=[...groups.values()].sort((x,y)=>Math.max(...y.map(a=>a.created_at||0))-Math.max(...x.map(a=>a.created_at||0)));
+  const stateText=a=>a.open?(isAssignPastDue(a)?"기한 지남":"제출 가능"):"마감됨";
+  const cellHtml=(label, a)=>`<button type="button" class="hub-cell has${a.open&&!isAssignPastDue(a)?"":" closed"}" data-open="${a.id}" title="${esc(label)} 제출함 열기">
+      <span class="hub-cell-name">${esc(label)}</span>
+      <span class="hub-cell-meta">${a.due_at?("기한 "+esc(fmtDue(a.due_at))):"기한 없음"} · 제출 ${a.submission_count||0}건 · ${stateText(a)}</span></button>`;
+  wrap.innerHTML=list.map((g,gi)=>{
+    const src=g[0];
+    const byClass=cid=>g.filter(a=>(a.class_id??null)===cid);
+    const cells=classes.map(cl=>{
+      const own=byClass(cl.id);
+      if(own.length) return own.map(a=>cellHtml(classLabel(cl), a)).join("");
+      return `<button type="button" class="hub-cell add" data-group="${gi}" data-class="${cl.id}" title="같은 과제를 ${esc(classLabel(cl))}에 새로 만듭니다">
+        <span class="hub-cell-name">${ICONS.plus} ${esc(classLabel(cl))}</span><span class="hub-cell-meta">눌러서 이 분반에 만들기</span></button>`;
+    }).join("");
+    const none=byClass(null).map(a=>cellHtml("수업 미지정", a)).join("");
+    const have=new Set(g.map(a=>a.class_id??null)).size;
+    return `<div class="hub-group" data-title="${esc(src.title||"")}">
+      <div class="hub-group-head">
+        <span class="hub-group-title">${ICONS.book} ${esc(src.title||"")}</span>
+        <span class="hint">${src.type?esc(TYPE_LABEL[src.type]||src.type)+" 과제":"종류 미지정"}${src.max_score!=null?` · 배점 ${src.max_score}점`:""} · ${have}/${classes.length+(byClass(null).length?1:0)}개 분반</span>
+      </div>
+      <div class="hub-cells">${cells}${none}</div>
+    </div>`;
+  }).join("") + `<p class="hint" id="hubNoMatch" style="display:none">검색과 맞는 과제가 없습니다.</p>`;
+  applyHubFilter(c);
+  wrap.querySelectorAll(".hub-cell.has").forEach(b=>{
+    b.onclick=()=>{ profAssignFolderId=Number(b.dataset.open); profReviewId=null; render(); window.scrollTo(0,0); };
+  });
+  wrap.querySelectorAll(".hub-cell.add").forEach(b=>{
+    b.onclick=async ()=>{
+      if(b.disabled) return;
+      const g=list[Number(b.dataset.group)], cid=Number(b.dataset.class);
+      /* 원본 설정 — 묶음에서 가장 최근에 만든 폴더 */
+      const src=g.slice().sort((x,y)=>(y.created_at||0)-(x.created_at||0))[0];
+      b.disabled=true; b.classList.add("busy");
+      b.querySelector(".hub-cell-meta").textContent="만드는 중…";
+      const r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({
+        title:String(src.title||"").replace(/\s+/g," ").trim(), dueAt:src.due_at||null, classIds:[cid], type:src.type||null, maxScore:src.max_score!=null?src.max_score:null})});
+      if(!r.ok){ alert((r.body&&r.body.error)||"만들지 못했습니다."); b.disabled=false; b.classList.remove("busy"); b.querySelector(".hub-cell-meta").textContent="눌러서 이 분반에 만들기"; return; }
+      loadProfAssignHub(c);
+    };
+  });
+}
+
 /* unix초 → <input type="date">가 쓰는 "YYYY-MM-DD" (현지 시간 기준) */
 function unixToDateInput(sec){
   if(!sec) return "";
@@ -11314,7 +11408,8 @@ function openNewAssignmentModal(classId){ openAssignmentModal(classId, null); }
 /* 과제 등록 / 설정 변경 공용 모달 (2026-09-08: 등록 후에도 과제명·제출기한·수업·마감 여부를 고칠 수
    있게 확장. 예전에는 마감 스위치만 바꿀 수 있어서, 과제명을 잘못 적으면 과제를 지우고 다시 만드는
    수밖에 없었고 그때 학생 제출물까지 함께 사라졌다) */
-function openAssignmentModal(classId, assignment){
+/* 2026-11-17: onSaved를 주면 저장 후 그걸 부른다(과제 관리 허브). classId가 null이면 등록 화면에서 처음엔 아무 수업도 체크하지 않는다 */
+function openAssignmentModal(classId, assignment, onSaved){
   const editing=!!assignment;
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   overlay.onclick=e=>{ if(e.target===overlay) document.body.removeChild(overlay); };
@@ -11394,9 +11489,10 @@ function openAssignmentModal(classId, assignment){
       if(!overlay.isConnected || !list) return;
       const classes=(res.ok && res.body && res.body.classes)||[];
       if(!classes.length){ list.innerHTML=`<p class="hint">지금 보고 있는 수업에만 만듭니다.</p>`; return; }
-      const cur=classId==="none"?"none":String(classId);
+      const cur=classId==null?"":classId==="none"?"none":String(classId);
       const rows=classes.map(cl=>({v:String(cl.id), label:classLabel(cl)}));
       if(cur==="none") rows.unshift({v:"none", label:"수업 미지정(전체 공개)"});
+      else if(cur==="") rows.push({v:"none", label:"수업 미지정(전체 공개)"});
       list.innerHTML=rows.map(r=>`<label class="notice-class-chk"><input type="checkbox" value="${r.v}"${r.v===cur?" checked":""}> ${esc(r.label)}</label>`).join("");
       createClassesLoaded=true;
       const syncBtn=()=>{ const n=list.querySelectorAll("input:checked").length;
@@ -11432,6 +11528,7 @@ function openAssignmentModal(classId, assignment){
     }else{
       const typeVal=box.querySelector("#newAssignType").value;
       let classIds=[classId==="none"?null:classId];
+      if(classId==null && !createClassesLoaded){ btn.disabled=false; alert("수업 목록을 아직 불러오지 못했습니다. 잠시 후 다시 눌러 주세요."); return; }
       if(createClassesLoaded){
         classIds=[...box.querySelectorAll("#newAssignClassList input:checked")].map(i=>i.value==="none"?null:Number(i.value));
         if(!classIds.length){ btn.disabled=false; alert("과제를 만들 수업을 하나 이상 골라주세요."); return; }
@@ -11440,7 +11537,7 @@ function openAssignmentModal(classId, assignment){
         classIds, type: typeVal==="none"?null:typeVal, maxScore: maxScoreVal})});
     }
     btn.disabled=false;
-    if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(classId); }
+    if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); if(typeof onSaved==="function") onSaved(); else renderProfAssignList(classId); }
     else alert((r.body&&r.body.error)||(editing?"저장에 실패했습니다.":"등록에 실패했습니다."));
   };
 }
@@ -14032,6 +14129,7 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
+      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다.</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 등록 화면의 <b>[만들 수업]</b>에서 여러 분반을 체크하면 같은 과제가 분반마다 <b>따로</b> 하나씩 만들어집니다(제출함·마감·설정 변경은 분반별로 따로). 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 용량 제한은 관리자 설정값 · 기본 1.5MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
