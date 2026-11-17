@@ -4,7 +4,8 @@ import { requireAuth, jsonResponse, nowSec, ensureBoardSchema, ensureAssignmentS
    수업마다 공지 게시판. 일반 공지와 과제 공지(kind "assignment" — 과제를 연결할 수 있다)를
    한 목록에서 쓰고, 교수 자료실(materials.js)의 자료를 공지에 첨부할 수 있다.
    2026-11-04: 공지 하나를 여러 수업에 동시 공개한다. 공개 수업은 notice_classes 표.
-   과제 공지는 공개 수업마다 그 수업의 과제를 하나씩 연결할 수 있고(assignment_ids), 학생에게는 자기 수업의 과제만 보인다.
+   과제 공지는 공개 수업마다 그 수업의 과제를 연결할 수 있고(assignment_ids), 학생에게는 자기 수업의 과제만 보인다.
+   2026-11-17: 수업당 하나 제한을 없앴다 — 한 공지에 여러 분반의 과제 폴더를 여러 개씩 연결할 수 있다.
 
    - GET  /api/class-notices?classId=N : 그 수업에 공개된 공지 목록 + 수업에 공유된 자료 목록
                                          (교수: 내 수업만, 각 공지에 공개 수업 목록 classes /
@@ -95,6 +96,8 @@ async function loadBoard(env, cls, viewer) {
       const out = {
         id: n.id, kind: n.kind === "assignment" ? "assignment" : "notice", title: n.title, body: n.body || "",
         pinned: !!n.pinned, created_at: n.created_at, updated_at: n.updated_at,
+        /* 2026-11-17: 수업마다 과제 여러 개 — assignments는 이 수업의 연결 과제 전부(연결 순서), assignment는 예전 화면 호환용 첫 번째 */
+        assignments: aIds.map((id) => assignById[id]).filter((a) => a && a.class_id === cls.id),
         assignment: aIds.map((id) => assignById[id]).find((a) => a && a.class_id === cls.id) || null,
         materials: parseIdList(n.material_ids).map((id) => matById[id]).filter(Boolean),
       };
@@ -172,21 +175,18 @@ export async function onRequestPost({ request, env }) {
   const kind = body.kind === "assignment" ? "assignment" : "notice";
   const pinned = body.pinned ? 1 : 0;
 
-  /* 과제 연결 — 공개 수업의 과제만, 수업당 하나 */
+  /* 과제 연결 — 공개 수업의 과제만. 2026-11-17: 수업마다 여러 개 연결할 수 있다(전체 최대 100개) */
   let assignmentIds = [];
   if (kind === "assignment") {
     const want = Array.isArray(body.assignmentIds) ? body.assignmentIds : (body.assignmentId ? [body.assignmentId] : []);
-    const ids = [...new Set(want.map(Number).filter(Boolean))].slice(0, 50);
+    const ids = [...new Set(want.map(Number).filter(Boolean))].slice(0, 100);
     if (ids.length) {
       const { results } = await env.DB.prepare(
         "SELECT id, class_id FROM assignments WHERE prof_id = ? AND id IN (" + inList(ids) + ")"
       ).bind(auth.user.id, ...ids).all();
-      const used = new Set();
       for (const id of ids) {
         const a = (results || []).find((x) => x.id === id);
         if (!a || !classIds.includes(a.class_id)) return jsonResponse({ error: "공개할 수업의 과제만 연결할 수 있습니다." }, 400);
-        if (used.has(a.class_id)) return jsonResponse({ error: "수업마다 과제는 하나만 연결할 수 있습니다." }, 400);
-        used.add(a.class_id);
         assignmentIds.push(id);
       }
     }

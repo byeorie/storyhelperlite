@@ -105,7 +105,7 @@ export async function ensureBoardSchema(env) {
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_notice_reads_pair ON notice_reads(notice_id, student_id)",
     /* 2026-11-04: 공지 하나를 여러 수업에 동시 공개 — 어느 수업에 보이는지는 notice_classes가 정한다
        (class_notices.class_id는 처음 쓴 수업으로만 남는다). 과제 공지는 수업마다 다른 과제를 연결할 수 있어
-       assignment_ids(JSON 배열, 수업당 1개)에 둔다. 예전 공지는 아래 INSERT로 원래 수업 1개에 연결된다. */
+       assignment_ids(JSON 배열 — 2026-11-17부터 수업당 여러 개 가능)에 둔다. 예전 공지는 아래 INSERT로 원래 수업 1개에 연결된다. */
     "ALTER TABLE class_notices ADD COLUMN assignment_ids TEXT",
     "CREATE TABLE IF NOT EXISTS notice_classes (notice_id INTEGER NOT NULL, class_id INTEGER NOT NULL)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_notice_classes_pair ON notice_classes(notice_id, class_id)",

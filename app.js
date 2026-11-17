@@ -10712,7 +10712,7 @@ function openAddClassStudentModal(classId, available){
 /* ===== 수업 공지 · 교수 자료실 (2026-10-31) =====
    - 교수 [자료실] 탭(rProfMaterials): 교수 계정에 묶인 자료. 수업마다 "공유"를 걸면 그 수업 학생이 받는다.
      3/1·9/1 정기 초기화 대상이 아니라 학기가 바뀌어도 남는다(서버 materials.js 설명 참고).
-   - 수업 상세 [공지] 탭(renderClassNoticesTab): 일반 공지와 과제 공지(그 수업 과제 하나 연결)를 한 목록에.
+   - 수업 상세 [공지] 탭(renderClassNoticesTab): 일반 공지와 과제 공지(공개 수업마다 과제 폴더 여러 개 연결 가능)를 한 목록에.
      자료실 자료를 첨부할 수 있다.
    - [수업 공지] 탭(rClassBoard): 학생은 내가 등록된 수업을 골라 공지와 공유 자료를 본다(열면 읽음 처리).
      교수는 내 수업을 골라 같은 화면에서 공지를 보고 쓴다(2026-11-01, 수업 상세 [공지] 탭과 같은 화면).
@@ -10871,9 +10871,14 @@ function openMaterialShareModal(m, classes){
 function noticeCardsHtml(notices, opt){
   const prof=!!opt.prof;
   return notices.map(n=>{
-    const a=n.assignment;
+    /* 2026-11-17: 이 수업에 연결된 과제 전부(서버가 지금 보는 수업 것만 보내므로 학생은 자기 분반 과제만 본다) */
+    const as=Array.isArray(n.assignments) ? n.assignments : (n.assignment ? [n.assignment] : []);
     const unread=!prof && !n.read;
-    const goType=(!prof && a && a.type && TYPE_LABEL[a.type]) ? a.type : null;
+    const assignHtml=as.map(a=>{
+      const goType=(!prof && a.type && TYPE_LABEL[a.type]) ? a.type : null;
+      return `<div class="notice-assign">${ICONS.book} 과제 <b>${esc(a.title)}</b>${a.due_at?` · 제출기한 ${fmtDateTime(a.due_at)}`:""}${a.open?"":" · 제출 마감"}
+        ${goType?`<button type="button" class="btn ghost sm notice-go" data-type="${goType}">${esc(TYPE_LABEL[goType])}에서 제출하기</button>`:""}</div>`;
+    }).join("");
     return `<div class="notice-card${n.pinned?" pinned":""}${unread?" unread":""}" data-id="${n.id}">
       <div class="notice-head">
         ${n.pinned?`<span class="notice-tag pin">고정</span>`:""}
@@ -10882,8 +10887,7 @@ function noticeCardsHtml(notices, opt){
         ${unread?`<span class="notice-tag new">새 글</span>`:""}
         <span class="hint notice-date">${fmtDateTime(n.created_at)}${n.updated_at>n.created_at+60?" · 수정됨":""}</span>
       </div>
-      ${a?`<div class="notice-assign">${ICONS.book} 과제 <b>${esc(a.title)}</b>${a.due_at?` · 제출기한 ${fmtDateTime(a.due_at)}`:""}${a.open?"":" · 제출 마감"}
-        ${goType?`<button type="button" class="btn ghost sm notice-go" data-type="${goType}">${esc(TYPE_LABEL[goType])}에서 제출하기</button>`:""}</div>`:""}
+      ${assignHtml}
       ${n.body?`<div class="notice-body">${linkifyEscaped(esc(n.body))}</div>`:""}
       ${n.materials.length?`<div class="notice-files">${n.materials.map(materialChipHtml).join("")}</div>`:""}
       ${prof?`<div class="notice-foot">
@@ -10897,7 +10901,7 @@ function noticeCardsHtml(notices, opt){
 
 /* ----- 교수: 수업 상세 [공지] 탭 ----- */
 async function renderClassNoticesTab(container, classId){
-  container.innerHTML=`<p class="hint">이 수업 학생들에게 보이는 공지입니다. <b>과제 공지</b>로 쓰면 이 수업의 과제를 연결할 수 있고, [자료실]의 자료를 첨부할 수 있습니다.
+  container.innerHTML=`<p class="hint">이 수업 학생들에게 보이는 공지입니다. <b>과제 공지</b>로 쓰면 공개한 수업마다 과제 폴더를 여러 개 연결할 수 있고(학생에게는 자기 분반 과제만 보입니다), [자료실]의 자료를 첨부할 수 있습니다.
     학생에게는 왼쪽 메뉴 [수업 공지]와 알림 팝업으로 보입니다.</p>
     <div class="assign-folder-actions">
       <button class="btn" id="noticeNewBtn">${ICONS.plus} 공지 쓰기</button>
@@ -10933,7 +10937,8 @@ async function renderClassNoticesTab(container, classId){
 }
 /* 공지 쓰기/수정 팝업 — notice가 있으면 수정.
    2026-11-04: [공개할 수업]을 여러 개 체크하면 공지 하나가 그 수업들에 함께 보인다(처음엔 지금 수업이 체크됨).
-   과제 공지는 체크한 수업마다 그 수업의 과제를 하나씩 고른다 — 학생에게는 자기 수업의 과제만 보인다. */
+   과제 공지는 체크한 수업마다 그 수업의 과제를 고른다 — 학생에게는 자기 수업의 과제만 보인다.
+   2026-11-17: 수업마다 과제 폴더를 여러 개 체크할 수 있다(드롭다운 → 체크 목록). */
 async function openNoticeModal(classId, notice, onSaved){
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
@@ -10953,7 +10958,7 @@ async function openNoticeModal(classId, notice, onSaved){
     <label>공개할 수업 <span class="hint">(여러 개 고르면 이 공지 하나가 그 수업들에 함께 보입니다)</span></label>
     <div id="noticeClassList" class="notice-class-list"><p class="hint">불러오는 중…</p></div>
     <div id="noticeAssignRow" class="notice-assign-row">
-      <label>연결할 과제 <span class="hint">(선택 — 수업마다 그 수업의 과제를 고릅니다. 학생 화면에 과제 이름·제출기한이 함께 보입니다)</span></label>
+      <label>연결할 과제 <span class="hint">(선택 — 수업마다 그 수업의 과제 폴더를 여러 개 고를 수 있습니다. 학생에게는 자기 수업의 과제만 이름·제출기한과 함께 보입니다)</span></label>
       <div id="noticeAssignList"></div>
     </div>
     <label>제목</label><input type="text" id="noticeTitle" maxlength="200" value="${esc(n.title)}">
@@ -10980,25 +10985,33 @@ async function openNoticeModal(classId, notice, onSaved){
 
   /* 공개 수업 — 수정이면 지금 공개된 수업들, 새 공지면 지금 보고 있는 수업 */
   const onClasses=new Set(notice && n.classes.length ? n.classes.map(cl=>cl.id) : [classId]);
-  /* 수업별로 고른 과제 {classId: assignmentId} */
+  /* 수업별로 고른 과제 {classId: [assignmentId, ...]} — 2026-11-17: 수업마다 여러 개(체크한 순서대로) */
   const pickA={};
-  (n.assignmentIds||[]).forEach(id=>{ const a=assigns.find(x=>x.id===id); if(a) pickA[a.class_id]=a.id; });
+  (n.assignmentIds||[]).forEach(id=>{ const a=assigns.find(x=>x.id===id); if(a) (pickA[a.class_id]=pickA[a.class_id]||[]).push(a.id); });
 
   const drawAssigns=()=>{
     const list=box.querySelector("#noticeAssignList");
     const rows=classes.filter(cl=>onClasses.has(cl.id));
     list.innerHTML=rows.map(cl=>{
       const own=assigns.filter(a=>a.class_id===cl.id);
-      return `<div class="notice-assign-pick"><span class="notice-assign-cls">${esc(classLabel(cl))}</span>
-        <select data-class="${cl.id}"><option value="">(연결 안 함)</option>${own.map(a=>`<option value="${a.id}"${pickA[cl.id]===a.id?" selected":""}>${esc(a.title)}${a.due_at?` — 기한 ${fmtDateTime(a.due_at)}`:""}</option>`).join("")}</select></div>`;
+      const on=new Set(pickA[cl.id]||[]);
+      return `<div class="notice-assign-pick"><div class="notice-assign-cls">${esc(classLabel(cl))}
+          <span class="hint notice-assign-cnt" data-class="${cl.id}">${on.size?`${on.size}개 연결`:"연결 안 함"}</span></div>
+        <div class="notice-assign-opts">${own.length ? own.map(a=>`<label class="notice-assign-opt"><input type="checkbox" data-class="${cl.id}" value="${a.id}"${on.has(a.id)?" checked":""}>
+          <span>${esc(a.title)}${a.due_at?` <span class="hint">— 기한 ${fmtDateTime(a.due_at)}</span>`:""}</span></label>`).join("")
+          : `<p class="hint">이 수업에 과제 폴더가 없습니다.</p>`}</div></div>`;
     }).join("") || `<p class="hint">공개할 수업을 먼저 골라 주세요.</p>`;
-    list.querySelectorAll("select").forEach(sel=>{
-      sel.onchange=()=>{
-        const cid=Number(sel.dataset.class), aid=Number(sel.value)||null;
-        if(aid) pickA[cid]=aid; else delete pickA[cid];
+    list.querySelectorAll('input[type="checkbox"]').forEach(chk=>{
+      chk.onchange=()=>{
+        const cid=Number(chk.dataset.class), aid=Number(chk.value);
+        const arr=(pickA[cid]=(pickA[cid]||[]).filter(x=>x!==aid));
+        if(chk.checked) arr.push(aid);
+        if(!arr.length) delete pickA[cid];
+        const cnt=list.querySelector(`.notice-assign-cnt[data-class="${cid}"]`);
+        if(cnt) cnt.textContent=arr.length?`${arr.length}개 연결`:"연결 안 함";
         /* 제목이 비어 있으면 처음 고른 과제 이름으로 채워준다 */
         const t=box.querySelector("#noticeTitle"), a=assigns.find(x=>x.id===aid);
-        if(a && !t.value.trim()) t.value=`[과제] ${a.title}`;
+        if(chk.checked && a && !t.value.trim()) t.value=`[과제] ${a.title}`;
       };
     });
   };
@@ -11041,7 +11054,7 @@ async function openNoticeModal(classId, notice, onSaved){
     const kind=kindVal();
     const payload={id:notice?notice.id:undefined, classIds, kind, title,
       body:box.querySelector("#noticeBody").value, pinned:box.querySelector("#noticePinned").checked,
-      assignmentIds:kind==="assignment" ? classIds.map(id=>pickA[id]).filter(Boolean) : [],
+      assignmentIds:kind==="assignment" ? classIds.flatMap(id=>pickA[id]||[]) : [],
       materialIds:[...checked].filter(id=>mats.some(m=>m.id===id))};
     btn.disabled=true;
     const r=await apiFetch("class-notices", {method:"POST", body:JSON.stringify(payload)});

@@ -1757,9 +1757,14 @@ html:has(#app.draw-open),body:has(#app.draw-open){overscroll-behavior:none}
 /* 2026-11-04: 공지 여러 수업 공개 */
 .notice-class-list{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 8px}
 .notice-class-chk{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer}
-.notice-assign-pick{display:flex;align-items:center;gap:8px;margin:4px 0}
-.notice-assign-cls{flex:0 0 auto;max-width:40%;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.notice-assign-pick select{flex:1;min-width:0}
+/* 2026-11-17: 수업마다 과제 폴더 여러 개 체크 */
+.notice-assign-pick{margin:6px 0;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+.notice-assign-cls{font-size:13px;font-weight:600;display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.notice-assign-cnt{font-weight:400;margin-left:auto}
+.notice-assign-opts{display:flex;flex-direction:column;gap:2px;max-height:180px;overflow:auto}
+.notice-assign-opt{display:flex;align-items:flex-start;gap:6px;font-size:13px;font-weight:400;margin:0;cursor:pointer}
+.notice-assign-opt input{margin-top:3px;flex:0 0 auto}
+.notice-assign + .notice-assign{margin-top:4px}
 
 /* ===== 플롯 카드 목록 — 작품 하나에 플롯 여러 개 (2026-11-05) ===== */
 .plot-card-rename{left:44px}
