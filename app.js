@@ -9111,6 +9111,22 @@ function openStoryboardImageViewer(title, key, onDraw){
     mkZ("화면 맞춤","그림 전체를 화면에 맞춥니다",fitNow),
     mkZ("원본 크기","실제 해상도(100%)로 봅니다",()=>zoomAt(1))
   );
+  /* 2026-11-17: 이미지 내려받기 — 서버에 저장된 원본 그대로(확대 배율과 무관). 파일 이름은 창 제목 + 실제 형식의 확장자 */
+  const dlBtn=document.createElement("button"); dlBtn.type="button"; dlBtn.className="btn ghost sm icon-btn";
+  dlBtn.innerHTML=ICONS.download+" 다운로드"; dlBtn.title="이 이미지를 파일로 내려받습니다";
+  dlBtn.onclick=async ()=>{
+    if(dlBtn.disabled) return;
+    dlBtn.disabled=true;
+    try{
+      const r=await fetch(img.src);
+      if(!r.ok) throw new Error();
+      const blob=await r.blob();
+      const base=String(title||"이미지").replace(/[\\/:*?"<>|]+/g,"_").replace(/\s+/g," ").trim().slice(0,80)||"이미지";
+      triggerDownload(blob, base+bulkExtOf(blob.type||""));
+    }catch(e){ alert("이미지를 내려받지 못했습니다. 잠시 후 다시 시도해 주세요."); }
+    dlBtn.disabled=false;
+  };
+  zbar.appendChild(dlBtn);
   const zhint=document.createElement("span"); zhint.className="sb-zoom-hint";
   zhint.textContent="휠·두 손가락으로 확대/축소, 끌어서 이동, 더블클릭으로 2배";
   zbar.appendChild(zhint);
