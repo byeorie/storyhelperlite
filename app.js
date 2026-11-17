@@ -11331,7 +11331,8 @@ function openAssignmentModal(classId, assignment){
      ${editing?`<label>소속 수업</label><select id="newAssignClass"><option value="none">수업 미지정(전체 공개)</option></select>
      <label style="display:flex;align-items:center;gap:8px;margin-top:12px">
        <input type="checkbox" id="newAssignOpen" style="width:auto;margin:0"${assignment.open?" checked":""}> 학생이 제출할 수 있음(마감 안 함)
-     </label>`:""}
+     </label>`:`<label>만들 수업 <span class="hint">(여러 개 고르면 같은 설정의 과제 폴더가 수업마다 <b>따로</b> 하나씩 생깁니다 — 제출함·마감은 수업별로 따로 관리)</span></label>
+     <div id="newAssignClassList" class="notice-class-list"><p class="hint">불러오는 중…</p></div>`}
      <button class="btn" id="newAssignSaveBtn" style="margin-top:14px;width:100%">${editing?"변경 내용 저장":"등록"}</button>`);
   overlay.appendChild(box); document.body.appendChild(overlay);
 
@@ -11368,6 +11369,25 @@ function openAssignmentModal(classId, assignment){
       sel.value = assignment.class_id ? String(assignment.class_id) : "none";
     });
   }
+  /* 2026-11-17: 등록 화면 — 같은 과제를 여러 수업에 동시에(수업마다 별도 폴더로) 만든다. 처음엔 지금 수업만 체크.
+     목록을 못 불러오면 예전처럼 지금 수업에만 만든다. */
+  let createClassesLoaded=false;
+  if(!editing){
+    const list=box.querySelector("#newAssignClassList");
+    apiFetch("professor-classes").then(res=>{
+      if(!overlay.isConnected || !list) return;
+      const classes=(res.ok && res.body && res.body.classes)||[];
+      if(!classes.length){ list.innerHTML=`<p class="hint">지금 보고 있는 수업에만 만듭니다.</p>`; return; }
+      const cur=classId==="none"?"none":String(classId);
+      const rows=classes.map(cl=>({v:String(cl.id), label:classLabel(cl)}));
+      if(cur==="none") rows.unshift({v:"none", label:"수업 미지정(전체 공개)"});
+      list.innerHTML=rows.map(r=>`<label class="notice-class-chk"><input type="checkbox" value="${r.v}"${r.v===cur?" checked":""}> ${esc(r.label)}</label>`).join("");
+      createClassesLoaded=true;
+      const syncBtn=()=>{ const n=list.querySelectorAll("input:checked").length;
+        box.querySelector("#newAssignSaveBtn").textContent = n>1 ? `${n}개 수업에 각각 등록` : "등록"; };
+      list.querySelectorAll("input").forEach(i=>{ i.onchange=syncBtn; });
+    });
+  }
 
   box.querySelector("#newAssignSaveBtn").onclick=async ()=>{
     const btn=box.querySelector("#newAssignSaveBtn");
@@ -11395,8 +11415,13 @@ function openAssignmentModal(classId, assignment){
       r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify(payload)});
     }else{
       const typeVal=box.querySelector("#newAssignType").value;
+      let classIds=[classId==="none"?null:classId];
+      if(createClassesLoaded){
+        classIds=[...box.querySelectorAll("#newAssignClassList input:checked")].map(i=>i.value==="none"?null:Number(i.value));
+        if(!classIds.length){ btn.disabled=false; alert("과제를 만들 수업을 하나 이상 골라주세요."); return; }
+      }
       r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({title, dueAt,
-        classId: classId==="none"?null:classId, type: typeVal==="none"?null:typeVal, maxScore: maxScoreVal})});
+        classIds, type: typeVal==="none"?null:typeVal, maxScore: maxScoreVal})});
     }
     btn.disabled=false;
     if(r.ok){ if(overlay.isConnected) document.body.removeChild(overlay); renderProfAssignList(classId); }
@@ -13991,7 +14016,7 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
-      <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
+      <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 등록 화면의 <b>[만들 수업]</b>에서 여러 분반을 체크하면 같은 과제가 분반마다 <b>따로</b> 하나씩 만들어집니다(제출함·마감·설정 변경은 분반별로 따로). 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 용량 제한은 관리자 설정값 · 기본 1.5MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
       <li>학생이 제출하면 화면 오른쪽 위에 <b>알림</b>이 뜹니다. 제출함에서 <b>[과제 확인]</b>만 눌러 읽었다는 표시를 남기거나, 제출물을 열어 항목별로 첨삭 · 메모를 달 수 있습니다.</li>

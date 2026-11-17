@@ -44,8 +44,9 @@ export async function onRequestGet({ request, env }) {
   return jsonResponse({ assignments: results });
 }
 
-/* POST /api/professor-assignments — 새 과제 등록  body: { title, dueAt, classId }
-   (dueAt: unix seconds 또는 null, classId: 특정 수업에 속하면 그 수업 id, 수업 미지정이면 null) */
+/* POST /api/professor-assignments — 새 과제 등록  body: { title, dueAt, classIds | classId, type, maxScore }
+   (dueAt: unix seconds 또는 null, classIds: 과제를 만들 수업 id 배열 — 수업마다 별도 과제가 생긴다,
+    null 원소/classId null은 수업 미지정. 응답 assignments = 만든 과제들, assignment = 첫 번째) */
 export async function onRequestPost({ request, env }) {
   const auth = await requireProfessor(request, env);
   if (!auth) return jsonResponse({ error: "교수 계정만 접근할 수 있습니다." }, 403);
@@ -62,26 +63,46 @@ export async function onRequestPost({ request, env }) {
     ? Number(body.maxScore) : null;
   if (!title) return jsonResponse({ error: "과제명을 입력해주세요." }, 400);
 
-  let classId = null;
-  if (body && body.classId != null) {
-    classId = Number(body.classId);
-    if (!classId) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
-    const cls = await env.DB.prepare("SELECT id FROM classes WHERE id = ? AND prof_id = ?").bind(classId, auth.user.id).first();
-    if (!cls) return jsonResponse({ error: "수업을 찾을 수 없습니다." }, 404);
+  /* 2026-11-17: classIds 배열이면 같은 설정의 과제 폴더를 수업마다 "따로" 하나씩 만든다(합치지 않음 —
+     제출함·마감·설정 변경이 수업별로 독립). null 원소는 수업 미지정(전체 공개) 과제. 예전 형식 classId 하나도 받는다. */
+  let want;
+  if (body && Array.isArray(body.classIds)) want = body.classIds;
+  else want = [body && body.classId != null ? body.classId : null];
+  const seen = new Set();
+  const classIds = [];
+  for (const raw of want.slice(0, 50)) {
+    const cid = raw == null || raw === "none" ? null : Number(raw);
+    if (cid !== null && !cid) return jsonResponse({ error: "잘못된 요청입니다." }, 400);
+    const k = cid === null ? "none" : cid;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    classIds.push(cid);
+  }
+  if (!classIds.length) return jsonResponse({ error: "과제를 만들 수업을 하나 이상 골라주세요." }, 400);
+  const realIds = classIds.filter((c) => c !== null);
+  if (realIds.length) {
+    const { results: mine } = await env.DB.prepare(
+      "SELECT id FROM classes WHERE prof_id = ? AND id IN (" + realIds.map(() => "?").join(",") + ")"
+    ).bind(auth.user.id, ...realIds).all();
+    if ((mine || []).length !== realIds.length) return jsonResponse({ error: "수업을 찾을 수 없습니다." }, 404);
   }
 
   const created = nowSec();
-  /* max_score는 나중에 추가된 컬럼 — 없는 DB에서도 과제 등록 자체는 되어야 하므로 2단계로 시도한다 */
-  let result;
-  try {
-    result = await env.DB.prepare(
-      "INSERT INTO assignments (prof_id, title, due_at, open, class_id, type, max_score, created_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?)"
-    ).bind(auth.user.id, title, dueAt, classId, type, maxScore, created).run();
-  } catch (e) {
-    result = await env.DB.prepare(
-      "INSERT INTO assignments (prof_id, title, due_at, open, class_id, type, created_at) VALUES (?, ?, ?, 1, ?, ?, ?)"
-    ).bind(auth.user.id, title, dueAt, classId, type, created).run();
+  const assignments = [];
+  for (const classId of classIds) {
+    /* max_score는 나중에 추가된 컬럼 — 없는 DB에서도 과제 등록 자체는 되어야 하므로 2단계로 시도한다 */
+    let result;
+    try {
+      result = await env.DB.prepare(
+        "INSERT INTO assignments (prof_id, title, due_at, open, class_id, type, max_score, created_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?)"
+      ).bind(auth.user.id, title, dueAt, classId, type, maxScore, created).run();
+    } catch (e) {
+      result = await env.DB.prepare(
+        "INSERT INTO assignments (prof_id, title, due_at, open, class_id, type, created_at) VALUES (?, ?, ?, 1, ?, ?, ?)"
+      ).bind(auth.user.id, title, dueAt, classId, type, created).run();
+    }
+    assignments.push({ id: result.meta.last_row_id, title, due_at: dueAt, open: 1, class_id: classId, type, max_score: maxScore, created_at: created, submission_count: 0 });
   }
 
-  return jsonResponse({ ok: true, assignment: { id: result.meta.last_row_id, title, due_at: dueAt, open: 1, class_id: classId, type, max_score: maxScore, created_at: created, submission_count: 0 } });
+  return jsonResponse({ ok: true, assignment: assignments[0], assignments });
 }
