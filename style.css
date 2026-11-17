@@ -1160,8 +1160,15 @@ canvas.draw-layer-canvas.is-base{position:relative}
 
 /* 콘티 이미지 크게 보기 (2026-09-11) — 업로드한 이미지도 원본 비율 그대로 화면에 맞춰 크게 띄운다 */
 .sb-view-modal{max-width:94vw}
-.sb-view-img{display:block;max-width:min(88vw,1100px);max-height:76vh;width:auto;height:auto;
-  object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px;align-self:center}
+/* 2026-11-17: 크게 보기 창 확대·축소 — 고정 크기 무대 안에서 그림을 transform으로 확대·이동 */
+.sb-view-stage{position:relative;overflow:hidden;width:min(88vw,1100px);height:70vh;
+  background:#f3f3f3;border:1px solid var(--line);border-radius:8px;touch-action:none;user-select:none;cursor:zoom-in}
+.sb-view-img{position:absolute;left:0;top:0;max-width:none;max-height:none;width:auto;height:auto;
+  transform-origin:0 0;background:#fff;-webkit-user-drag:none;pointer-events:none}
+.sb-zoom-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sb-zoom-pct{min-width:52px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
+.sb-zoom-hint{font-size:12px;color:var(--muted,#888);margin-left:auto}
+@media (max-width:600px){.sb-view-stage{height:62vh}.sb-zoom-hint{display:none}}
 .sb-fb-img-zoom{cursor:zoom-in}
 .sb-fb-img-zoom:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
 

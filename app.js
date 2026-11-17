@@ -9078,9 +9078,72 @@ function openStoryboardImageViewer(title, key, onDraw){
   top.append(ttl, iconBtn(ICONS.close, "닫기", close));
   box.appendChild(top);
 
-  const img=document.createElement("img"); img.className="sb-view-img";
+  /* 2026-11-17: 확대·축소 — 휠/핀치/버튼(＋ − 화면 맞춤)으로 배율을 바꾸고, 확대한 뒤에는 끌어서 옮긴다.
+     더블클릭(더블탭)은 화면 맞춤 ↔ 2배 전환. 파일 제출 과제의 jpg·png도 이 창을 쓴다. */
+  const stage=document.createElement("div"); stage.className="sb-view-stage";
+  const img=document.createElement("img"); img.className="sb-view-img"; img.draggable=false;
   img.alt=title||"콘티"; img.src="/api/storyboard-image?key="+encodeURIComponent(key);
-  box.appendChild(img);
+  stage.appendChild(img);
+  box.appendChild(stage);
+
+  const zbar=document.createElement("div"); zbar.className="sb-zoom-bar";
+  const mkZ=(label,tip,fn)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn ghost sm"; b.textContent=label; b.title=tip; b.onclick=fn; return b; };
+  const pct=document.createElement("span"); pct.className="sb-zoom-pct";
+  let fit=1, s=1, tx=0, ty=0;
+  const MAXS=8;
+  const apply=()=>{ img.style.transform=`translate(${tx}px,${ty}px) scale(${s})`; pct.textContent=Math.round(s*100)+"%";
+    stage.style.cursor = s>fit+1e-6 ? "grab" : "zoom-in"; };
+  /* 그림이 화면보다 작으면 가운데, 크면 가장자리가 안쪽으로 들어오지 않게 묶는다 */
+  const clamp=()=>{ const W=stage.clientWidth, H=stage.clientHeight, w=img.naturalWidth*s, h=img.naturalHeight*s;
+    tx = w<=W ? (W-w)/2 : Math.min(0, Math.max(W-w, tx));
+    ty = h<=H ? (H-h)/2 : Math.min(0, Math.max(H-h, ty)); };
+  const zoomAt=(ns,cx,cy)=>{ ns=Math.max(fit*0.5, Math.min(MAXS, ns));
+    if(cx==null){ cx=stage.clientWidth/2; cy=stage.clientHeight/2; }
+    tx = cx-(cx-tx)*(ns/s); ty = cy-(cy-ty)*(ns/s); s=ns; clamp(); apply(); };
+  const fitNow=()=>{ const W=stage.clientWidth, H=stage.clientHeight;
+    if(!img.naturalWidth||!W||!H) return;
+    fit=Math.min(1, W/img.naturalWidth, H/img.naturalHeight); s=fit; clamp(); apply(); };
+  zbar.append(
+    mkZ("−","축소",()=>zoomAt(s/1.25)),
+    pct,
+    mkZ("＋","확대",()=>zoomAt(s*1.25)),
+    mkZ("화면 맞춤","그림 전체를 화면에 맞춥니다",fitNow),
+    mkZ("원본 크기","실제 해상도(100%)로 봅니다",()=>zoomAt(1))
+  );
+  const zhint=document.createElement("span"); zhint.className="sb-zoom-hint";
+  zhint.textContent="휠·두 손가락으로 확대/축소, 끌어서 이동, 더블클릭으로 2배";
+  zbar.appendChild(zhint);
+  box.appendChild(zbar);
+
+  img.onload=fitNow;
+  stage.addEventListener("wheel", e=>{ e.preventDefault();
+    const r=stage.getBoundingClientRect();
+    zoomAt(s*Math.exp(-e.deltaY*0.0015), e.clientX-r.left, e.clientY-r.top); }, {passive:false});
+  stage.addEventListener("dblclick", e=>{ const r=stage.getBoundingClientRect();
+    if(s>fit*1.05) fitNow(); else zoomAt(Math.max(fit*2, Math.min(1,MAXS)), e.clientX-r.left, e.clientY-r.top); });
+  /* 끌어서 이동 + 두 손가락 핀치 (Pointer Events) */
+  const pts=new Map(); let pinch=null;
+  stage.addEventListener("pointerdown", e=>{ stage.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2){ const [a,b]=[...pts.values()]; pinch={d:Math.hypot(a.x-b.x,a.y-b.y)||1, s}; }
+    if(s>fit+1e-6) stage.style.cursor="grabbing"; });
+  stage.addEventListener("pointermove", e=>{ const p=pts.get(e.pointerId); if(!p) return;
+    const r=stage.getBoundingClientRect();
+    if(pts.size>=2 && pinch){ pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      const [a,b]=[...pts.values()];
+      zoomAt(pinch.s*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d, (a.x+b.x)/2-r.left, (a.y+b.y)/2-r.top); return; }
+    tx+=e.clientX-p.x; ty+=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY; clamp(); apply(); });
+  const up=e=>{ pts.delete(e.pointerId); if(pts.size<2) pinch=null; apply(); };
+  stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+  const onKey=e=>{ if(!overlay.isConnected){ document.removeEventListener("keydown", onKey); return; }
+    if(e.key==="Escape") close();
+    else if(e.key==="+"||e.key==="=") zoomAt(s*1.25);
+    else if(e.key==="-") zoomAt(s/1.25);
+    else if(e.key==="0") fitNow(); };
+  document.addEventListener("keydown", onKey);
+  const onResize=()=>{ if(!overlay.isConnected){ window.removeEventListener("resize", onResize); return; }
+    const wasFit = Math.abs(s-fit)<1e-6; if(wasFit) fitNow(); else { clamp(); apply(); } };
+  window.addEventListener("resize", onResize);
 
   if(typeof onDraw==="function"){
     const actions=document.createElement("div"); actions.className="dlg-modal-actions";
