@@ -44,7 +44,8 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS user_data (
   user_id INTEGER PRIMARY KEY,
   data TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  rev INTEGER  -- 2026-11-18: 저장 번호(덮어쓰기 충돌 방지). 기존 DB는 functions/api/data.js가 자동으로 추가
 );
 CREATE INDEX IF NOT EXISTS idx_user_data_updated ON user_data(updated_at);
 CREATE TABLE IF NOT EXISTS assignments (

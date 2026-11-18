@@ -58,7 +58,8 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS user_data (
   user_id INTEGER PRIMARY KEY,
   data TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  rev INTEGER  -- 2026-11-18: 저장 번호(덮어쓰기 충돌 방지). 기존 DB는 functions/api/data.js가 자동으로 추가
 );
 -- (2026-09-15) idx_user_data_updated 인덱스는 만들지 않는다.
 -- user_data는 항상 user_id(기본키)로만 조회하므로 updated_at 인덱스를 쓰는 곳이 없는데,

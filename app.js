@@ -417,8 +417,11 @@ function save(opts){
       alert("이 브라우저에 임시 저장할 공간이 부족합니다.\n작품 내용은 서버에 저장되지만, 인터넷이 끊긴 상태에서는 저장되지 않을 수 있습니다.\n사용하지 않는 작품을 정리하거나 브라우저 저장 공간을 비워주세요.");
     }
   }
+  /* (2026-11-18) 계정 태그는 "서버에서 이 계정 데이터를 불러온 뒤"에만 남긴다 — 같은 PC에서 다른 학생이
+     로그인한 직후(불러오기 전)에 save()가 불리면 앞 학생의 작품에 새 학생의 태그가 붙어, auth.js
+     loadFromServer()가 그것을 새 학생의 "아직 못 올린 글"로 보고 합쳐 버릴 수 있다. */
   try{
-    if(typeof getToken==="function" && getToken() && typeof currentUser!=="undefined" && currentUser && currentUser.username){
+    if(typeof serverSaveReady==="function" && serverSaveReady() && typeof currentUser!=="undefined" && currentUser && currentUser.username){
       localStorage.setItem(LS_OWNER_KEY, currentUser.username);
     }
   }catch(e){}
@@ -539,7 +542,9 @@ function fillWriteDoc(wd){
     const backgrounds=Array.isArray(x.backgrounds)?x.backgrounds.filter(s=>typeof s==="string"&&s.trim()):[];
     const characters=Array.isArray(x.characters)?x.characters.filter(s=>typeof s==="string"&&s.trim()):[];
     const storyboard=(x.storyboard && typeof x.storyboard==="object" && x.storyboard.key)
-      ? {key:String(x.storyboard.key), size:sbNormalizeSize(x.storyboard.size)}
+      /* 2026-11-18: layers(층 3장의 key)도 함께 보관 — 예전에는 불러올 때마다 빠져서, 다시 열면 층이 한 장으로 합쳐졌다 */
+      ? Object.assign({key:String(x.storyboard.key), size:sbNormalizeSize(x.storyboard.size)},
+          (x.storyboard.layers && typeof x.storyboard.layers==="object") ? {layers:Object.assign({}, x.storyboard.layers)} : {})
       : null;
     return {id:x.id||uid(), sectionId:x.sectionId||"", fromIdea:x.fromIdea||"", title:x.title||"", items, groupId, backgrounds, characters, storyboard};
   }) : []);

@@ -333,28 +333,255 @@ function showAuthPanel(name) {
 }
 
 /* ===== 서버 데이터 저장/불러오기 ===== */
+
+/* ===== (2026-11-18) 저장 버전(rev) + 3방향 합치기 — "다시 접속하면 글이 사라진다" 문제의 근본 수정 =====
+   원인: 서버가 받은 내용을 무조건 덮어썼기 때문에, 예전 내용을 들고 있는 다른 화면(실습실 PC에 열어둔 탭,
+   같은 브라우저의 두 번째 탭, 휴대폰 등)에서 아무 조작이나 하면 그 예전 내용이 새로 쓴 글을 덮어썼다.
+   이제
+   (1) 서버에서 받은 rev(저장 번호)를 serverRev에 기억해 두고 저장할 때 baseRev로 함께 보낸다.
+       서버의 rev가 앞서 있으면 서버는 덮어쓰지 않고 409 + 최신 내용을 돌려준다(functions/api/data.js).
+   (2) 그러면 "마지막으로 서버와 맞춘 상태(syncBase — 작품별 해시)"를 기준으로 내 쪽/서버 쪽 중 어느 쪽이
+       바뀌었는지 작품 단위로 가려 합친다(mergeSyncData). 한쪽만 바뀐 작품은 바뀐 쪽을 쓰고,
+       양쪽 모두 바뀐 작품은 내 쪽을 그대로 두고 서버 쪽은 "(다른 곳에서 저장된 내용)" 사본으로 따로 보관한다
+       — 어떤 경우에도 글을 버리지 않는다.
+   (3) syncBase는 localStorage(SYNC_BASE_KEY)에도 남겨, 새로고침/재접속 때 이 브라우저에 남아 있던
+       "아직 서버에 못 올라간 내용"(불러오기 전에 쓴 글, 예전 화면에서 거절당한 저장)도 서버 내용과 합쳐 올린다.
+   (4) 저장 요청은 한 번에 하나만 보낸다(먼저 보낸 요청이 늦게 도착해 새 내용을 덮어쓰는 일 방지).
+   (5) 창으로 돌아오면(visibilitychange/focus) 서버 rev만 가볍게 확인해, 그사이 다른 곳에서 저장됐으면
+       예전 내용 위에서 계속 쓰지 않도록 곧바로 최신 내용을 받아 합친다. */
+const SYNC_BASE_KEY = "storyhelper_v1_syncbase";
+const SYNC_META_KEYS = ["projects", "current", "openIds", "modTimes"]; // 해시로 비교하지 않는 키
+let serverRev = null;   // 마지막으로 서버와 맞춘 rev (불러오기 전에는 null)
+let syncBase = null;    // {p:{작품id:해시}, k:{키:해시}} — 마지막으로 서버와 맞춘 내용의 해시
+
+/* 짧은 문자열 해시(cyrb53) — 내용 비교용 */
+function syncHash(str) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36) + ":" + str.length;
+}
+/* 키 순서와 무관한 JSON — 비교용 해시는 이것으로 만든다. fillProject() 같은 보정은 값은 그대로 두고
+   키 순서만 바꿀 수 있는데, 일반 JSON.stringify로 비교하면 "내용이 바뀌었다"고 잘못 판단해 사본이 생긴다. */
+function syncStable(v) {
+  if (v === null || typeof v !== "object") { const s = JSON.stringify(v); return typeof s === "undefined" ? "null" : s; }
+  if (Array.isArray(v)) return "[" + v.map(syncStable).join(",") + "]";
+  const keys = Object.keys(v).filter((k) => typeof v[k] !== "undefined" && typeof v[k] !== "function").sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + syncStable(v[k])).join(",") + "}";
+}
+function syncHashOf(v) { return syncHash(syncStable(v)); }
+/* DB 전체 JSON과 작품별/키별 해시를 한 번에 만든다. JSON은 JSON.stringify(db)와 똑같은 문자열이다. */
+function syncSnapshot(db) {
+  const parts = [], base = { p: {}, k: {} };
+  Object.keys(db || {}).forEach((key) => {
+    const v = db[key];
+    if (typeof v === "undefined" || typeof v === "function") return;
+    let s;
+    if (key === "projects" && Array.isArray(v)) {
+      const arr = v.map((p) => {
+        const js = JSON.stringify(p);
+        if (p && p.id) base.p[p.id] = syncHashOf(p);
+        return typeof js === "undefined" ? "null" : js;
+      });
+      s = "[" + arr.join(",") + "]";
+    } else {
+      s = JSON.stringify(v);
+      if (typeof s === "undefined") return;
+      if (SYNC_META_KEYS.indexOf(key) < 0) base.k[key] = syncHashOf(v);
+    }
+    parts.push(JSON.stringify(key) + ":" + s);
+  });
+  return { json: "{" + parts.join(",") + "}", base };
+}
+function setSyncBase(base, rev) {
+  syncBase = base;
+  serverRev = rev;
+  try {
+    if (currentUser && currentUser.username)
+      localStorage.setItem(SYNC_BASE_KEY, JSON.stringify({ user: currentUser.username, rev, p: base.p, k: base.k }));
+  } catch (e) {}
+}
+function storedSyncBase() {
+  try {
+    const b = JSON.parse(localStorage.getItem(SYNC_BASE_KEY));
+    if (b && currentUser && b.user === currentUser.username && b.p && b.k) return { p: b.p, k: b.k };
+  } catch (e) {}
+  return null;
+}
+/* 서버에서 받은 데이터를 화면에서 쓰는 형태로 보정(예전 버전 데이터의 빠진 칸 채우기 등) */
+function normalizeSyncData(data) {
+  if (typeof fillProject === "function") data.projects = data.projects.map(fillProject);
+  if (!data.projects.some((p) => p.id === data.current)) data.current = data.projects[0].id;
+  if (typeof fillWorkDB === "function") data.workDB = fillWorkDB(data.workDB);
+  if (typeof fillOpenIds === "function") fillOpenIds(data);
+  if (typeof migrateIdeaBlocksToAccount === "function") migrateIdeaBlocksToAccount(data);
+  return data;
+}
+function syncMaxTime(mt) {
+  let m = 0;
+  Object.keys(mt || {}).forEach((k) => { if (mt[k] > m) m = mt[k]; });
+  return m;
+}
+/* 내 쪽(local)과 서버 쪽(server)을 base(마지막으로 맞춘 상태의 해시) 기준으로 합친다.
+   local의 작품 객체는 가능한 한 그대로 재사용한다(편집 중인 화면이 그 객체를 붙들고 있으므로).
+   base가 없으면(이번 수정 전에 쓰던 브라우저) 작품별 마지막 수정 시각(modTimes)으로 판단한다.
+   돌려주는 값: {db, changed(내 쪽과 달라졌는지), copies(따로 보관한 사본 이름들)} */
+function mergeSyncData(local, server, base) {
+  const lmt = (local.modTimes && typeof local.modTimes === "object") ? local.modTimes : {};
+  const smt = (server.modTimes && typeof server.modTimes === "object") ? server.modTimes : {};
+  const bp = base ? base.p : null, bk = base ? base.k : null;
+  const sById = {};
+  (server.projects || []).forEach((p) => { if (p && p.id) sById[p.id] = p; });
+  const lIds = {};
+  const projects = [], copies = [], copyIds = [];
+  let changed = false;
+
+  (local.projects || []).forEach((L) => {
+    if (!L || !L.id) return;
+    lIds[L.id] = true;
+    const S = sById[L.id];
+    const hl = syncHashOf(L);
+    if (!S) {
+      // 서버에 없는 작품: 예전에 서버에 있었고 내 쪽이 그대로면 = 다른 곳에서 삭제한 것 → 따른다
+      if (bp && bp[L.id] && bp[L.id] === hl) { changed = true; return; }
+      projects.push(L); return;
+    }
+    const hs = syncHashOf(S);
+    if (hl === hs) { projects.push(L); return; }
+    const b = bp ? bp[L.id] : null;
+    if (b && hl === b) { projects.push(S); changed = true; return; }   // 서버 쪽만 바뀜
+    if (b && hs === b) { projects.push(L); return; }                   // 내 쪽만 바뀜
+    if (!b && (smt[L.id] || 0) >= (lmt[L.id] || 0)) { projects.push(S); changed = true; return; } // 기준 없음: 서버가 더 최근
+    // 양쪽 모두 바뀜 → 내 쪽을 유지하고, 서버 쪽은 사본으로 보관(어느 쪽 글도 버리지 않는다)
+    projects.push(L);
+    const copy = JSON.parse(JSON.stringify(S));
+    copy.id = (typeof uid === "function") ? uid() : ("p" + Date.now() + Math.floor(Math.random() * 1e6));
+    copy.name = (S.name || "제목 없음") + " (다른 곳에서 저장된 내용)";
+    copy.isSampleProject = false;
+    projects.push(copy);
+    copies.push(copy.name); copyIds.push(copy.id);
+    changed = true;
+  });
+  (server.projects || []).forEach((S) => {
+    if (!S || !S.id || lIds[S.id]) return;
+    // 내 쪽에 없는 작품: 예전에 맞춘 적 있고 서버 쪽이 그대로면 = 내가 삭제한 것 → 다시 살리지 않는다
+    if (bp && bp[S.id] && bp[S.id] === syncHashOf(S)) return;
+    projects.push(S); changed = true;
+  });
+
+  const out = {};
+  const keys = [];
+  Object.keys(local).concat(Object.keys(server)).forEach((k) => { if (keys.indexOf(k) < 0) keys.push(k); });
+  const serverNewer = syncMaxTime(smt) >= syncMaxTime(lmt);
+  keys.forEach((k) => {
+    if (k === "projects") { out.projects = projects; return; }
+    if (k === "modTimes") {
+      const m = Object.assign({}, smt);
+      Object.keys(lmt).forEach((id) => { if (!(m[id] >= lmt[id])) m[id] = lmt[id]; });
+      copyIds.forEach((id) => { m[id] = Date.now(); });
+      out.modTimes = m; return;
+    }
+    if (k === "current" || k === "openIds") { out[k] = (k in local) ? local[k] : server[k]; return; }
+    const lv = local[k], sv = server[k];
+    if (!(k in server)) { out[k] = lv; return; }
+    if (!(k in local)) { out[k] = sv; changed = true; return; }
+    const hl = syncHashOf(lv), hs = syncHashOf(sv);
+    if (hl === hs) { out[k] = lv; return; }
+    const b = bk ? bk[k] : null;
+    if (b && hl === b) { out[k] = sv; changed = true; return; }
+    if (b && hs === b) { out[k] = lv; return; }
+    if (Array.isArray(lv) && Array.isArray(sv) && k === "ideaBlocks") {
+      // 아이디어 블록: 양쪽 모두 바뀌었으면 id 기준으로 합친다(내 쪽 우선)
+      const seen = {}; const arr = [];
+      lv.forEach((x) => { if (x && x.id) seen[x.id] = true; arr.push(x); });
+      sv.forEach((x) => { if (x && x.id && !seen[x.id]) { arr.push(x); changed = true; } });
+      out[k] = arr; return;
+    }
+    if (!b && serverNewer) { out[k] = sv; changed = true; return; }
+    out[k] = lv;
+  });
+  if (!Array.isArray(out.projects) || !out.projects.length) out.projects = projects.length ? projects : (server.projects || []);
+  if (!Array.isArray(out.openIds)) out.openIds = [];
+  copyIds.forEach((id) => { if (out.openIds.indexOf(id) < 0) out.openIds.push(id); });
+  if (!out.projects.some((p) => p.id === out.current)) out.current = out.projects[0].id;
+  if (typeof fillOpenIds === "function") fillOpenIds(out);
+  return { db: out, changed, copies };
+}
+/* 합친 결과를 지금 쓰는 DB 객체에 그대로 덮어 넣는다(DB 객체 자체는 바꾸지 않음) */
+function applyMergedDB(merged) {
+  Object.keys(DB).forEach((k) => { if (!(k in merged)) delete DB[k]; });
+  Object.assign(DB, merged);
+  const prevP = P;
+  P = currentProject();
+  if (P !== prevP && typeof resetUndoHistory === "function") resetUndoHistory();
+  try { localStorage.setItem(typeof LS_KEY !== "undefined" ? LS_KEY : "storyhelper_v1", JSON.stringify(DB)); } catch (e) {}
+}
+function alertSyncCopies(copies) {
+  if (!copies || !copies.length) return;
+  alert("다른 창(또는 다른 컴퓨터)에서 같은 작품이 따로 수정되어 있었습니다.\n\n" +
+    "지금 화면의 내용은 그대로 두고, 다른 곳에서 저장된 내용은 아래 이름의 작품으로 따로 보관했습니다.\n" +
+    "두 내용을 비교해 필요한 부분을 옮긴 뒤, 필요 없는 쪽은 지우시면 됩니다.\n\n· " + copies.join("\n· "));
+}
+
+let serverLoadInFlight = false;
 async function loadFromServer() {
   if (!getToken()) return;
+  if (serverLoadInFlight) return;
   clearTimeout(serverLoadRetryTimer);
   const st = document.getElementById("serverStatus");
   if (st) st.innerHTML = CLOUD_ICON + " 불러오는 중…";
-  const res = await apiFetch("data");
+  serverLoadInFlight = true;
+  let res;
+  try { res = await apiFetch("data"); } finally { serverLoadInFlight = false; }
   if (res.status === 401) { signOut(); return; }
   if (res.ok && res.body) {
     serverLoadRetries = 0;
     const data = res.body.data;
+    const rev = Number(res.body.rev) || 0;
+    /* 이 브라우저에 남아 있는 내용이 지금 로그인한 계정의 것인지(다른 계정이 쓰던 PC가 아닌지) */
+    let localOwner = null;
+    try { localOwner = localStorage.getItem(typeof LS_OWNER_KEY !== "undefined" ? LS_OWNER_KEY : "__none__"); } catch (e) {}
+    const hasLocalData = DB && Array.isArray(DB.projects) && DB.projects.length > 0;
+    const localIsMine = hasLocalData && localOwner && currentUser && localOwner === currentUser.username;
+
     if (data && Array.isArray(data.projects) && data.projects.length && typeof fillProject === "function") {
+      normalizeSyncData(data);
+      const serverSnap = syncSnapshot(data);
+      const wasLoaded = serverDataLoaded;
       serverDataLoaded = true;
-      data.projects = data.projects.map(fillProject);
-      if (!data.projects.some((p) => p.id === data.current)) data.current = data.projects[0].id;
-      if (typeof fillWorkDB === "function") data.workDB = fillWorkDB(data.workDB);
-      if (typeof fillOpenIds === "function") fillOpenIds(data);
-      if (typeof migrateIdeaBlocksToAccount === "function") migrateIdeaBlocksToAccount(data);
-      DB = data;
-      P = currentProject();
-      if (typeof resetUndoHistory === "function") resetUndoHistory();
-      render();
-      if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
+      if (localIsMine) {
+        /* (2026-11-18) 서버 내용으로 통째로 바꾸지 않고, 이 브라우저에 남은 "아직 못 올린 글"과 합친다 */
+        const base = (wasLoaded && syncBase) ? syncBase : storedSyncBase();
+        const m = mergeSyncData(DB, data, base);
+        setSyncBase(serverSnap.base, rev);
+        if (m.changed || !wasLoaded) {
+          applyMergedDB(m.db);
+          if (!wasLoaded && typeof resetUndoHistory === "function") resetUndoHistory();
+          render();
+        }
+        if (syncSnapshot(DB).json !== serverSnap.json) {
+          lastSavedJson = null;
+          if (st) st.innerHTML = CLOUD_ICON + " 서버와 합치는 중…";
+          forceSaveToServer();
+        } else {
+          lastSavedJson = serverSnap.json;
+          if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
+        }
+        alertSyncCopies(m.copies);
+      } else {
+        DB = data;
+        P = currentProject();
+        setSyncBase(serverSnap.base, rev);
+        lastSavedJson = serverSnap.json;
+        if (typeof resetUndoHistory === "function") resetUndoHistory();
+        render();
+        if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
+      }
     } else {
       // 서버에 저장된 데이터가 없는 경우 — 이 시점에 메모리의 DB는 로그인 화면이 뜨기 전 localStorage에서
       // 미리 읽어들인 값이다. 예전엔 이럴 때 무조건 빈 작품으로 새로 시작하며 그 빈 내용을 로컬 저장소에도
@@ -366,10 +593,8 @@ async function loadFromServer() {
       // 그대로 서버에 복구 업로드한다. 태그가 없거나 다른 계정이면(예: 같은 브라우저에서 다른 계정을
       // 테스트했던 경우) 예전처럼 빈 작품으로 새로 시작한다.
       serverDataLoaded = true; // 서버 응답을 정상적으로 확인했으므로 이제부터 서버 저장 허용
-      let localOwner = null;
-      try { localOwner = localStorage.getItem(typeof LS_OWNER_KEY !== "undefined" ? LS_OWNER_KEY : "__none__"); } catch (e) {}
-      const hasLocalData = DB && Array.isArray(DB.projects) && DB.projects.length > 0;
-      const localIsMine = hasLocalData && localOwner && currentUser && localOwner === currentUser.username;
+      setSyncBase({ p: {}, k: {} }, rev);
+      lastSavedJson = null;
 
       if (localIsMine) {
         if (typeof fillProject === "function") DB.projects = DB.projects.map(fillProject);
@@ -398,8 +623,10 @@ async function loadFromServer() {
        화면에는 (이 브라우저에 남아있던) 로컬 데이터가 보이고 사용자는 정상인 줄 알았다.
        기록 삭제 등으로 로컬이 비어 있으면 "작품이 사라진" 것처럼 보였다.
        이제 자동으로 다시 시도하고, 계속 실패하면 한 번 분명히 알려준다.
-       이 상태에서는 serverDataLoaded가 false이므로 서버 저장(덮어쓰기)도 하지 않는다. */
-    serverDataLoaded = false;
+       이 상태에서는 serverDataLoaded가 false이므로 서버 저장(덮어쓰기)도 하지 않는다.
+       (2026-11-18) 이미 한 번 불러온 뒤의 "다시 확인"이 실패한 경우에는 저장을 막지 않는다 —
+       저장은 rev 확인을 거치므로 덮어쓸 위험이 없다. */
+    if (serverDataLoaded) { if (st) st.innerHTML = CLOUD_ICON + " 서버 확인 실패"; return; }
     if (serverLoadRetries < 4) {
       serverLoadRetries++;
       if (st) st.innerHTML = CLOUD_ICON + " 서버 연결 실패 — 다시 시도 중…";
@@ -426,44 +653,100 @@ let serverSaveRetryTimer = null;
    (2) SAVE_DEBOUNCE_MS: 자동저장 대기시간을 0.6초 → 2.5초로 늘려, 글을 이어 쓰는 동안 발생하는
        저장 횟수를 줄인다. 탭을 닫거나 화면을 벗어날 때는 아래 flushPendingServerSave()가 대기 중이던
        저장을 즉시 내보내므로 유실 위험은 늘지 않는다.
-   주의: lastSavedJson은 "서버에 실제로 올라간 내용"만 기억해야 한다. 서버에서 불러온 직후에 미리
-   채워두면 fillProject()/migrate...() 같은 보정 결과가 영영 서버에 반영되지 않으므로 그렇게 하지 말 것. */
+   주의: lastSavedJson은 "서버에 실제로 올라간 내용"만 기억해야 한다. */
 const SAVE_DEBOUNCE_MS = 2500;
 let lastSavedJson = null;
 function dbJson() { try { return JSON.stringify(DB); } catch (e) { return null; } }
-function resetServerSaveCache() { lastSavedJson = null; }
+function resetServerSaveCache() {
+  lastSavedJson = null;
+  serverRev = null;
+  syncBase = null;
+}
 
-async function doServerSave(pid, isRetry, json) {
+/* (2026-11-18) 저장 요청은 한 번에 하나만 — 보내는 중에 또 저장하면 끝난 뒤 최신 내용으로 한 번 더 보낸다 */
+let serverSaveInFlight = false;
+let serverSaveQueued = false;
+let serverConflictStreak = 0;
+
+async function doServerSave(pid, isRetry, keepalive) {
+  if (!serverSaveReady() || serverRev === null) return;
+  if (serverSaveInFlight) { serverSaveQueued = true; return; }
   const st = document.getElementById("serverStatus");
-  const payload = (typeof json === "string" && json) ? json : dbJson();
-  if (payload === null) return; // 직렬화 자체가 실패하면 보낼 것이 없다
+  let snap;
+  try { snap = syncSnapshot(DB); } catch (e) { return; } // 직렬화 자체가 실패하면 보낼 것이 없다
+  const payload = snap.json;
   if (!isRetry && payload === lastSavedJson) {
     // 서버에 있는 내용과 똑같다 — 요청을 보내지 않는다(쓰기 절약)
     if (st) st.innerHTML = CLOUD_ICON + " 서버에 저장됨";
     if (typeof projSaveState === "object") projSaveState[pid] = "saved";
     if (typeof updateTabDot === "function") updateTabDot(pid);
     /* 2026-09-15: 이 경로에서만 showSaveToast를 부르지 않아 화면 위 "저장 중…" 배너가 영영 사라지지
-       않았다. save()는 이미 "saving"을 띄운 뒤라, 보낼 내용이 없으면 여기서 닫아줘야 한다.
-       (내용이 하나도 바뀌지 않는 조작을 했을 때 이 경로로 들어온다 — 배너가 계속 떠 있으면
-       "저장이 안 되고 있다"는 오해를 준다) */
+       않았다. save()는 이미 "saving"을 띄운 뒤라, 보낼 내용이 없으면 여기서 닫아줘야 한다. */
     if (typeof showSaveToast === "function") showSaveToast("saved");
     return;
   }
-  const res = await apiFetch("data", { method: "POST", body: '{"data":' + payload + '}' });
-  if (res.status === 401) { signOut(); return; }
+  serverSaveInFlight = true;
+  const sentRev = serverRev;
+  let res;
+  try {
+    const body = '{"baseRev":' + sentRev + ',"data":' + payload + '}';
+    /* (2026-11-18) 화면을 벗어나는 순간의 저장(keepalive) — 탭을 닫아도 브라우저가 끝까지 보내 준다.
+       keepalive는 약 64KB까지만 허용되므로 그보다 크면 일반 요청으로 보낸다. */
+    const ka = !!keepalive && (typeof TextEncoder === "undefined" || new TextEncoder().encode(body).length < 60000);
+    res = await apiFetch("data", ka ? { method: "POST", body, keepalive: true } : { method: "POST", body });
+  } finally {
+    serverSaveInFlight = false;
+  }
+  if (res.status === 401) {
+    /* (2026-11-18) 로그인이 만료돼 저장이 거절된 경우 — 쓰던 글은 이 브라우저에 남아 있고, 다시 로그인하면
+       서버 내용과 합쳐 올라간다(loadFromServer). 학생이 놀라 창을 닫지 않도록 분명히 알려준다. */
+    alert("로그인이 만료되어 방금 쓴 내용이 서버에 저장되지 않았습니다.\n\n이 창을 닫지 말고 다시 로그인해 주세요. 쓰던 글은 이 브라우저에 남아 있어, 로그인하면 자동으로 서버에 올라갑니다.");
+    signOut(); return;
+  }
+
+  if (res.status === 409 && res.body && res.body.conflict && res.body.data && Array.isArray(res.body.data.projects) && res.body.data.projects.length) {
+    /* 그사이 다른 화면이 먼저 저장했다 — 덮어쓰지 않고 합친 뒤 다시 저장한다 */
+    serverConflictStreak++;
+    const server = normalizeSyncData(res.body.data);
+    const serverSnap = syncSnapshot(server);
+    const m = mergeSyncData(DB, server, syncBase);
+    setSyncBase(serverSnap.base, Number(res.body.rev) || 0);
+    if (m.changed) { applyMergedDB(m.db); render(); }
+    lastSavedJson = null;
+    alertSyncCopies(m.copies);
+    if (serverConflictStreak <= 3) { serverSaveQueued = false; doServerSave(DB.current, true); return; }
+    // 계속 충돌하면(여러 창에서 동시에 쓰는 중) 잠시 쉬었다가 다시 시도한다
+    serverConflictStreak = 0;
+    clearTimeout(serverSaveRetryTimer);
+    serverSaveRetryTimer = setTimeout(() => doServerSave(DB.current, true), 3000);
+    return;
+  }
+  if (res.status === 409 && res.body && res.body.conflict && !res.body.outdatedClient && Number.isInteger(res.body.rev)) {
+    // 서버 쪽에 쓸 만한 작품이 없는 충돌(빈 데이터) — 번호만 맞추고 내 내용으로 다시 저장한다
+    setSyncBase({ p: {}, k: {} }, res.body.rev);
+    lastSavedJson = null;
+    if (++serverConflictStreak <= 3) { doServerSave(DB.current, true); return; }
+    serverConflictStreak = 0;
+  }
+
   /* (2026-09-08) 일시적인 통신 오류로 저장이 실패하면 2초 뒤 한 번 자동 재시도한다.
-     재시도까지 실패했을 때만 "저장 실패"로 표시한다. */
+     재시도까지 실패했을 때만 "저장 실패"로 표시한다. (2026-11-18) 재시도 때는 그 시점의 최신 내용을 보낸다. */
   if (!res.ok && !isRetry) {
     if (st) st.innerHTML = CLOUD_ICON + " 저장 재시도 중…";
     clearTimeout(serverSaveRetryTimer);
-    serverSaveRetryTimer = setTimeout(() => doServerSave(pid, true, payload), 2000);
+    serverSaveRetryTimer = setTimeout(() => doServerSave(DB.current, true), 2000);
     return;
   }
-  if (res.ok) lastSavedJson = payload;
+  if (res.ok) {
+    serverConflictStreak = 0;
+    lastSavedJson = payload;
+    setSyncBase(snap.base, Number(res.body && res.body.rev) || 0);
+  }
   if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
   if (typeof projSaveState === "object") projSaveState[pid] = res.ok ? "saved" : "error";
   if (typeof updateTabDot === "function") updateTabDot(pid);
   if (typeof showSaveToast === "function") showSaveToast(res.ok ? "saved" : "error");
+  if (serverSaveQueued) { serverSaveQueued = false; doServerSave(DB.current); }
 }
 function saveToServer() {
   if (!serverSaveReady()) return; // 서버에서 아직 못 불러왔으면 덮어쓰지 않는다(2026-09-08)
@@ -481,15 +764,14 @@ function forceSaveToServer() {
   doServerSave(DB.current);
 }
 
-/* 2026-09-03: 디바운스(0.6초) 중이던 서버 저장이 창을 닫거나 다른 화면으로 넘어가면서 그대로 취소돼
-   버리는 문제 수정 — 마지막 편집 후 0.6초 안에 탭을 닫거나 컴퓨터를 바꾸면 그 편집 내용이 서버에
-   전혀 반영되지 않은 채 유실될 수 있었다(로컬에는 남지만 다른 컴퓨터에서 보면 사라진 것처럼 보임).
-   visibilitychange("hidden")는 탭 전환·창 최소화처럼 페이지가 아직 살아있는 대부분의 경우를 잡아내고,
-   pagehide는 실제로 탭이 닫히는 순간의 보조 안전장치다. pagehide 시점엔 일반 fetch가 취소될 수 있어
-   keepalive:true를 준다(브라우저마다 다르지만 대략 64KB까지 보장 — 아주 큰 작품은 못 실릴 수 있음,
-   알려진 한계). */
+/* 2026-09-03: 디바운스 중이던 서버 저장이 창을 닫거나 다른 화면으로 넘어가면서 그대로 취소돼
+   버리는 문제 수정. visibilitychange("hidden")는 탭 전환·창 최소화처럼 페이지가 아직 살아있는 대부분의
+   경우를 잡아내고, pagehide는 실제로 탭이 닫히는 순간의 보조 안전장치다. pagehide 시점엔 일반 fetch가
+   취소될 수 있어 keepalive:true를 준다(대략 64KB까지 보장 — 아주 큰 작품은 못 실릴 수 있음, 알려진 한계).
+   (2026-11-18) keepalive 요청은 결과를 확인할 수 없으므로 lastSavedJson을 미리 바꾸지 않는다
+   (예전에는 실패해도 "올라간 것"으로 기억해, 페이지가 되살아났을 때 다음 저장이 생략될 수 있었다). */
 function flushPendingServerSave(useKeepalive) {
-  if (!serverSaveReady()) return;
+  if (!serverSaveReady() || serverRev === null) return;
   if (saveToServerTimer == null) return;
   clearTimeout(saveToServerTimer);
   saveToServerTimer = null;
@@ -500,18 +782,33 @@ function flushPendingServerSave(useKeepalive) {
       fetch("/api/data", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + getToken() },
-        body: '{"data":' + payload + '}',
+        body: '{"baseRev":' + serverRev + ',"data":' + payload + '}',
         keepalive: true,
-      });
-      lastSavedJson = payload;
+      }).catch(() => {});
     } catch (e) {}
   } else {
-    doServerSave(DB.current);
+    doServerSave(DB.current, false, true);
   }
+}
+
+/* (2026-11-18) 창으로 돌아왔을 때 — 그사이 다른 곳(다른 탭·다른 컴퓨터)에서 저장됐는지 rev만 확인하고,
+   바뀌었으면 곧바로 최신 내용을 받아 합친다. 예전 내용 위에서 계속 쓰다가 충돌이 나는 일을 줄인다. */
+let lastFreshCheck = 0;
+async function checkServerFreshness() {
+  if (!serverSaveReady() || serverRev === null) return;
+  const now = Date.now();
+  if (now - lastFreshCheck < 5000) return;
+  lastFreshCheck = now;
+  const res = await apiFetch("data?meta=1");
+  if (res.status === 401) { signOut(); return; }
+  if (!res.ok || !res.body) return;
+  if ((Number(res.body.rev) || 0) !== serverRev && !serverSaveInFlight) loadFromServer();
 }
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushPendingServerSave(false);
+  else checkServerFreshness();
 });
+window.addEventListener("focus", () => checkServerFreshness());
 window.addEventListener("pagehide", () => flushPendingServerSave(true));
 
 /* ===== 폼 바인딩 ===== */
