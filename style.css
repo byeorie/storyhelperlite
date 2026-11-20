@@ -1936,4 +1936,10 @@ mark.memo-hl .dh{background:transparent}
 .hub-cell.add{border-style:dashed;color:var(--muted,#888)}
 .hub-cell.add:hover{border-color:var(--accent);color:var(--accent)}
 .hub-cell.busy{opacity:.6;cursor:progress}
+.hub-cell-wrap{position:relative;min-width:0;display:flex}
+.hub-cell-wrap .hub-cell{flex:1;padding-right:58px}
+.hub-due-btn{position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;gap:3px;padding:2px 7px;font:inherit;font-size:11px;
+  border:1px solid var(--line);border-radius:6px;background:var(--card);color:inherit;cursor:pointer}
+.hub-due-btn .icon{width:12px;height:12px}
+.hub-due-btn:hover{border-color:var(--accent);color:var(--accent)}
 @media (max-width:600px){.hub-filter{max-width:none;margin-left:0}.hub-cells{grid-template-columns:1fr 1fr}}

@@ -11299,7 +11299,7 @@ function rProfAssignHub(){
   c.innerHTML=`<h2>${ICONS.book} 과제 관리</h2>
     <p class="hint">과제 폴더를 중심으로, 같은 과제가 어느 분반에 있는지 한눈에 봅니다(과제명과 종류가 같으면 같은 과제로 묶습니다).
       분반 칸을 누르면 그 분반의 제출함이 열리고, <b>＋ 칸</b>을 누르면 같은 설정(과제명·종류·배점·제출기한)의 과제 폴더가 그 분반에 <b>따로</b> 하나 생깁니다.
-      폴더는 분반마다 독립이라 제출함·마감·설정 변경은 분반별로 관리됩니다.</p>
+      폴더는 분반마다 독립이라 제출함·마감·설정 변경은 분반별로 관리됩니다. 칸 오른쪽 위 <b>[기한]</b>으로 분반별 마감일·시간을 따로 정할 수 있습니다.</p>
     <div class="assign-folder-actions">
       <button class="btn" id="hubNewBtn">${ICONS.plus} 과제 등록</button>
       <input type="search" id="hubFilter" class="hub-filter" placeholder="과제명 검색">
@@ -11333,9 +11333,11 @@ async function loadProfAssignHub(c){
   assigns.forEach(a=>{ const k=assignHubKey(a); if(!groups.has(k)) groups.set(k, []); groups.get(k).push(a); });
   const list=[...groups.values()].sort((x,y)=>Math.max(...y.map(a=>a.created_at||0))-Math.max(...x.map(a=>a.created_at||0)));
   const stateText=a=>a.open?(isAssignPastDue(a)?"기한 지남":"제출 가능"):"마감됨";
-  const cellHtml=(label, a)=>`<button type="button" class="hub-cell has${a.open&&!isAssignPastDue(a)?"":" closed"}" data-open="${a.id}" title="${esc(label)} 제출함 열기">
+  /* 2026-11-20: 칸 오른쪽 위 [기한] 버튼 — 그 분반 폴더의 제출기한(날짜·시간)만 바로 바꾼다 */
+  const cellHtml=(label, a)=>`<div class="hub-cell-wrap"><button type="button" class="hub-cell has${a.open&&!isAssignPastDue(a)?"":" closed"}" data-open="${a.id}" title="${esc(label)} 제출함 열기">
       <span class="hub-cell-name">${esc(label)}</span>
-      <span class="hub-cell-meta">${a.due_at?("기한 "+esc(fmtDue(a.due_at))):"기한 없음"} · 제출 ${a.submission_count||0}건 · ${stateText(a)}</span></button>`;
+      <span class="hub-cell-meta">${a.due_at?("기한 "+esc(fmtDue(a.due_at))):"기한 없음"} · 제출 ${a.submission_count||0}건 · ${stateText(a)}</span></button>
+      <button type="button" class="hub-due-btn" data-due="${a.id}" title="${esc(label)} 마감일·시간 설정">${ICONS.edit} 기한</button></div>`;
   wrap.innerHTML=list.map((g,gi)=>{
     const src=g[0];
     const byClass=cid=>g.filter(a=>(a.class_id??null)===cid);
@@ -11358,6 +11360,14 @@ async function loadProfAssignHub(c){
   applyHubFilter(c);
   wrap.querySelectorAll(".hub-cell.has").forEach(b=>{
     b.onclick=()=>{ profAssignFolderId=Number(b.dataset.open); profReviewId=null; render(); window.scrollTo(0,0); };
+  });
+  wrap.querySelectorAll(".hub-due-btn").forEach(b=>{
+    b.onclick=e=>{
+      e.stopPropagation();
+      const a=assigns.find(x=>x.id===Number(b.dataset.due)); if(!a) return;
+      const cl=classes.find(x=>x.id===(a.class_id??null));
+      openDueEditModal(a, cl?classLabel(cl):"수업 미지정", ()=>loadProfAssignHub(c));
+    };
   });
   wrap.querySelectorAll(".hub-cell.add").forEach(b=>{
     b.onclick=async ()=>{
@@ -11404,6 +11414,55 @@ function fmtDue(sec){
 function isAssignPastDue(a){ return !!a.due_at && Date.now()/1000>Number(a.due_at); }
 function isAssignOpen(a){ return !!a.open && !isAssignPastDue(a); }
 function openNewAssignmentModal(classId){ openAssignmentModal(classId, null); }
+
+/* 2026-11-20: 과제 관리 허브 — 과제 폴더(분반 칸) 하나의 제출기한만 바꾸는 작은 창.
+   같은 과제라도 분반마다 폴더가 따로라서, 여기서 바꾼 기한은 그 분반 폴더에만 적용된다.
+   서버는 { id, dueAt }만 보내면 기한만 바꾼다(professor-assignment POST). 시간 규칙은 등록 창과 같다
+   ([시간 지정]을 끄면 그날 23:59, 10분 단위, 날짜를 비우면 기한 없음). */
+function openDueEditModal(a, label, onSaved){
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="마감일·시간 설정";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",close));
+  box.appendChild(top);
+  const t=dueTimeState(a.due_at);
+  box.insertAdjacentHTML("beforeend",
+    `<p class="hint" style="margin:0 0 8px"><b>${esc(a.title||"")}</b> · ${esc(label)}<br>이 분반의 과제 폴더에만 적용됩니다(다른 분반 기한은 그대로).</p>
+     <label>제출기한</label>
+     <div class="due-row">
+       <input type="date" id="dueEditDate" value="${unixToDateInput(a.due_at)}">
+       <label class="due-time-on"><input type="checkbox" id="dueEditTimeOn"${t.on?" checked":""}> 시간 지정</label>
+       <select id="dueEditH" title="시 (24시간)"${t.on?"":" disabled"}>${Array.from({length:24},(_,i)=>String(i).padStart(2,"0")).map(h=>`<option value="${h}"${h===t.h?" selected":""}>${h}시</option>`).join("")}</select>
+       <select id="dueEditM" title="분 (10분 단위)"${t.on?"":" disabled"}>${["00","10","20","30","40","50"].map(m=>`<option value="${m}"${m===t.m?" selected":""}>${m}분</option>`).join("")}</select>
+     </div>
+     <p class="hint" style="margin:4px 0 0">[시간 지정]을 켜지 않으면 그날 23:59까지입니다. 날짜를 비우면 기한이 없습니다.</p>
+     <div style="display:flex;gap:8px;margin-top:14px">
+       <button class="btn ghost" id="dueEditClear" style="flex:1">기한 없애기</button>
+       <button class="btn" id="dueEditSave" style="flex:2">저장</button>
+     </div>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const on=box.querySelector("#dueEditTimeOn");
+  on.onchange=()=>{ box.querySelector("#dueEditH").disabled=!on.checked; box.querySelector("#dueEditM").disabled=!on.checked; };
+  const save=async (dueAt, btn)=>{
+    btn.disabled=true;
+    const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:a.id, dueAt})});
+    btn.disabled=false;
+    if(!r.ok){ alert((r.body&&r.body.error)||"저장에 실패했습니다."); return; }
+    close(); if(typeof onSaved==="function") onSaved();
+  };
+  box.querySelector("#dueEditSave").onclick=e=>{
+    const d=box.querySelector("#dueEditDate").value;
+    const tm=on.checked ? `${box.querySelector("#dueEditH").value}:${box.querySelector("#dueEditM").value}:00` : "23:59:59";
+    save(d ? Math.floor(new Date(`${d}T${tm}`).getTime()/1000) : null, e.currentTarget);
+  };
+  box.querySelector("#dueEditClear").onclick=e=>{
+    if(a.due_at && !confirm("이 분반 과제의 제출기한을 없앨까요?")) return;
+    save(null, e.currentTarget);
+  };
+}
 
 /* 과제 등록 / 설정 변경 공용 모달 (2026-09-08: 등록 후에도 과제명·제출기한·수업·마감 여부를 고칠 수
    있게 확장. 예전에는 마감 스위치만 바꿀 수 있어서, 과제명을 잘못 적으면 과제를 지우고 다시 만드는
@@ -14129,7 +14188,7 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
-      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다.</li>
+      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다. 칸 오른쪽 위 <b>[기한]</b>을 누르면 그 분반 폴더의 마감일·시간만 따로 바꿀 수 있습니다.</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 등록 화면의 <b>[만들 수업]</b>에서 여러 분반을 체크하면 같은 과제가 분반마다 <b>따로</b> 하나씩 만들어집니다(제출함·마감·설정 변경은 분반별로 따로). 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 용량 제한은 관리자 설정값 · 기본 1.5MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
