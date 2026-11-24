@@ -413,6 +413,52 @@ function storedSyncBase() {
   } catch (e) {}
   return null;
 }
+/* ===== (2026-11-24) 공용 PC의 "남겨진 글" 보관(stash) =====
+   실습실 PC처럼 여러 학생이 같은 브라우저를 쓰면, 앞 학생이 서버에 못 올린 글(저장 실패한 채 쓴 글)이
+   이 브라우저에만 남아 있다가 다음 학생이 로그인해 저장하는 순간 덮여 사라졌다.
+   다른 계정의 로컬 데이터를 버리기 전에 그 계정 이름으로 따로 보관해 두고, 그 학생이 이 브라우저에서
+   다시 로그인하면 서버 내용과 합쳐 올린 뒤 지운다. (계정별 1개, 마지막 것만) */
+const STASH_PREFIX = "storyhelper_v1_stash_";
+function stashLeftoverFor(owner) {
+  if (!owner) return;
+  try {
+    /* 메모리의 DB가 아니라 이 브라우저에 저장된 값(LS_KEY)을 보관한다 — 메모리 쪽은 이미 지금 로그인한
+       학생의 서버 데이터로 바뀌었을 수 있다 */
+    const local = JSON.parse(localStorage.getItem(typeof LS_KEY !== "undefined" ? LS_KEY : "storyhelper_v1"));
+    if (!local || !Array.isArray(local.projects) || !local.projects.length) return;
+    let base = null;
+    const b = JSON.parse(localStorage.getItem(SYNC_BASE_KEY));
+    if (b && b.user === owner && b.p && b.k) base = { p: b.p, k: b.k };
+    localStorage.setItem(STASH_PREFIX + owner, JSON.stringify({ at: Date.now(), base, db: local }));
+  } catch (e) {}
+}
+function takeStashFor(user) {
+  try {
+    const s = JSON.parse(localStorage.getItem(STASH_PREFIX + user));
+    if (s && s.db && Array.isArray(s.db.projects) && s.db.projects.length) return s;
+  } catch (e) {}
+  return null;
+}
+function dropStashFor(user) { try { localStorage.removeItem(STASH_PREFIX + user); } catch (e) {} }
+/* 서버 내용으로 화면을 맞춘 뒤 호출 — 이 계정 이름으로 보관된 글이 있으면 합쳐서 올린다 */
+function applyStashIfAny() {
+  if (!currentUser || !currentUser.username || !serverDataLoaded || serverRev === null) return;
+  const s = takeStashFor(currentUser.username);
+  if (!s) return;
+  let local;
+  try { local = normalizeSyncData(JSON.parse(JSON.stringify(s.db))); } catch (e) { dropStashFor(currentUser.username); return; }
+  const keepCurrent = DB.current;
+  const m = mergeSyncData(local, DB, s.base || null);
+  m.db.current = m.db.projects.some((p) => p.id === keepCurrent) ? keepCurrent : m.db.current;
+  if (m.changed || syncSnapshot(m.db).json !== syncSnapshot(DB).json) {
+    applyMergedDB(m.db);
+    render();
+    lastSavedJson = null;
+    forceSaveToServer();
+  }
+  dropStashFor(currentUser.username);
+  alertSyncCopies(m.copies);
+}
 /* 서버에서 받은 데이터를 화면에서 쓰는 형태로 보정(예전 버전 데이터의 빠진 칸 채우기 등) */
 function normalizeSyncData(data) {
   if (typeof fillProject === "function") data.projects = data.projects.map(fillProject);
@@ -456,16 +502,28 @@ function mergeSyncData(local, server, base) {
     const b = bp ? bp[L.id] : null;
     if (b && hl === b) { projects.push(S); changed = true; return; }   // 서버 쪽만 바뀜
     if (b && hs === b) { projects.push(L); return; }                   // 내 쪽만 바뀜
-    if (!b && (smt[L.id] || 0) >= (lmt[L.id] || 0)) { projects.push(S); changed = true; return; } // 기준 없음: 서버가 더 최근
+    const keepCopy = (src, suffix) => {
+      const copy = JSON.parse(JSON.stringify(src));
+      copy.id = (typeof uid === "function") ? uid() : ("p" + Date.now() + Math.floor(Math.random() * 1e6));
+      copy.name = (src.name || "제목 없음") + suffix;
+      copy.isSampleProject = false;
+      projects.push(copy);
+      copies.push(copy.name); copyIds.push(copy.id);
+      changed = true;
+    };
+    /* 기준 없음(이 브라우저에 맞춘 기록이 없음) + 내용이 다름: 서버가 더 최근이면 서버 쪽을 쓰되,
+       이 브라우저에 남아 있던 내용도 반드시 사본으로 남긴다.
+       (2026-11-24) 예전에는 서버가 더 최근이면 이 브라우저 내용을 그냥 버렸다 — 배포 전에 열어둔 화면에서
+       저장이 거절된 채 쓴 글이 이 브라우저에만 남아 있는데, 그사이 다른 PC에서 조금이라도 저장했으면
+       나중에 이 PC로 돌아와 로그인할 때 그 글이 사라졌다. */
+    if (!b && (smt[L.id] || 0) >= (lmt[L.id] || 0)) {
+      projects.push(S); changed = true;
+      keepCopy(L, " (이 컴퓨터에 남아 있던 내용)");
+      return;
+    }
     // 양쪽 모두 바뀜 → 내 쪽을 유지하고, 서버 쪽은 사본으로 보관(어느 쪽 글도 버리지 않는다)
     projects.push(L);
-    const copy = JSON.parse(JSON.stringify(S));
-    copy.id = (typeof uid === "function") ? uid() : ("p" + Date.now() + Math.floor(Math.random() * 1e6));
-    copy.name = (S.name || "제목 없음") + " (다른 곳에서 저장된 내용)";
-    copy.isSampleProject = false;
-    projects.push(copy);
-    copies.push(copy.name); copyIds.push(copy.id);
-    changed = true;
+    keepCopy(S, " (다른 곳에서 저장된 내용)");
   });
   (server.projects || []).forEach((S) => {
     if (!S || !S.id || lIds[S.id]) return;
@@ -523,9 +581,9 @@ function applyMergedDB(merged) {
 }
 function alertSyncCopies(copies) {
   if (!copies || !copies.length) return;
-  alert("다른 창(또는 다른 컴퓨터)에서 같은 작품이 따로 수정되어 있었습니다.\n\n" +
-    "지금 화면의 내용은 그대로 두고, 다른 곳에서 저장된 내용은 아래 이름의 작품으로 따로 보관했습니다.\n" +
-    "두 내용을 비교해 필요한 부분을 옮긴 뒤, 필요 없는 쪽은 지우시면 됩니다.\n\n· " + copies.join("\n· "));
+  alert("같은 작품이 서버와 이 컴퓨터(또는 다른 창)에서 서로 다르게 저장되어 있었습니다.\n\n" +
+    "어느 쪽 글도 지우지 않고, 한쪽은 아래 이름의 작품으로 따로 보관했습니다.\n" +
+    "[다른 작품 열기]에서 두 작품을 비교해 필요한 부분을 옮긴 뒤, 필요 없는 쪽은 지우시면 됩니다.\n\n· " + copies.join("\n· "));
 }
 
 let serverLoadInFlight = false;
@@ -548,6 +606,8 @@ async function loadFromServer() {
     try { localOwner = localStorage.getItem(typeof LS_OWNER_KEY !== "undefined" ? LS_OWNER_KEY : "__none__"); } catch (e) {}
     const hasLocalData = DB && Array.isArray(DB.projects) && DB.projects.length > 0;
     const localIsMine = hasLocalData && localOwner && currentUser && localOwner === currentUser.username;
+    /* (2026-11-24) 다른 학생이 이 브라우저에 남긴 글은 버리기 전에 그 학생 이름으로 보관(공용 PC) */
+    if (!serverDataLoaded && localOwner && currentUser && localOwner !== currentUser.username) stashLeftoverFor(localOwner);
 
     if (data && Array.isArray(data.projects) && data.projects.length && typeof fillProject === "function") {
       normalizeSyncData(data);
@@ -582,6 +642,7 @@ async function loadFromServer() {
         render();
         if (st) st.innerHTML = CLOUD_ICON + " 서버에서 불러옴";
       }
+      applyStashIfAny();
     } else {
       // 서버에 저장된 데이터가 없는 경우 — 이 시점에 메모리의 DB는 로그인 화면이 뜨기 전 localStorage에서
       // 미리 읽어들인 값이다. 예전엔 이럴 때 무조건 빈 작품으로 새로 시작하며 그 빈 내용을 로컬 저장소에도
@@ -617,6 +678,7 @@ async function loadFromServer() {
       else if (typeof save === "function") save();
       else saveToServer();
       if (!localIsMine && st) st.innerHTML = CLOUD_ICON + " 서버 연결됨";
+      applyStashIfAny();
     }
   } else {
     /* (2026-09-08) 서버에서 못 불러온 경우 — 예전에는 상태 표시만 바꾸고 그대로 두었기 때문에,
