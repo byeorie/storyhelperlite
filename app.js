@@ -9369,19 +9369,20 @@ async function renderAdminUsers(){
   if(!wrap.isConnected) return; /* 렌더링 도중 탭을 벗어난 경우 무시 */
   if(!users.length){ wrap.innerHTML=`<p class="hint">회원 명단을 불러오지 못했습니다.</p>`; return; }
   const profCount=users.filter(u=>u.role==="professor").length;
+  /* 2026-11-24: 칸마다 클래스(c-…)와 data-label — 화면이 좁아지면 덜 중요한 칸을 숨기고, 휴대폰 폭에서는 줄 하나를 카드로 쌓는다(style.css) */
   const rows=users.map(u=>`<tr>
-    <td>${esc(u.school)}</td><td>${esc(u.name)}</td><td>${esc(u.username)}</td>
-    <td><select class="admin-role-select" data-uid="${u.id}" ${u.username===ADMIN_USERNAME?"disabled":""}>
+    <td class="c-school" data-label="학교">${esc(u.school)}</td><td class="c-name" data-label="이름">${esc(u.name)}</td><td class="c-id" data-label="아이디">${esc(u.username)}</td>
+    <td class="c-role" data-label="등급"><select class="admin-role-select" data-uid="${u.id}" ${u.username===ADMIN_USERNAME?"disabled":""}>
       <option value="student" ${u.role==="professor"?"":"selected"}>학생</option>
       <option value="professor" ${u.role==="professor"?"selected":""}>교수</option>
     </select></td>
-    <td>${u.role==="professor"?`<label class="admin-gm-label"><input type="checkbox" class="admin-gm-chk" data-uid="${u.id}" ${u.game_gm?"checked":""}> GM</label>`:""}</td>
-    <td>${esc(u.email)}</td><td>${fmtDate(u.created_at)}</td>
-    <td><div class="admin-hist-cell"><select class="admin-hist-select" data-uid="${u.id}" data-username="${esc(u.username)}" data-name="${esc(u.name)}"><option value="">이전 버전 보기</option></select><button type="button" class="btn ghost sm admin-hist-btn" disabled>복구</button></div></td>
-    <td>${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
+    <td class="c-gm" data-label="RPG 게임">${u.role==="professor"?`<label class="admin-gm-label"><input type="checkbox" class="admin-gm-chk" data-uid="${u.id}" ${u.game_gm?"checked":""}> GM</label>`:""}</td>
+    <td class="c-email" data-label="이메일">${esc(u.email)}</td><td class="c-date" data-label="가입일">${fmtDate(u.created_at)}</td>
+    <td class="c-hist" data-label="이전 버전 복구"><div class="admin-hist-cell"><select class="admin-hist-select" data-uid="${u.id}" data-username="${esc(u.username)}" data-name="${esc(u.name)}"><option value="">이전 버전 보기</option></select><button type="button" class="btn ghost sm admin-hist-btn" disabled>복구</button></div></td>
+    <td class="c-del">${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
   </tr>`).join("");
   wrap.innerHTML=`<div class="admin-table-scroll"><table class="admin-table"><thead><tr>
-    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG 게임</th><th>이메일</th><th>가입일</th><th title="저장할 때마다 서버가 자동으로 보관한 이전 작품 데이터(20분에 한 번, 최근 6개 + 5일간 날짜별 1개)">이전 버전 복구</th><th></th>
+    <th class="c-school">학교</th><th class="c-name">이름</th><th class="c-id">아이디</th><th class="c-role">등급</th><th class="c-gm" title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG</th><th class="c-email">이메일</th><th class="c-date">가입일</th><th class="c-hist" title="저장할 때마다 서버가 자동으로 보관한 이전 작품 데이터(20분에 한 번, 최근 6개 + 5일간 날짜별 1개)">이전 버전 복구</th><th class="c-del"></th>
   </tr></thead><tbody>${rows}</tbody></table></div>
   <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.
     작품이 사라졌다는 학생은 [이전 버전 복구]에서 버전을 골라 [복구]를 누르세요. <span id="adminHistTotal"></span></p>`;

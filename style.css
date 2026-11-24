@@ -604,11 +604,40 @@ body.logged-in .login-overlay { display: none; }
 .admin-table-scroll { width: 100%; overflow-x: auto; }
 /* #app은 flex 칸이라 기본 최소 너비가 "내용 너비"다 — 줄바꿈 없는 표가 페이지 전체를 옆으로 밀지 않도록 관리자 화면에서만 0으로 */
 #app:has(.admin-table-scroll) { min-width: 0; }
-.admin-table-scroll .admin-table th, .admin-table-scroll .admin-table td { white-space: nowrap; vertical-align: middle; }
-.admin-table .admin-role-select { width: auto; min-width: 84px; padding: 4px 24px 4px 8px; font-size: 13px; }
+/* 2026-11-24(2): 기기별 대응 — 예전처럼 모든 칸을 한 줄로 고정하면 표가 화면보다 넓어져 좌우가 잘렸다.
+   이제 긴 글(학교·이름·이메일)은 칸 안에서 줄바꿈하고, 짧은 값·버튼만 한 줄로 둔다.
+   - 1280px 이하: 가입일 숨김 / 1024px 이하: 이메일도 숨김(둘 다 휴대폰 카드에서는 다시 보임)
+   - 760px 이하(휴대폰): 줄 하나를 카드로 쌓아 보여준다 */
+.admin-table-scroll .admin-table td, .admin-table-scroll .admin-table th { vertical-align: middle; }
+.admin-table .c-school { word-break: keep-all; overflow-wrap: anywhere; }
+.admin-table .c-name { white-space: nowrap; }
+.admin-table .c-email { overflow-wrap: anywhere; }
+.admin-table .c-id, .admin-table .c-role, .admin-table .c-gm, .admin-table .c-date, .admin-table .c-del, .admin-table th { white-space: nowrap; }
+.admin-table .admin-role-select { width: auto; min-width: 76px; padding: 4px 22px 4px 8px; font-size: 13px; }
 .admin-table .admin-user-del { white-space: nowrap; }
-.admin-hist-cell { display: flex; gap: 6px; align-items: center; }
-.admin-table .admin-hist-select { width: 280px; max-width: 32vw; font-size: 12.5px; padding: 4px 6px; }
+.admin-hist-cell { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.admin-table .admin-hist-select { flex: 1 1 150px; width: auto; min-width: 0; max-width: 300px; font-size: 12.5px; padding: 4px 6px; }
+.admin-table .admin-hist-btn { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 1280px) {
+  .admin-table .c-date { display: none; }
+}
+@media (max-width: 1024px) {
+  .admin-table .c-email { display: none; }
+}
+@media (max-width: 760px) {
+  .admin-table, .admin-table tbody { display: block; width: 100%; }
+  .admin-table thead { display: none; }
+  .admin-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--card, #fff); }
+  .admin-table tbody tr:nth-child(even) { background: var(--card, #fff); }
+  .admin-table td { display: block; border: none; padding: 0; min-width: 0; }
+  .admin-table td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted, #8a8172); margin-bottom: 2px; }
+  .admin-table td:empty { display: none; }
+  .admin-table .c-date, .admin-table .c-email { display: block; }
+  .admin-table .c-email, .admin-table .c-hist, .admin-table .c-del { grid-column: 1 / -1; }
+  .admin-table .admin-hist-select { max-width: none; }
+  .admin-table .c-del { text-align: right; }
+}
 /* 2026-09-08: 줄마다 [나가기] 버튼이 붙으면서 목록 표시를 글머리표 → 한 줄 카드 형태로 변경 */
 .settings-prof-list { margin: 6px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
 .settings-prof-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px;
