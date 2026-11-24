@@ -9378,7 +9378,7 @@ function openMyHistory(){
     return;
   }
   const {overlay, body}=openAccountModal("이전 버전에서 꺼내오기",
-    `<p class="hint">서버는 저장할 때 <b>1시간에 한 번</b> 그 직전 상태를 보관합니다(최근 6개 + 최근 5일 동안 날짜별 1개).
+    `<p class="hint">서버는 <b>접속하거나 저장할 때 1시간에 한 번</b> 작품 상태를 보관합니다(최근 6개 + 최근 5일 동안 날짜별 1개).
       버전을 고르면 그 안의 작품을 <b>새 작품(사본)</b>으로 꺼내 옵니다. <b>지금 작품은 바뀌지 않습니다.</b></p>
      <div id="myHistBody"><p class="hint">불러오는 중…</p></div>`);
   const box=body.querySelector("#myHistBody");
@@ -9391,7 +9391,7 @@ function openMyHistory(){
     if(!res.ok || !res.body){ box.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"목록을 불러오지 못했습니다.")}</p>`; return; }
     const vs=(res.body.versions||[]).filter(v=>!(v.summary&&v.summary.broken));
     if(!vs.length){
-      box.innerHTML=`<p class="hint">아직 보관된 버전이 없습니다. 작품을 저장하면 1시간에 한 번씩 서버가 이전 상태를 보관합니다.</p>`;
+      box.innerHTML=`<p class="hint">아직 보관된 버전이 없습니다(서버에 저장된 작품이 없습니다). 작품을 저장하면 그때부터 1시간에 한 번씩 보관됩니다.</p>`;
       return;
     }
     box.innerHTML=`<div class="my-hist-list">${vs.map(v=>{
@@ -9488,7 +9488,7 @@ async function renderAdminUsers(){
     <td class="c-del">${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
   </tr>`).join("");
   wrap.innerHTML=`<div class="admin-table-scroll"><table class="admin-table"><thead><tr>
-    <th class="c-school">학교</th><th class="c-name">이름</th><th class="c-id">아이디</th><th class="c-role">등급</th><th class="c-gm" title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG</th><th class="c-email">이메일</th><th class="c-date">가입일</th><th class="c-hist" title="저장할 때마다 서버가 자동으로 보관한 이전 작품 데이터(1시간에 한 번, 최근 6개 + 5일간 날짜별 1개)">이전 버전 복구</th><th class="c-del"></th>
+    <th class="c-school">학교</th><th class="c-name">이름</th><th class="c-id">아이디</th><th class="c-role">등급</th><th class="c-gm" title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG</th><th class="c-email">이메일</th><th class="c-date">가입일</th><th class="c-hist" title="학생이 접속하거나 저장할 때 서버가 자동으로 보관한 작품 데이터(1시간에 한 번, 최근 6개 + 5일간 날짜별 1개)">이전 버전 복구</th><th class="c-del"></th>
   </tr></thead><tbody>${rows}</tbody></table></div>
   <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.
     작품이 사라졌다는 학생은 [이전 버전 복구]에서 버전을 골라 [복구]를 누르세요. <span id="adminHistTotal"></span></p>`;

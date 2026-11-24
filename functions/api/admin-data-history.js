@@ -28,6 +28,9 @@ export async function onRequestGet({ request, env }) {
   const user = await env.DB.prepare("SELECT id, name, username, school FROM users WHERE username = ?").bind(username).first();
   if (!user) return jsonResponse({ error: "그 아이디의 회원이 없습니다.", total }, 404);
 
+  /* (2026-11-24) 보관본이 하나도 없는 회원이면 지금 상태부터 하나 보관해 둔다 */
+  const any = await env.DB.prepare("SELECT 1 AS x FROM user_data_history WHERE user_id = ? LIMIT 1").bind(user.id).first();
+  if (!any) await snapshotUserData(env, user.id, "auto", true);
   const cur = await env.DB.prepare("SELECT data, rev, updated_at FROM user_data WHERE user_id = ?").bind(user.id).first();
   const { results } = await env.DB.prepare(
     "SELECT id, data, rev, saved_at, reason FROM user_data_history WHERE user_id = ? ORDER BY saved_at DESC, id DESC"

@@ -36,6 +36,10 @@ export async function onRequestGet({ request, env }) {
     return jsonResponse({ rev: m ? (m.rev || 0) : 0, updatedAt: m ? m.updated_at : null, exists: !!m });
   }
 
+  /* (2026-11-24) 접속해서 작품을 불러갈 때도 지금 상태를 보관한다(1시간에 한 번) — 예전에는 새로 저장할 때만 보관해서,
+     배포 뒤 아직 저장하지 않은 학생은 보관본이 하나도 없었다. 실패해도 불러오기는 계속한다. */
+  await snapshotUserData(env, auth.user.id, "auto", false);
+
   const row = await env.DB.prepare(
     "SELECT data, updated_at, rev FROM user_data WHERE user_id = ?"
   ).bind(auth.user.id).first();
