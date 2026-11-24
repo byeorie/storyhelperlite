@@ -1166,8 +1166,10 @@ canvas.draw-layer-canvas.is-base{position:relative}
 /* 2026-11-17: 크게 보기 창 확대·축소 — 무대 안에서 그림을 transform으로 확대·이동 */
 .sb-view-stage{position:relative;overflow:hidden;flex:1;min-height:0;width:100%;
   background:#f3f3f3;border:1px solid var(--line);border-radius:8px;touch-action:none;user-select:none;cursor:zoom-in}
+/* 2026-11-24: 크기·위치는 app.js가 width/height·left/top으로 직접 넣는다(transform 확대 방식은 큰 그림이 잘려 보였음) */
 .sb-view-img{position:absolute;left:0;top:0;max-width:none;max-height:none;width:auto;height:auto;
-  transform-origin:0 0;background:#fff;-webkit-user-drag:none;pointer-events:none}
+  background:#fff;-webkit-user-drag:none;pointer-events:none}
+.sb-view-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted,#888);font-size:14px}
 .sb-zoom-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .sb-zoom-pct{min-width:52px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
 .sb-zoom-hint{font-size:12px;color:var(--muted,#888);margin-left:auto}
@@ -1402,7 +1404,8 @@ canvas.draw-layer-canvas.is-base{position:relative}
 /* 2026-09-15: 파일 과제 — 고른 파일 목록 / 제출된 clip 파일 줄 */
 .file-pick-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .file-pick-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:6px 8px}
-.file-pick-thumb{width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:0 0 auto}
+/* 2026-11-24: cover(정사각형으로 잘라 보이기) → contain — 고른 그림이 잘려서 올라가는 것처럼 보이지 않게 전체를 보인다 */
+.file-pick-thumb{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid var(--line);flex:0 0 auto}
 .file-pick-ext{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
   border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700}
 .file-pick-name{flex:1;min-width:0;word-break:break-all}

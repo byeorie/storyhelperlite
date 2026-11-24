@@ -9091,28 +9091,44 @@ function openStoryboardImageViewer(title, key, onDraw){
   /* 2026-11-17: 확대·축소 — 휠/핀치/버튼(＋ − 화면 맞춤)으로 배율을 바꾸고, 확대한 뒤에는 끌어서 옮긴다.
      더블클릭(더블탭)은 화면 맞춤 ↔ 2배 전환. 파일 제출 과제의 jpg·png도 이 창을 쓴다. */
   const stage=document.createElement("div"); stage.className="sb-view-stage";
+  /* 2026-11-24: "파일 제출 이미지가 잘려서 올라간다" 신고 — 실제 저장된 파일은 원본 그대로였고, 이 창이
+     그림을 원본 해상도(예: 2480×3508)로 무대 왼쪽 위에 깔아 둔 채 다 불러온 뒤에야 transform으로 줄였기 때문에
+     ① 불러오는 동안(큰 파일·느린 회선) ② 무대 크기를 아직 못 잰 채 load가 끝났을 때 ③ 아주 큰 그림을 transform으로
+     줄여 그리다 일부 브라우저(특히 iPad·아이폰 Safari)가 큰 레이어를 끝까지 못 그릴 때, 그림의 왼쪽 위 일부만
+     보여 "잘린" 것처럼 보였다. 이제 화면에 맞춘 크기를 계산하기 전에는 그림을 숨기고, 크기는 transform이 아니라
+     width/height·left/top으로 직접 지정한다(원본 크기의 거대한 상자를 만들지 않는다). */
   const img=document.createElement("img"); img.className="sb-view-img"; img.draggable=false;
+  img.style.visibility="hidden";
   img.alt=title||"콘티"; img.src="/api/storyboard-image?key="+encodeURIComponent(key);
-  stage.appendChild(img);
+  const loading=document.createElement("div"); loading.className="sb-view-loading"; loading.textContent="이미지를 불러오는 중…";
+  stage.append(img, loading);
   box.appendChild(stage);
 
   const zbar=document.createElement("div"); zbar.className="sb-zoom-bar";
   const mkZ=(label,tip,fn)=>{ const b=document.createElement("button"); b.type="button"; b.className="btn ghost sm"; b.textContent=label; b.title=tip; b.onclick=fn; return b; };
   const pct=document.createElement("span"); pct.className="sb-zoom-pct";
-  let fit=1, s=1, tx=0, ty=0;
+  let fit=1, s=1, tx=0, ty=0, shown=false;
   const MAXS=8;
-  const apply=()=>{ img.style.transform=`translate(${tx}px,${ty}px) scale(${s})`; pct.textContent=Math.round(s*100)+"%";
+  const apply=()=>{ if(!shown) return;
+    img.style.width=(img.naturalWidth*s)+"px"; img.style.height=(img.naturalHeight*s)+"px";
+    img.style.left=tx+"px"; img.style.top=ty+"px";
+    pct.textContent=Math.round(s*100)+"%";
     stage.style.cursor = s>fit+1e-6 ? "grab" : "zoom-in"; };
   /* 그림이 화면보다 작으면 가운데, 크면 가장자리가 안쪽으로 들어오지 않게 묶는다 */
   const clamp=()=>{ const W=stage.clientWidth, H=stage.clientHeight, w=img.naturalWidth*s, h=img.naturalHeight*s;
     tx = w<=W ? (W-w)/2 : Math.min(0, Math.max(W-w, tx));
     ty = h<=H ? (H-h)/2 : Math.min(0, Math.max(H-h, ty)); };
-  const zoomAt=(ns,cx,cy)=>{ ns=Math.max(fit*0.5, Math.min(MAXS, ns));
+  const zoomAt=(ns,cx,cy)=>{ if(!shown) return; ns=Math.max(fit*0.5, Math.min(MAXS, ns));
     if(cx==null){ cx=stage.clientWidth/2; cy=stage.clientHeight/2; }
     tx = cx-(cx-tx)*(ns/s); ty = cy-(cy-ty)*(ns/s); s=ns; clamp(); apply(); };
+  /* 무대 크기를 아직 못 쟀으면(창이 막 붙는 중) 다음 프레임에 다시 맞춘다 — 그 전에는 그림을 보여주지 않는다 */
+  let fitTries=0;
   const fitNow=()=>{ const W=stage.clientWidth, H=stage.clientHeight;
-    if(!img.naturalWidth||!W||!H) return;
-    fit=Math.min(1, W/img.naturalWidth, H/img.naturalHeight); s=fit; clamp(); apply(); };
+    if(!img.naturalWidth) return;
+    if(!W||!H){ if(overlay.isConnected && ++fitTries<60) requestAnimationFrame(fitNow); return; }
+    fit=Math.min(1, W/img.naturalWidth, H/img.naturalHeight); s=fit;
+    if(!shown){ shown=true; img.style.visibility=""; loading.remove(); }
+    clamp(); apply(); };
   zbar.append(
     mkZ("−","축소",()=>zoomAt(s/1.25)),
     pct,
@@ -9142,6 +9158,7 @@ function openStoryboardImageViewer(title, key, onDraw){
   box.appendChild(zbar);
 
   img.onload=fitNow;
+  img.onerror=()=>{ loading.textContent="이미지를 불러오지 못했습니다. 잠시 후 다시 열어 주세요."; };
   stage.addEventListener("wheel", e=>{ e.preventDefault();
     const r=stage.getBoundingClientRect();
     zoomAt(s*Math.exp(-e.deltaY*0.0015), e.clientX-r.left, e.clientY-r.top); }, {passive:false});
@@ -9180,6 +9197,7 @@ function openStoryboardImageViewer(title, key, onDraw){
     box.appendChild(actions);
   }
   overlay.appendChild(box); document.body.appendChild(overlay);
+  if(img.complete && img.naturalWidth) fitNow();   /* 이미 캐시에 있던 그림이면 바로 맞춘다 */
 }
 
 /* 콘티 피드백 그리기 (2026-09-11) — 캔버스는 SB_SIZES 고정 크기가 아니라 실제 이미지의 가로세로
