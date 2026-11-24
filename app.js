@@ -1066,7 +1066,7 @@ function render(){
     // 2026-08-20: 캐릭터 탭은 상세 편집 화면(charDetailFor 있음)일 때만 넓게 표시됐는데,
     // 갤러리·관계도 화면도 배경/사건 설정과 같은 mountWithPlanViewer(좌우 분할) 레이아웃을 쓰므로
     // 항상 넓게 표시하도록 통일함(예전엔 갤러리·관계도가 좁게 눌려 보이는 문제가 있었음).
-    app.classList.toggle("wide", activeTab==="home"||(activeTab==="plot" && plotEditOpen && !feedbackPage && P && !!plotCompareTarget())||activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
+    app.classList.toggle("wide", activeTab==="home"||activeTab==="admin"||(activeTab==="plot" && plotEditOpen && !feedbackPage && P && !!plotCompareTarget())||activeTab==="write"||activeTab==="storyboard"||activeTab==="background"||activeTab==="event"||activeTab==="character"
       ||(activeTab==="practice" && (practiceFor==="buildup"||practiceFor==="cliche"||practiceFor==="romance"||practiceFor==="twist") && !feedbackPage)
       /* 2026-11-15: 첨삭 화면(교수)·피드백 상세(학생)는 왼쪽 원본 / 오른쪽 피드백 두 열이라 넓게 */
       ||((activeTab==="profClasses"||activeTab==="profAssignHub") && !!profReviewId)||(!!feedbackPage && feedbackPage.mode==="detail"));  // 실습 화면: 오른쪽에 예시 패널
@@ -9273,18 +9273,6 @@ function rAdmin(){
     <p class="hint">가입한 회원 명단입니다. 교수 계정에는 학생이 그룹 가입 시 입력할 6자리 코드가 함께 표시됩니다.</p>
     <div id="adminUsersWrap"><p class="hint">불러오는 중…</p></div>
   </div>
-  <div class="card"><h2>${ICONS.undo||ICONS.file} 학생 작품 복구 (이전 버전)</h2>
-    <p class="hint">학생이 저장할 때 서버가 <b>덮어쓰기 직전 상태</b>를 자동으로 보관합니다(같은 학생은 20분에 한 번,
-      최근 6개 + 최근 5일 동안 날짜별 마지막 1개). 작품이 사라졌다는 학생이 있으면 아이디로 찾아 그 전 버전으로 되돌리세요.
-      되돌리기 직전 상태도 따로 보관되므로, 잘못 되돌렸다면 다시 되돌릴 수 있습니다.</p>
-    <div class="assign-folder-actions">
-      <input type="text" id="adminHistUser" list="adminHistUserList" placeholder="학생 아이디(예: hs26126)" style="width:200px" autocomplete="off">
-      <datalist id="adminHistUserList"></datalist>
-      <button class="btn" id="adminHistLoadBtn">버전 보기</button>
-      <span class="hint" id="adminHistTotal"></span>
-    </div>
-    <div id="adminHistWrap"></div>
-  </div>
   <div class="card"><h2>${ICONS.file} 파일 제출 용량 제한</h2>
     <p class="hint">"파일 제출" 과제에서 학생이 올릴 수 있는 <b>파일 하나당 최대 용량</b>입니다(0.5MB ~ 10MB).
       바꾸면 모든 계정에 바로 적용되며, 서버에서도 같은 값으로 막습니다. 값을 키우면 서버 저장 용량이 더 빨리 찹니다.</p>
@@ -9312,60 +9300,53 @@ function rAdmin(){
   </div>`;
   app.appendChild(c);
   renderAdminUsers();
-  initAdminHistory(c);
   c.querySelector("#adminFileMaxSaveBtn").onclick=()=>doAdminSaveFileMax(c);
   c.querySelector("#adminResetDataBtn").onclick=()=>doAdminReset("data");
   c.querySelector("#adminResetAllBtn").onclick=()=>doAdminReset("all");
 }
-/* ===== (2026-11-24) 학생 작품 복구 — 서버가 보관한 이전 버전 목록을 보고 골라서 되돌린다(functions/api/admin-data-history.js) ===== */
+/* ===== (2026-11-24) 학생 작품 복구 — 회원 명단의 줄마다 [이전 버전] 드롭다운 + [복구] 버튼 =====
+   서버가 저장 때마다 보관한 이전 버전(functions/api/admin-data-history.js)을 고르면 그 버전으로 되돌린다.
+   목록은 마우스를 드롭다운에 올리거나 포커스할 때 그 회원 것만 불러온다(전체를 한꺼번에 읽으면 서버 부담이 크다).
+   되돌리기 직전 상태도 서버가 "복구 직전"으로 따로 보관하므로, 잘못 되돌렸으면 다시 되돌릴 수 있다. */
 function fmtKB(n){ return n>=1024*1024 ? (n/1024/1024).toFixed(1)+"MB" : Math.max(1,Math.round(n/1024))+"KB"; }
-async function initAdminHistory(c){
-  const input=c.querySelector("#adminHistUser"), btn=c.querySelector("#adminHistLoadBtn");
-  const go=()=>loadAdminHistory(c, input.value.trim());
-  btn.onclick=go;
-  input.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } };
-  const res=await apiFetch("admin-data-history");
-  const tot=c.querySelector("#adminHistTotal");
-  if(tot && res.ok && res.body && res.body.total) tot.textContent=`전체 보관본 ${res.body.total.count}개 · ${fmtKB(res.body.total.bytes)}`;
-  const users=await loadAdminUsers();
-  const dl=c.querySelector("#adminHistUserList");
-  if(dl) dl.innerHTML=users.filter(u=>u.role!=="professor").map(u=>`<option value="${esc(u.username)}">${esc(u.name)} · ${esc(u.school||"")}</option>`).join("");
+function adminHistLabel(v){
+  const s=v.summary||{};
+  if(s.broken) return `${fmtDateTime(v.savedAt)} · 손상된 데이터`;
+  return `${fmtDateTime(v.savedAt)}${v.reason==="before-restore"?" (복구 직전)":""} · 작품 ${s.projectCount||0} · 아이디어 ${s.ideaCount||0} · ${Number(s.chars||0).toLocaleString()}자`;
 }
-function adminHistSummaryHtml(s){
-  if(!s) return "-";
-  if(s.broken) return `<span class="hint">손상된 데이터</span>`;
-  const names=(s.projects||[]).join(", ");
-  return `작품 ${s.projectCount}개${names?` <span class="hint">(${esc(names)})</span>`:""} · 아이디어 ${s.ideaCount}개 · 글자 약 ${Number(s.chars||0).toLocaleString()}자`;
+async function loadAdminHistOptions(sel, force){
+  if(sel.dataset.loaded==="1" && !force) return;
+  if(sel.dataset.loading==="1") return;
+  sel.dataset.loading="1";
+  sel.innerHTML=`<option value="">불러오는 중…</option>`;
+  const res=await apiFetch("admin-data-history?username="+encodeURIComponent(sel.dataset.username));
+  sel.dataset.loading="";
+  if(!res.ok || !res.body){ sel.innerHTML=`<option value="">불러오지 못함</option>`; return; }
+  const vs=res.body.versions||[], cur=res.body.current;
+  sel.dataset.loaded="1";
+  sel.title=cur ? "지금: "+adminHistLabel({savedAt:cur.updatedAt, summary:cur.summary}) : "서버에 저장된 작품 없음";
+  sel.innerHTML=(vs.length ? `<option value="">이전 버전 ${vs.length}개 — 고르세요</option>` : `<option value="">보관된 버전 없음</option>`)
+    + vs.map(v=>`<option value="${v.id}" data-at="${v.savedAt}" ${v.summary&&v.summary.broken?"disabled":""} title="${esc((v.summary&&v.summary.projects||[]).join(", "))}">${esc(adminHistLabel(v))}</option>`).join("");
 }
-async function loadAdminHistory(c, username){
-  const wrap=c.querySelector("#adminHistWrap");
-  if(!username){ wrap.innerHTML=`<p class="hint">학생 아이디를 입력해 주세요.</p>`; return; }
-  wrap.innerHTML=`<p class="hint">불러오는 중…</p>`;
-  const res=await apiFetch("admin-data-history?username="+encodeURIComponent(username));
-  if(!wrap.isConnected) return;
-  if(!res.ok || !res.body || !res.body.user){ wrap.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"불러오지 못했습니다.")}</p>`; return; }
-  const {user, current, versions}=res.body;
-  const reasonLabel=r=>r==="before-restore"?"되돌리기 직전":"자동 보관";
-  const rows=(versions||[]).map(v=>`<tr>
-      <td>${fmtDateTime(v.savedAt)}</td><td>${reasonLabel(v.reason)}</td>
-      <td>${adminHistSummaryHtml(v.summary)}</td><td>${fmtKB(v.size)}</td>
-      <td><button class="btn ghost sm admin-hist-restore" data-id="${v.id}" data-at="${v.savedAt}" ${v.summary&&v.summary.broken?"disabled":""}>이 버전으로 되돌리기</button></td>
-    </tr>`).join("");
-  wrap.innerHTML=`
-    <p style="margin-top:12px"><b>${esc(user.name)}</b> (${esc(user.username)}${user.school?" · "+esc(user.school):""})</p>
-    <p class="hint">지금 상태: ${current?`${fmtDateTime(current.updatedAt)} 저장 · ${adminHistSummaryHtml(current.summary)} · ${fmtKB(current.size)}`:"서버에 저장된 작품이 없습니다."}</p>
-    ${(versions||[]).length?`<div style="overflow-x:auto"><table class="admin-table"><thead><tr><th>보관 시각</th><th>종류</th><th>내용</th><th>크기</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-      :`<p class="hint">보관된 이전 버전이 아직 없습니다. (이 기능은 2026-11-24부터 보관을 시작했습니다. 그 전 시점은 Cloudflare D1 Time Travel로만 복구할 수 있습니다.)</p>`}`;
-  wrap.querySelectorAll(".admin-hist-restore").forEach(b=>{
-    b.onclick=async()=>{
-      const when=fmtDateTime(Number(b.dataset.at));
-      if(!confirm(`${user.name}(${user.username}) 학생의 작품 데이터를 ${when} 보관본으로 되돌릴까요?\n\n`+
-        `· 지금 상태도 "되돌리기 직전" 보관본으로 남으므로 나중에 다시 되돌릴 수 있습니다.\n`+
+function wireAdminHistRow(wrap){
+  wrap.querySelectorAll(".admin-hist-select").forEach(sel=>{
+    const btn=sel.parentElement.querySelector(".admin-hist-btn");
+    const load=()=>loadAdminHistOptions(sel);
+    sel.addEventListener("pointerenter", load);
+    sel.addEventListener("focus", load);
+    sel.onchange=()=>{ btn.disabled=!sel.value; };
+    btn.onclick=async()=>{
+      const opt=sel.options[sel.selectedIndex]; if(!sel.value || !opt) return;
+      const when=fmtDateTime(Number(opt.dataset.at));
+      if(!confirm(`${sel.dataset.name}(${sel.dataset.username})의 작품 데이터를 ${when} 버전으로 되돌릴까요?\n\n`+
+        `· ${opt.textContent}\n`+
+        `· 지금 상태도 "복구 직전" 버전으로 남으므로 나중에 다시 되돌릴 수 있습니다.\n`+
         `· 학생에게 사이트 창을 모두 닫았다가 다시 열어 달라고 안내해 주세요.`)) return;
-      b.disabled=true; b.textContent="되돌리는 중…";
-      const r=await apiFetch("admin-data-history", {method:"POST", body:JSON.stringify({userId:user.id, historyId:Number(b.dataset.id)})});
-      if(r.ok && r.body && r.body.ok){ alert(`${when} 버전으로 되돌렸습니다.`); loadAdminHistory(c, username); }
-      else{ alert((r.body&&r.body.error)||"되돌리지 못했습니다."); b.disabled=false; b.textContent="이 버전으로 되돌리기"; }
+      btn.disabled=true; sel.disabled=true; btn.textContent="복구 중…";
+      const r=await apiFetch("admin-data-history", {method:"POST", body:JSON.stringify({userId:Number(sel.dataset.uid), historyId:Number(sel.value)})});
+      sel.disabled=false; btn.textContent="복구";
+      if(r.ok && r.body && r.body.ok){ alert(`${when} 버전으로 되돌렸습니다.`); await loadAdminHistOptions(sel, true); btn.disabled=true; }
+      else{ alert((r.body&&r.body.error)||"되돌리지 못했습니다."); btn.disabled=false; }
     };
   });
 }
@@ -9396,12 +9377,19 @@ async function renderAdminUsers(){
     </select></td>
     <td>${u.role==="professor"?`<label class="admin-gm-label"><input type="checkbox" class="admin-gm-chk" data-uid="${u.id}" ${u.game_gm?"checked":""}> GM</label>`:""}</td>
     <td>${esc(u.email)}</td><td>${fmtDate(u.created_at)}</td>
+    <td><div class="admin-hist-cell"><select class="admin-hist-select" data-uid="${u.id}" data-username="${esc(u.username)}" data-name="${esc(u.name)}"><option value="">이전 버전 보기</option></select><button type="button" class="btn ghost sm admin-hist-btn" disabled>복구</button></div></td>
     <td>${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
   </tr>`).join("");
-  wrap.innerHTML=`<table class="admin-table"><thead><tr>
-    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG 게임</th><th>이메일</th><th>가입일</th><th></th>
-  </tr></thead><tbody>${rows}</tbody></table>
-  <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.</p>`;
+  wrap.innerHTML=`<div class="admin-table-scroll"><table class="admin-table"><thead><tr>
+    <th>학교</th><th>이름</th><th>아이디</th><th>등급</th><th title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG 게임</th><th>이메일</th><th>가입일</th><th title="저장할 때마다 서버가 자동으로 보관한 이전 작품 데이터(20분에 한 번, 최근 6개 + 5일간 날짜별 1개)">이전 버전 복구</th><th></th>
+  </tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.
+    작품이 사라졌다는 학생은 [이전 버전 복구]에서 버전을 골라 [복구]를 누르세요. <span id="adminHistTotal"></span></p>`;
+  wireAdminHistRow(wrap);
+  apiFetch("admin-data-history").then(r=>{
+    const t=document.getElementById("adminHistTotal");
+    if(t && r.ok && r.body && r.body.total) t.textContent=`(서버 보관 이전 버전 ${r.body.total.count}개 · ${fmtKB(r.body.total.bytes)})`;
+  });
   wrap.querySelectorAll(".admin-role-select").forEach(sel=>{
     sel.onchange=()=>doAdminSetRole(sel);
   });
