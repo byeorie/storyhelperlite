@@ -7917,6 +7917,9 @@ async function uploadStoryboardBlob(blob, opts){
 async function deleteStoryboardImage(key){
   const token=typeof getToken==="function" ? getToken() : null;
   if(!token || !key) return;
+  /* 2026-11-24: 아직 이 계정 데이터 어딘가에서 쓰는 그림이면 지우지 않는다 — [이전 버전에서 꺼내오기]로 꺼낸 사본 작품은
+     원본과 같은 그림(key)을 함께 쓰므로, 한쪽에서 지우면 다른 쪽 그림까지 사라졌다. (호출하는 곳은 모두 참조를 먼저 뺀 뒤 부른다) */
+  try{ if(JSON.stringify(DB).indexOf(key)>=0) return; }catch(e){}
   try{ await fetch("/api/storyboard-image?key="+encodeURIComponent(key), {method:"DELETE", headers:{"Authorization":"Bearer "+token}}); }catch(e){}
 }
 /* 콘티 이미지를 R2에서 새 key로 복제(다시 업로드) — 과제 제출 시 스냅샷을 만들거나(원본이 이후
@@ -9350,6 +9353,109 @@ function wireAdminHistRow(wrap){
     };
   });
 }
+/* ===== (2026-11-24) 학생: [이전 버전에서 꺼내오기] — 사용자 메뉴 =====
+   서버가 저장할 때 1시간에 한 번 보관한 내 이전 버전(functions/api/my-data-history.js)을 골라,
+   그 안의 작품을 "새 작품(사본)"으로 꺼내 오고 지금 없는 아이디어만 되살린다.
+   지금 데이터는 바꾸지 않으므로 잘못 골라도 꺼낸 사본만 지우면 된다(전체 되돌리기는 관리자 화면에만 있다).
+   꺼낸 사본은 원본과 같은 콘티·캐릭터 그림을 함께 쓴다 — deleteStoryboardImage가 아직 쓰이는 그림은 지우지 않는다. */
+function myHistStamp(sec){
+  const d=new Date(sec*1000), p=n=>String(n).padStart(2,"0");
+  return `${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function myHistChars(v){
+  let n=0;
+  const walk=(x,depth)=>{
+    if(depth>40||x==null) return;
+    if(typeof x==="string"){ if(!x.startsWith("data:")) n+=x.length; return; }
+    if(Array.isArray(x)){ x.forEach(y=>walk(y,depth+1)); return; }
+    if(typeof x==="object") Object.keys(x).forEach(k=>{ if(k!=="id" && k!=="key" && !/Ids?$/.test(k)) walk(x[k],depth+1); });
+  };
+  walk(v,0); return n;
+}
+function openMyHistory(){
+  if(!(typeof serverSaveReady==="function" && serverSaveReady())){
+    alert("서버에서 작품을 불러온 뒤에 사용할 수 있습니다. 잠시 후 다시 눌러 주세요.");
+    return;
+  }
+  const {overlay, body}=openAccountModal("이전 버전에서 꺼내오기",
+    `<p class="hint">서버는 저장할 때 <b>1시간에 한 번</b> 그 직전 상태를 보관합니다(최근 6개 + 최근 5일 동안 날짜별 1개).
+      버전을 고르면 그 안의 작품을 <b>새 작품(사본)</b>으로 꺼내 옵니다. <b>지금 작품은 바뀌지 않습니다.</b></p>
+     <div id="myHistBody"><p class="hint">불러오는 중…</p></div>`);
+  const box=body.querySelector("#myHistBody");
+  const close=()=>{ if(overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+
+  async function showList(){
+    box.innerHTML=`<p class="hint">불러오는 중…</p>`;
+    const res=await apiFetch("my-data-history");
+    if(!box.isConnected) return;
+    if(!res.ok || !res.body){ box.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"목록을 불러오지 못했습니다.")}</p>`; return; }
+    const vs=(res.body.versions||[]).filter(v=>!(v.summary&&v.summary.broken));
+    if(!vs.length){
+      box.innerHTML=`<p class="hint">아직 보관된 버전이 없습니다. 작품을 저장하면 1시간에 한 번씩 서버가 이전 상태를 보관합니다.</p>`;
+      return;
+    }
+    box.innerHTML=`<div class="my-hist-list">${vs.map(v=>{
+      const s=v.summary||{};
+      return `<button type="button" class="my-hist-ver" data-id="${v.id}" data-at="${v.savedAt}">
+        <b>${myHistStamp(v.savedAt)}</b>${v.reason==="before-restore"?` <span class="hint">(교수님 복구 직전)</span>`:""}
+        <span class="hint">작품 ${s.projectCount||0}개${(s.projects||[]).length?` (${esc(s.projects.join(", "))})`:""} · 아이디어 ${s.ideaCount||0}개 · ${Number(s.chars||0).toLocaleString()}자</span>
+      </button>`;}).join("")}</div>`;
+    box.querySelectorAll(".my-hist-ver").forEach(b=>{ b.onclick=()=>showVersion(Number(b.dataset.id)); });
+  }
+
+  async function showVersion(id){
+    box.innerHTML=`<p class="hint">불러오는 중…</p>`;
+    const res=await apiFetch("my-data-history?id="+id);
+    if(!box.isConnected) return;
+    if(!res.ok || !res.body || !res.body.data){ box.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"불러오지 못했습니다.")}</p><button type="button" class="btn ghost sm" id="myHistBack">← 다른 버전</button>`;
+      box.querySelector("#myHistBack").onclick=showList; return; }
+    const {version, data}=res.body;
+    const stamp=myHistStamp(version.savedAt);
+    const projects=data.projects||[];
+    const haveIdea=new Set((DB.ideaBlocks||[]).map(b=>b&&b.id));
+    const missingIdeas=(data.ideaBlocks||[]).filter(b=>b && b.id && !haveIdea.has(b.id));
+    const curNames=new Set((DB.projects||[]).map(p=>p.name));
+    box.innerHTML=`
+      <p><b>${stamp}</b> 버전 — 꺼내 올 것을 고르세요.</p>
+      ${projects.length?`<div class="my-hist-picks">${projects.map((p,i)=>`
+        <label class="my-hist-pick"><input type="checkbox" class="my-hist-proj" data-i="${i}" checked>
+          ${esc(p.name||"제목 없음")} <span class="hint">· ${myHistChars(p).toLocaleString()}자${curNames.has(p.name)?" · 지금도 같은 이름의 작품이 있음":""}</span></label>`).join("")}</div>`
+        :`<p class="hint">이 버전에는 작품이 없습니다.</p>`}
+      ${missingIdeas.length?`<label class="my-hist-pick"><input type="checkbox" id="myHistIdeas" checked> 지금 없는 아이디어 ${missingIdeas.length}개 되살리기</label>`
+        :`<p class="hint">아이디어는 지금 모두 그대로 있습니다.</p>`}
+      <p class="hint">꺼낸 작품은 "이름 (${stamp} 버전)"으로 새로 추가됩니다. 지금 작품과 비교해 필요한 내용을 옮긴 뒤, 필요 없는 쪽은 지우세요.</p>
+      <div class="my-hist-actions">
+        <button type="button" class="btn ghost" id="myHistBack">← 다른 버전</button>
+        <button type="button" class="btn" id="myHistGo">꺼내오기</button>
+      </div>`;
+    box.querySelector("#myHistBack").onclick=showList;
+    box.querySelector("#myHistGo").onclick=()=>{
+      const picked=[...box.querySelectorAll(".my-hist-proj:checked")].map(c=>projects[Number(c.dataset.i)]).filter(Boolean);
+      const ideaChk=box.querySelector("#myHistIdeas");
+      const ideas=(ideaChk && ideaChk.checked) ? missingIdeas : [];
+      if(!picked.length && !ideas.length){ alert("꺼내 올 작품이나 아이디어를 하나 이상 골라 주세요."); return; }
+      if(!Array.isArray(DB.ideaBlocks)) DB.ideaBlocks=[];
+      if(!Array.isArray(DB.openIds)) DB.openIds=[];
+      const newIds=[];
+      picked.forEach(p=>{
+        const c=fillProject(JSON.parse(JSON.stringify(p)));
+        c.id=uid(); c.name=`${p.name||"제목 없음"} (${stamp} 버전)`; c.isSampleProject=false;
+        DB.projects.push(c); DB.openIds.push(c.id); newIds.push(c.id);
+      });
+      ideas.forEach(b=>DB.ideaBlocks.push(JSON.parse(JSON.stringify(b))));
+      if(newIds.length){ DB.current=newIds[0]; P=currentProject(); resetUndoHistory(); }
+      save();
+      if(typeof forceSaveToServer==="function") forceSaveToServer();
+      refreshProjSelect(); render();
+      close();
+      alert(`${stamp} 버전에서 꺼내 왔습니다.\n\n`+
+        (picked.length?`· 작품 ${picked.length}개: 상단 탭에 "(${stamp} 버전)"으로 추가했습니다.\n`:"")+
+        (ideas.length?`· 아이디어 ${ideas.length}개를 아이디어 수집에 되살렸습니다.\n`:"")+
+        `\n지금 작품은 그대로입니다. 비교해 필요한 내용을 옮긴 뒤, 필요 없는 쪽은 지우세요.`);
+    };
+  }
+  showList();
+}
 /* 파일 제출 용량 제한 저장 — 서버(server_meta)에 넣고, 이 화면의 FILE_MAX_MB도 바로 갱신한다 */
 async function doAdminSaveFileMax(c){
   const input=c.querySelector("#adminFileMaxMb"), msg=c.querySelector("#adminFileMaxMsg");
@@ -9382,7 +9488,7 @@ async function renderAdminUsers(){
     <td class="c-del">${u.username===ADMIN_USERNAME?"":`<button type="button" class="btn ghost sm admin-user-del" data-uid="${u.id}" data-name="${esc(u.name)}">${ICONS.trash} 삭제</button>`}</td>
   </tr>`).join("");
   wrap.innerHTML=`<div class="admin-table-scroll"><table class="admin-table"><thead><tr>
-    <th class="c-school">학교</th><th class="c-name">이름</th><th class="c-id">아이디</th><th class="c-role">등급</th><th class="c-gm" title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG</th><th class="c-email">이메일</th><th class="c-date">가입일</th><th class="c-hist" title="저장할 때마다 서버가 자동으로 보관한 이전 작품 데이터(20분에 한 번, 최근 6개 + 5일간 날짜별 1개)">이전 버전 복구</th><th class="c-del"></th>
+    <th class="c-school">학교</th><th class="c-name">이름</th><th class="c-id">아이디</th><th class="c-role">등급</th><th class="c-gm" title="체크한 교수는 [수업 관리]에서 RPG 게임을 수업에 켤 수 있습니다">RPG</th><th class="c-email">이메일</th><th class="c-date">가입일</th><th class="c-hist" title="저장할 때마다 서버가 자동으로 보관한 이전 작품 데이터(1시간에 한 번, 최근 6개 + 5일간 날짜별 1개)">이전 버전 복구</th><th class="c-del"></th>
   </tr></thead><tbody>${rows}</tbody></table></div>
   <p class="hint">총 ${users.length}명 (교수 ${profCount}명 · 학생 ${users.length-profCount}명) · 등급을 클릭해 바꿀 수 있습니다.
     작품이 사라졌다는 학생은 [이전 버전 복구]에서 버전을 골라 [복구]를 누르세요. <span id="adminHistTotal"></span></p>`;

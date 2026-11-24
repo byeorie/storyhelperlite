@@ -974,6 +974,9 @@ function bindAuthForms() {
   if (profileBtn) profileBtn.onclick = openProfileEdit;
   const profCodeBtn = document.getElementById("classCodeMenuBtn");
   if (profCodeBtn) profCodeBtn.onclick = openProfCodeManager;
+  /* 2026-11-24: 내 작품의 이전 버전에서 꺼내오기(app.js openMyHistory) */
+  const histMenuBtn = document.getElementById("menuHistoryBtn");
+  if (histMenuBtn) histMenuBtn.onclick = () => { if (typeof openMyHistory === "function") openMyHistory(); };
   const pwMenuBtn = document.getElementById("menuPwBtn");
   if (pwMenuBtn) pwMenuBtn.onclick = openPasswordChange;
   const logoutBtn = document.getElementById("menuLogoutBtn");

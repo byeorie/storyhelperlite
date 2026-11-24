@@ -1,4 +1,4 @@
-import { requireAdmin, jsonResponse, nowSec, ensureHistorySchema, snapshotUserData } from "./_utils.js";
+import { requireAdmin, jsonResponse, nowSec, ensureHistorySchema, snapshotUserData, summarizeUserData } from "./_utils.js";
 
 /* ===== (2026-11-24) 관리자: 학생 작품 데이터 이전 버전 보기·되돌리기 =====
    GET  /api/admin-data-history?username=아이디  → 지금 상태 + 보관된 이전 버전 목록(내용 대신 요약만)
@@ -7,28 +7,7 @@ import { requireAdmin, jsonResponse, nowSec, ensureHistorySchema, snapshotUserDa
         되돌리기 직전 상태도 먼저 보관(reason "before-restore")하므로, 되돌리기 자체도 다시 되돌릴 수 있다.
         rev를 1 올리므로 학생이 열어 둔 화면은 다음 저장 때 덮어쓰지 않고 이 내용을 받아 합친다(auth.js). */
 
-/* 작품 데이터 요약 — 관리자가 어느 버전이 맞는지 고를 수 있도록 작품 이름·아이디어 수·글자 수를 보여준다 */
-function summarize(json) {
-  let d;
-  try { d = JSON.parse(json); } catch (e) { return { broken: true }; }
-  const projects = Array.isArray(d && d.projects) ? d.projects : [];
-  let chars = 0;
-  const walk = (v, depth) => {
-    if (depth > 40 || v == null) return;
-    if (typeof v === "string") { if (!v.startsWith("data:")) chars += v.length; return; }
-    if (Array.isArray(v)) { v.forEach((x) => walk(x, depth + 1)); return; }
-    // id·…Id·…Ids·key 같은 내부 값은 글자 수에서 뺀다("idea…" 같은 진짜 내용 칸은 센다)
-    if (typeof v === "object") Object.keys(v).forEach((k) => { if (k !== "id" && k !== "key" && !/Ids?$/.test(k)) walk(v[k], depth + 1); });
-  };
-  walk(projects, 0);
-  walk(d.ideaBlocks, 0);
-  return {
-    projects: projects.filter((p) => p && !p.isSampleProject).map((p) => String(p.name || "제목 없음")).slice(0, 20),
-    projectCount: projects.filter((p) => p && !p.isSampleProject).length,
-    ideaCount: Array.isArray(d.ideaBlocks) ? d.ideaBlocks.length : 0,
-    chars,
-  };
-}
+const summarize = summarizeUserData; // _utils.js (학생용 my-data-history.js와 공용)
 
 async function totals(env) {
   try {

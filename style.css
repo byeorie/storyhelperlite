@@ -621,6 +621,16 @@ body.logged-in .login-overlay { display: none; }
 @media (max-width: 1280px) {
   .admin-table .c-date { display: none; }
 }
+/* 2026-11-24: 학생 [이전 버전에서 꺼내오기] 창 */
+.my-hist-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin-top: 6px; }
+.my-hist-ver { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; width: 100%;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 8px 10px; cursor: pointer; font: inherit; color: var(--ink); }
+.my-hist-ver:hover { border-color: var(--accent); background: #fbf6f1; }
+.my-hist-ver .hint { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.my-hist-picks { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; margin: 6px 0; }
+.my-hist-pick { display: flex; align-items: baseline; gap: 6px; font-size: 14px; cursor: pointer; overflow-wrap: anywhere; }
+.my-hist-pick .hint { font-size: 12px; margin: 0; }
+.my-hist-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; }
 @media (max-width: 1024px) {
   .admin-table .c-email { display: none; }
 }

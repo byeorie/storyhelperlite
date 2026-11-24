@@ -66,7 +66,7 @@ export async function onRequestPost({ request, env }) {
 
   const json = JSON.stringify(body.data);
   const now = nowSec();
-  /* (2026-11-24) 덮어쓰기 직전 상태를 이전 버전으로 보관(20분에 한 번) — 관리자 화면에서 학생별로 되돌릴 수 있다(_utils.js snapshotUserData) */
+  /* (2026-11-24) 덮어쓰기 직전 상태를 이전 버전으로 보관(1시간에 한 번) — 관리자 화면에서 학생별로 되돌릴 수 있다(_utils.js snapshotUserData) */
   await snapshotUserData(env, auth.user.id, "auto", false);
   /* (2026-09-15) 내용이 이전과 똑같으면 아예 쓰지 않는다 — D1 "쓴 행" 한도 절약.
      (2026-11-18) 서버의 rev가 baseRev와 같을 때만 덮어쓴다(그사이 다른 화면이 저장했으면 쓰지 않음).
