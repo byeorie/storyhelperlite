@@ -11470,6 +11470,7 @@ function drawProfHubStudents(c, data){
   const open=hubOpenStudents();
   const stateText=a=>a.open?(isAssignPastDue(a)?"기한 지남":"제출 가능"):"마감됨";
   const rowState=s=>s.has_feedback?" row-done":(s.checked_at?" row-checked":"");
+  const stuFolders={};   // 학생 id → 과제 폴더별 제출물(차수 순) — [과제 다운로드]가 쓴다
   wrap.innerHTML=`<p class="hint hub-stu-count">학생 ${people.length}명</p>`+people.map(st=>{
     const mine=subsBy.get(st.id)||[];
     /* 과제 폴더(+종류)별로 묶기 — 최근에 낸 폴더가 위로 */
@@ -11477,6 +11478,7 @@ function drawProfHubStudents(c, data){
     mine.forEach(s=>{ const k=s.assignment_id+"|"+s.type; if(!folders.has(k)) folders.set(k, []); folders.get(k).push(s); });
     const fl=[...folders.values()].map(rows=>rows.sort((x,y)=>(x.submit_round||0)-(y.submit_round||0)||(x.submitted_at||0)-(y.submitted_at||0)||x.id-y.id))
       .sort((x,y)=>Math.max(...y.map(s=>s.submitted_at||0))-Math.max(...x.map(s=>s.submitted_at||0)));
+    stuFolders[st.id]=fl;
     const latest=fl.map(rows=>rows[rows.length-1]);
     const nDone=latest.filter(s=>s.has_feedback).length, nTodo=latest.filter(s=>!s.has_feedback&&!s.checked_at).length;
     const clNames=[...(memberOf.get(st.id)||[])].map(id=>clMap.get(id)).filter(Boolean).map(classLabel);
@@ -11500,13 +11502,15 @@ function drawProfHubStudents(c, data){
           <span class="hint">${esc(cl?classLabel(cl):"수업 미지정")} · ${a.due_at?("기한 "+esc(fmtDue(a.due_at))):"기한 없음"} · ${stateText(a)}</span></div>
         <div class="hub-sub-items">${items}</div></div>`;
     }).join(""));
-    return `<div class="hub-group hub-stu${isOpen?" open":""}">
+    const nSubs=fl.reduce((n,rows)=>n+rows.length,0);
+    return `<div class="hub-group hub-stu${isOpen?" open":""}"><div class="hub-stu-top">
       <button type="button" class="hub-stu-head" data-stu="${st.id}">
         <span class="hub-stu-caret">${isOpen?"▾":"▸"}</span>
         <span class="hub-group-title">${esc(st.name||"")}</span><span class="hint">(${esc(st.username||"")})</span>
         ${clNames.length?`<span class="hint">${esc(clNames.join(", "))}</span>`:""}
         <span class="hint hub-stu-sum">${fl.length?`과제 ${fl.length}건 · 첨삭 완료 ${nDone} · 미확인 ${nTodo}`:"제출 없음"}</span>
-      </button>${isOpen?`<div class="hub-stu-body">${body}</div>`:""}</div>`;
+      </button>${fl.length?`<button type="button" class="btn ghost sm hub-stu-dl" data-dl="${st.id}" title="이 학생이 낸 과제(재제출 차수 전부)를 zip 하나로 내려받습니다${cls?" — 지금 고른 분반의 과제만":""}">${ICONS.download} 과제 다운로드 <span class="hint">(${nSubs}건)</span></button>`:""}</div>
+      ${isOpen?`<div class="hub-stu-body">${body}</div>`:""}</div>`;
   }).join("");
   wrap.querySelectorAll(".hub-stu-head").forEach(b=>{
     b.onclick=()=>{
@@ -11514,6 +11518,14 @@ function drawProfHubStudents(c, data){
       if(set.has(id)) set.delete(id); else set.add(id);
       hubSS("sh_hubStuOpen", JSON.stringify([...set]));
       drawProfHubStudents(c, data);
+    };
+  });
+  wrap.querySelectorAll(".hub-stu-dl").forEach(b=>{
+    b.onclick=e=>{
+      e.stopPropagation();
+      if(b.dataset.busy) return;
+      const st=data.students.find(x=>x.id===Number(b.dataset.dl)); if(!st) return;
+      exportStudentSubmissionsZip(st, stuFolders[st.id]||[], data, b);
     };
   });
   wrap.querySelectorAll(".hub-sub-item").forEach(b=>{
@@ -12116,6 +12128,66 @@ async function bulkExportClass(classId, kind, btn, assignmentIds){
     if(failAll) alert(`${okAll}건 내보내기 완료, ${failAll}건은 실패해 제외했습니다.`);
   }catch(e){
     alert(label+" 내보내기 중 오류가 발생했습니다: "+((e&&e.message)||e));
+  }finally{
+    btn.disabled=false; btn.innerHTML=origHtml; delete btn.dataset.busy;
+  }
+}
+/* 2026-11-24: [과제 관리] 학생별 — 학생 한 명의 과제를 zip 하나로 (재제출 차수 전부)
+   zip 안에 과제 폴더마다 폴더(과목명_분반_과제명)를 만들고, 차수마다 PDF(원본 + 그 차수의 최신 첨삭·메모·평가)를 담는다.
+   콘티·파일 과제는 올린 그림/파일 원본(+피드백 그림)도 같이 담는다(PDF에 못 넣는 clip 파일 포함).
+   파일명: 과목명_분반_과제명_학생이름_N차 (차수가 하나뿐이면 _N차 없이). 첨삭 "이전 버전"(같은 차수의 옛 첨삭)은 담지 않는다. */
+function studentZipPlan(st, folders, data){
+  const aMap=new Map(data.assigns.map(a=>[a.id, a])), clMap=new Map(data.classes.map(cl=>[cl.id, cl]));
+  const folderNames=new Set();
+  return folders.map(rows=>{
+    const a=aMap.get(rows[0].assignment_id)||{};
+    const cl=a.class_id!=null?clMap.get(a.class_id):null;
+    const info={title:(a.title||"과제")+(folders.some(o=>o!==rows&&o[0].assignment_id===rows[0].assignment_id)?" "+(TYPE_LABEL[rows[0].type]||rows[0].type):""),
+      class_name:cl?cl.name:"", class_section:cl?cl.section:""};
+    const folder=bulkUniqueName(folderNames, bulkBaseName(info, "")||"과제", "");
+    const used=new Set();
+    const items=rows.map((s,i)=>{
+      const round=s.submit_round||(i+1);
+      const base=bulkBaseName(info, st.name||"학생")+(rows.length>1?`_${round}차`:"");
+      return {id:s.id, type:s.type, base:bulkUniqueName(used, base, "")};
+    });
+    return {folder, items};
+  });
+}
+async function exportStudentSubmissionsZip(st, folders, data, btn){
+  const plan=studentZipPlan(st, folders, data);
+  const total=plan.reduce((n,f)=>n+f.items.length,0);
+  if(!total){ alert("내려받을 제출물이 없습니다."); return; }
+  const origHtml=btn.innerHTML;
+  btn.disabled=true; btn.dataset.busy="1";
+  try{
+    btn.textContent="준비 중…";
+    await ensureBulkPdfLibs();
+    const zip=new window.JSZip();
+    let done=0, ok=0, fail=0;
+    for(const f of plan){
+      const dir=zip.folder(f.folder);
+      const used=new Set();
+      for(const it of f.items){
+        done++; btn.textContent=`만드는 중… (${done}/${total})`;
+        try{
+          const res=await apiFetch("professor-submission?id="+it.id);
+          if(!res.ok || !res.body || !res.body.submission){ fail++; continue; }
+          const sub=res.body.submission;
+          const files=[{name:it.base+".pdf", blob:await submissionToPdfBlob(sub)}];
+          if(sub.type==="storyboard"||sub.type==="file") files.push(...await bulkImageFiles(sub, it.base));
+          files.forEach(x=>{ const dot=x.name.lastIndexOf("."); dir.file(bulkUniqueName(used, x.name.slice(0,dot), x.name.slice(dot)), x.blob); });
+          ok++;
+        }catch(e){ fail++; }
+      }
+    }
+    if(!ok){ alert("과제 다운로드에 실패했습니다(내보낼 내용이 없거나 오류)."); return; }
+    btn.textContent="압축 중…";
+    const zipName=[bulkSafeName(st.name||"학생"), bulkSafeName(st.username||"")].filter(Boolean).join("_")+"_과제.zip";
+    bulkSaveBlob(await zip.generateAsync({type:"blob"}), zipName);
+    if(fail) alert(`${ok}건 내려받기 완료, ${fail}건은 실패해 제외했습니다.`);
+  }catch(e){
+    alert("과제 다운로드 중 오류가 발생했습니다: "+((e&&e.message)||e));
   }finally{
     btn.disabled=false; btn.innerHTML=origHtml; delete btn.dataset.busy;
   }
@@ -14395,7 +14467,7 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
-      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다. 칸 오른쪽 위 <b>[기한]</b>을 누르면 그 분반 폴더의 마감일·시간만 따로 바꿀 수 있습니다. 위쪽 <b>[학생별]</b> 탭으로 바꾸면 학생마다 낸 과제를 과제 폴더·차수별로 모아 봅니다(제출 시각·기한 후 제출 여부·점수·확인/첨삭 상태). 분반 선택과 이름·학번 검색으로 거를 수 있고, 제출물을 누르면 첨삭 화면이 열립니다.</li>
+      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다. 칸 오른쪽 위 <b>[기한]</b>을 누르면 그 분반 폴더의 마감일·시간만 따로 바꿀 수 있습니다. 위쪽 <b>[학생별]</b> 탭으로 바꾸면 학생마다 낸 과제를 과제 폴더·차수별로 모아 봅니다(제출 시각·기한 후 제출 여부·점수·확인/첨삭 상태). 분반 선택과 이름·학번 검색으로 거를 수 있고, 제출물을 누르면 첨삭 화면이 열립니다. 학생 이름 줄 오른쪽 <b>[과제 다운로드]</b>를 누르면 그 학생이 낸 과제(재제출 차수 전부)를 과제별 폴더로 나눠 zip 하나로 내려받습니다(차수마다 PDF, 콘티·파일 과제는 올린 파일 원본도 함께).</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 등록 화면의 <b>[만들 수업]</b>에서 여러 분반을 체크하면 같은 과제가 분반마다 <b>따로</b> 하나씩 만들어집니다(제출함·마감·설정 변경은 분반별로 따로). 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 용량 제한은 관리자 설정값 · 기본 1.5MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
