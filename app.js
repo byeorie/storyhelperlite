@@ -7862,13 +7862,22 @@ function compressCanvasToLimit(canvas, maxBytes, cb){
 }
 
 /* blob.type을 그대로 보낸다 — 합친 그림은 image/jpeg, 층 3장은 투명도를 지켜야 하므로 image/png */
-async function uploadStoryboardBlob(blob){
+/* opts.fileCheck(2026-11-24, 파일 제출 과제): 원본 크기를 X-File-Size로 보내 서버가 받은 바이트 수와 대조하고
+   (전송 중 잘림 방지), 서버도 JPEG/PNG가 끝까지 온전한지 검사한다. 응답의 size도 다시 맞춰 본다. */
+async function uploadStoryboardBlob(blob, opts){
   const token=typeof getToken==="function" ? getToken() : null;
   if(!token) return null;
+  const check=!!(opts && opts.fileCheck);
   try{
-    const r=await fetch("/api/storyboard-image", {method:"POST", headers:{"Authorization":"Bearer "+token, "Content-Type":(blob&&blob.type)||"image/jpeg"}, body:blob});
-    if(!r.ok) return null;
+    const headers={"Authorization":"Bearer "+token, "Content-Type":(blob&&blob.type)||"image/jpeg"};
+    if(check){ headers["X-File-Check"]="1"; headers["X-File-Size"]=String(blob.size); }
+    const r=await fetch("/api/storyboard-image", {method:"POST", headers, body:blob});
+    if(!r.ok){
+      if(check){ const e=await r.json().catch(()=>null); if(e && e.error) alert(e.error); }
+      return null;
+    }
     const j=await r.json().catch(()=>null);
+    if(check && j && j.size!=null && Number(j.size)!==blob.size) return null;
     return (j && j.key) || null;
   }catch(e){ return null; }
 }
@@ -9778,7 +9787,10 @@ async function buildSubmissionData(type){
     for(let i=0;i<pendingFiles.length;i++){
       const it=pendingFiles[i];
       if(it.kind==="image"){
-        const key=await uploadStoryboardBlob(it.file);
+        /* 2026-11-24: 고른 뒤 파일이 바뀌었을 수 있으니 올리기 직전에 한 번 더 검사하고, 서버에도 원본 크기를 알려 대조한다 */
+        const bad=await imageFileProblem(it.file);
+        if(bad){ alert(`${it.file.name} — 손상된 이미지입니다: ${bad}.\n그림 프로그램에서 다시 저장(내보내기)한 뒤 다시 골라 주세요.`); return null; }
+        const key=await uploadStoryboardBlob(it.file, {fileCheck:true});
         if(!key) return null;
         out.push({id:it.id, no:i+1, title:it.file.name, key, size:await imageSizeKeyOf(it.file),
                   fileKind:"image", fileName:it.file.name, bytes:it.file.size});
@@ -9899,16 +9911,55 @@ function imageSizeKeyOf(file){
     img.src=url;
   });
 }
-function addPendingFiles(files){
+/* 2026-11-24: "파일 제출 이미지가 잘려서 올라간다" — 실제로 저장된 파일을 받아 보니 JPEG가 정확히 864KB에서
+   끊겨 끝 표시(FF D9)가 없었다(학생 PC에서 저장·동기화가 덜 끝난 파일이거나 전송 중 잘린 파일). 크롬은 이런 JPEG도
+   오류 없이 위쪽만 그리고 아래는 비워 두기 때문에 학생도 교수도 "잘려서 올라갔다"로만 보였다.
+   그래서 고를 때 파일이 끝까지 온전한지 바이트로 검사한다(확장자가 아니라 파일 내용의 형식으로 판단).
+   - JPEG: 첫 SOS(그림 데이터 시작) 뒤에 FF D9가 있어야 한다(EXIF 미리보기 그림의 FF D9는 SOS 앞에 있으므로 제외된다).
+   - PNG : IEND 덩어리가 있어야 한다.
+   그 밖의 형식(이름만 .jpg인 webp 등)은 막지 않는다. 문제가 없으면 null, 있으면 사유 문자열. */
+function imageBytesProblem(u8){
+  const n=u8.length;
+  if(n>=4 && u8[0]===0xFF && u8[1]===0xD8){
+    let i=2, sos=-1;
+    while(i+3<n){
+      if(u8[i]!==0xFF){ i++; continue; }
+      const m=u8[i+1];
+      if(m===0xFF){ i++; continue; }                       /* 채움 바이트 */
+      if(m===0xD8 || m===0x01 || (m>=0xD0 && m<=0xD7)){ i+=2; continue; }
+      if(m===0xDA){ sos=i; break; }
+      if(m===0xD9) return "그림 데이터가 없습니다";
+      i+=2+((u8[i+2]<<8)|u8[i+3]);
+    }
+    if(sos<0) return "그림 데이터가 없습니다";
+    for(let k=n-2;k>sos;k--) if(u8[k]===0xFF && u8[k+1]===0xD9) return null;
+    return "파일 끝부분이 없습니다(저장이 덜 끝난 파일)";
+  }
+  if(n>=8 && u8[0]===0x89 && u8[1]===0x50 && u8[2]===0x4E && u8[3]===0x47){
+    for(let k=n-8;k>=8;k--) if(u8[k]===0x49 && u8[k+1]===0x45 && u8[k+2]===0x4E && u8[k+3]===0x44) return null;   /* "IEND" */
+    return "파일 끝부분이 없습니다(저장이 덜 끝난 파일)";
+  }
+  return null;
+}
+async function imageFileProblem(file){
+  try{ return imageBytesProblem(new Uint8Array(await file.arrayBuffer())); }
+  catch(e){ return "파일을 읽지 못했습니다(다른 프로그램이 쓰는 중이거나 클라우드에서 아직 내려받는 중일 수 있습니다)"; }
+}
+async function addPendingFiles(files){
   const errs=[];
-  files.forEach(f=>{
+  for(const f of files){
     const ext=fileExtOf(f.name);
-    if(!FILE_IMAGE_EXT.includes(ext) && !FILE_ETC_EXT.includes(ext)){ errs.push(`${f.name} — jpg · png · clip 파일만 낼 수 있습니다.`); return; }
-    if(f.size>FILE_MAX_BYTES){ errs.push(`${f.name} — ${fileSizeText(f.size)} (파일 하나당 ${FILE_MAX_MB}MB까지)`); return; }
-    if(pendingFiles.length>=FILE_MAX_COUNT){ errs.push(`${f.name} — 한 번에 ${FILE_MAX_COUNT}개까지만 낼 수 있습니다.`); return; }
-    if(pendingFiles.some(x=>x.file.name===f.name && x.file.size===f.size)) return;   /* 같은 파일 두 번 담기 방지 */
-    pendingFiles.push({id:uid(), file:f, ext, kind:FILE_IMAGE_EXT.includes(ext)?"image":"clip"});
-  });
+    if(!FILE_IMAGE_EXT.includes(ext) && !FILE_ETC_EXT.includes(ext)){ errs.push(`${f.name} — jpg · png · clip 파일만 낼 수 있습니다.`); continue; }
+    if(f.size>FILE_MAX_BYTES){ errs.push(`${f.name} — ${fileSizeText(f.size)} (파일 하나당 ${FILE_MAX_MB}MB까지)`); continue; }
+    if(pendingFiles.length>=FILE_MAX_COUNT){ errs.push(`${f.name} — 한 번에 ${FILE_MAX_COUNT}개까지만 낼 수 있습니다.`); continue; }
+    if(pendingFiles.some(x=>x.file.name===f.name && x.file.size===f.size)) continue;   /* 같은 파일 두 번 담기 방지 */
+    const kind=FILE_IMAGE_EXT.includes(ext)?"image":"clip";
+    if(kind==="image"){
+      const bad=await imageFileProblem(f);
+      if(bad){ errs.push(`${f.name} — 손상된 이미지입니다: ${bad}. 그림 프로그램에서 다시 저장(내보내기)한 뒤 올려 주세요.`); continue; }
+    }
+    pendingFiles.push({id:uid(), file:f, ext, kind});
+  }
   renderFilePickList();
   if(errs.length) alert("다음 파일은 목록에서 제외했습니다:\n\n"+errs.join("\n"));
 }
