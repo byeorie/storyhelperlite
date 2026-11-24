@@ -6,6 +6,40 @@ const LS_KEY = "storyhelper_v1";
    로그인한 경우)과 "이 브라우저에 남아있던 다른 계정의 예전 테스트 데이터"(2026-08-18에 발견된 문제)를
    구분하는 데 쓴다 — auth.js loadFromServer() 참고. */
 const LS_OWNER_KEY = LS_KEY + "_owner";
+/* (2026-11-24 긴급) 계정 태그를 작품 데이터와 "한 덩어리"로 저장한다(LS_KEY 값 안의 __lsOwner).
+   예전에는 태그를 따로(LS_OWNER_KEY) 저장해서, 브라우저 저장 공간이 꽉 차 작품 데이터 쓰기는 실패하고
+   짧은 태그 쓰기만 성공하면 "앞 학생의 데이터 + 지금 학생의 태그"가 되어 버렸다. 그러면 auth.js의 합치기가
+   앞 학생의 데이터를 지금 학생의 "아직 못 올린 글"로 보고 서버에 올려, 지금 학생의 작품·아이디어가 통째로
+   사라졌다. LS_DATA_OWNER = 지금 메모리에 있는 DB의 주인. LS_OWNER_KEY는 예전 화면과의 호환용으로만 함께 쓴다. */
+let LS_DATA_OWNER = null;
+/* 같은 이유로 "마지막으로 서버와 맞춘 상태"(auth.js syncBase)도 데이터 안(__lsBase)에 함께 둔다 — 따로 두면
+   데이터 쓰기만 실패했을 때 기준이 데이터보다 새것이 되어, 새로고침하면 예전 내용이 "내가 고친 것"으로 보여 서버의 새 내용을 덮는다. */
+let LS_DATA_BASE = null;
+let LS_DATA_EMBEDDED = false;   // 주인 표시가 데이터 안에 들어 있는 새 형식인지(아니면 예전 형식 — 태그를 믿을 수 없음)
+function lsReadStored(){
+  try{
+    const d=JSON.parse(localStorage.getItem(LS_KEY));
+    if(d && typeof d==="object"){
+      let owner=null, embedded=false, base=null;
+      if(typeof d.__lsOwner==="string"){ owner=d.__lsOwner||null; embedded=true; }
+      if(embedded && d.__lsBase && typeof d.__lsBase==="object" && d.__lsBase.p && d.__lsBase.k) base={p:d.__lsBase.p, k:d.__lsBase.k};
+      delete d.__lsOwner; delete d.__lsBase;
+      if(!embedded){ try{ owner=localStorage.getItem(LS_OWNER_KEY)||null; }catch(e){} }
+      return {d, owner, embedded, base};
+    }
+  }catch(e){}
+  return {d:null, owner:null, embedded:false, base:null};
+}
+/* 실패하면 예외를 그대로 던진다(호출한 쪽이 처리). 실패해도 예전 값은 예전 주인·기준과 함께 그대로 남으므로 섞이지 않는다. */
+function lsWriteDB(db, owner){
+  const o=Object.assign({}, db);
+  o.__lsOwner=owner||"";
+  const mineNow = !!owner && typeof currentUser!=="undefined" && currentUser && currentUser.username===owner
+    && typeof serverSaveReady==="function" && serverSaveReady();
+  o.__lsBase = mineNow ? ((typeof syncBase!=="undefined" && syncBase) ? syncBase : null) : LS_DATA_BASE;
+  localStorage.setItem(LS_KEY, JSON.stringify(o));
+  try{ if(owner) localStorage.setItem(LS_OWNER_KEY, owner); else localStorage.removeItem(LS_OWNER_KEY); }catch(e){}
+}
 const ADMIN_USERNAME = "byeorie";
 
 /* ===== 심플라인 아이콘 (24x24 stroke, currentColor) ===== */
@@ -304,7 +338,8 @@ function migrateIdeaBlocksToAccount(d){
 }
 function load(){
   try{
-    const d=JSON.parse(localStorage.getItem(LS_KEY));
+    const st=lsReadStored(); const d=st.d;
+    LS_DATA_OWNER=st.owner; LS_DATA_BASE=st.base; LS_DATA_EMBEDDED=st.embedded;
     if(d&&Array.isArray(d.projects)&&d.projects.length){
       d.projects=d.projects.map(fillProject);
       if(!d.projects.some(p=>p.id===d.current)) d.current=d.projects[0].id;
@@ -409,22 +444,20 @@ function save(opts){
      함께 멈춰버리면 안 된다 — 예전에는 여기서 예외가 나면 아래 saveToServer()가 아예 호출되지 않아
      작품이 어디에도 저장되지 않았다. 이제 로컬 실패는 따로 알려주고 서버 저장은 계속 진행한다. */
   let localOk = true;
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }
+  /* 서버에서 이 계정 데이터를 불러온 뒤에만 주인을 지금 계정으로 바꾼다(2026-11-18 — 불러오기 전 DB는 앞 사람의 것일 수 있음) */
+  if(typeof serverSaveReady==="function" && serverSaveReady() && typeof currentUser!=="undefined" && currentUser && currentUser.username){
+    LS_DATA_OWNER=currentUser.username;
+  }
+  try{ lsWriteDB(DB, LS_DATA_OWNER); }
   catch(e){
     localOk = false;
+    /* 예전 형식(주인 표시가 안에 없는) 값이 남아 있을 수 있으므로 따로 둔 태그는 지운다 — 그래야 그 값이 남의 것으로 오인되지 않는다 */
+    try{ localStorage.removeItem(LS_OWNER_KEY); }catch(_){}
     if(!window.__lsQuotaWarned){
       window.__lsQuotaWarned = true;
       alert("이 브라우저에 임시 저장할 공간이 부족합니다.\n작품 내용은 서버에 저장되지만, 인터넷이 끊긴 상태에서는 저장되지 않을 수 있습니다.\n사용하지 않는 작품을 정리하거나 브라우저 저장 공간을 비워주세요.");
     }
   }
-  /* (2026-11-18) 계정 태그는 "서버에서 이 계정 데이터를 불러온 뒤"에만 남긴다 — 같은 PC에서 다른 학생이
-     로그인한 직후(불러오기 전)에 save()가 불리면 앞 학생의 작품에 새 학생의 태그가 붙어, auth.js
-     loadFromServer()가 그것을 새 학생의 "아직 못 올린 글"로 보고 합쳐 버릴 수 있다. */
-  try{
-    if(typeof serverSaveReady==="function" && serverSaveReady() && typeof currentUser!=="undefined" && currentUser && currentUser.username){
-      localStorage.setItem(LS_OWNER_KEY, currentUser.username);
-    }
-  }catch(e){}
   const el=document.getElementById("saveStatus");
   if(el){ el.textContent=localOk?"저장됨":"임시 저장 공간 부족"; el.style.opacity=1; setTimeout(()=>el.style.opacity=.4,1000); }
   /* (2026-09-08) 로그인 상태라도 "서버에서 내 데이터를 불러오기 전"에는 서버에 저장하지 않는다

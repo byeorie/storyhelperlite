@@ -398,20 +398,38 @@ function syncSnapshot(db) {
   });
   return { json: "{" + parts.join(",") + "}", base };
 }
+/* (2026-11-24 긴급) 기준 상태는 더 이상 따로(SYNC_BASE_KEY) 저장하지 않는다 — 작품 데이터와 한 값 안에 함께 저장한다
+   (app.js lsWriteDB/lsReadStored). 따로 두면 데이터 쓰기만 실패했을 때 기준이 데이터보다 새것이 되어,
+   새로고침하면 예전 내용이 "내가 고친 것"으로 보여 서버의 새 내용을 덮었다. 오늘 아침에 따로 저장된 값은 믿지 않고 지운다. */
+try { localStorage.removeItem(SYNC_BASE_KEY); } catch (e) {}
 function setSyncBase(base, rev) {
   syncBase = base;
   serverRev = rev;
-  try {
-    if (currentUser && currentUser.username)
-      localStorage.setItem(SYNC_BASE_KEY, JSON.stringify({ user: currentUser.username, rev, p: base.p, k: base.k }));
-  } catch (e) {}
+  /* 메모리 DB의 기준도 함께 갱신 — 로그아웃(로그인 만료) 뒤 같은 창에서 다시 로그인할 때 이 값을 쓴다 */
+  if (typeof LS_DATA_BASE !== "undefined" && currentUser && currentUser.username) {
+    LS_DATA_BASE = base; LS_DATA_EMBEDDED = true; LS_DATA_OWNER = currentUser.username;
+  }
 }
+/* 이 브라우저에 저장된 작품 데이터가 "새 형식(주인·기준이 안에 들어 있음)"이고 지금 계정의 것일 때만 그 기준을 쓴다 */
 function storedSyncBase() {
-  try {
-    const b = JSON.parse(localStorage.getItem(SYNC_BASE_KEY));
-    if (b && currentUser && b.user === currentUser.username && b.p && b.k) return { p: b.p, k: b.k };
-  } catch (e) {}
+  if (typeof LS_DATA_EMBEDDED !== "undefined" && LS_DATA_EMBEDDED && currentUser && LS_DATA_OWNER === currentUser.username)
+    return LS_DATA_BASE || null;
   return null;
+}
+/* 이 브라우저의 데이터가 이 계정의 것으로 보이는지 — 서버의 (샘플이 아닌) 작품과 하나라도 같은 작품이 있어야 한다.
+   주인 표시를 믿을 수 없는 예전 형식 데이터·공용 PC 보관분에 쓴다(남의 데이터가 섞이는 사고 방지). */
+function syncRelated(localDb, serverDb) {
+  const ids = {};
+  ((serverDb && serverDb.projects) || []).forEach((p) => { if (p && p.id && !p.isSampleProject) ids[p.id] = true; });
+  return ((localDb && localDb.projects) || []).some((p) => p && p.id && !p.isSampleProject && ids[p.id]);
+}
+function lsSaveMine() {
+  try {
+    if (currentUser && currentUser.username) LS_DATA_OWNER = currentUser.username;
+    if (typeof lsWriteDB === "function") lsWriteDB(DB, LS_DATA_OWNER);
+  } catch (e) {
+    try { localStorage.removeItem(typeof LS_OWNER_KEY !== "undefined" ? LS_OWNER_KEY : "storyhelper_v1_owner"); } catch (_) {}
+  }
 }
 /* ===== (2026-11-24) 공용 PC의 "남겨진 글" 보관(stash) =====
    실습실 PC처럼 여러 학생이 같은 브라우저를 쓰면, 앞 학생이 서버에 못 올린 글(저장 실패한 채 쓴 글)이
@@ -424,12 +442,13 @@ function stashLeftoverFor(owner) {
   try {
     /* 메모리의 DB가 아니라 이 브라우저에 저장된 값(LS_KEY)을 보관한다 — 메모리 쪽은 이미 지금 로그인한
        학생의 서버 데이터로 바뀌었을 수 있다 */
-    const local = JSON.parse(localStorage.getItem(typeof LS_KEY !== "undefined" ? LS_KEY : "storyhelper_v1"));
-    if (!local || !Array.isArray(local.projects) || !local.projects.length) return;
-    let base = null;
-    const b = JSON.parse(localStorage.getItem(SYNC_BASE_KEY));
-    if (b && b.user === owner && b.p && b.k) base = { p: b.p, k: b.k };
-    localStorage.setItem(STASH_PREFIX + owner, JSON.stringify({ at: Date.now(), base, db: local }));
+    if (typeof lsReadStored !== "function") return;
+    const st = lsReadStored();
+    const local = st.d;
+    if (!local || !Array.isArray(local.projects) || !local.projects.length || st.owner !== owner) return;
+    const json = JSON.stringify({ at: Date.now(), base: st.embedded ? st.base : null, db: local });
+    if (json.length > 1500000) return; // 너무 크면 보관하지 않는다(브라우저 저장 공간을 다 써 버리지 않도록)
+    localStorage.setItem(STASH_PREFIX + owner, json);
   } catch (e) {}
 }
 function takeStashFor(user) {
@@ -447,6 +466,7 @@ function applyStashIfAny() {
   if (!s) return;
   let local;
   try { local = normalizeSyncData(JSON.parse(JSON.stringify(s.db))); } catch (e) { dropStashFor(currentUser.username); return; }
+  if (!syncRelated(local, DB)) return; // 이 계정의 작품과 겹치는 것이 하나도 없으면 이 계정 것으로 보지 않는다
   const keepCurrent = DB.current;
   const m = mergeSyncData(local, DB, s.base || null);
   m.db.current = m.db.projects.some((p) => p.id === keepCurrent) ? keepCurrent : m.db.current;
@@ -577,7 +597,7 @@ function applyMergedDB(merged) {
   const prevP = P;
   P = currentProject();
   if (P !== prevP && typeof resetUndoHistory === "function") resetUndoHistory();
-  try { localStorage.setItem(typeof LS_KEY !== "undefined" ? LS_KEY : "storyhelper_v1", JSON.stringify(DB)); } catch (e) {}
+  lsSaveMine();
 }
 function alertSyncCopies(copies) {
   if (!copies || !copies.length) return;
@@ -602,10 +622,13 @@ async function loadFromServer() {
     const data = res.body.data;
     const rev = Number(res.body.rev) || 0;
     /* 이 브라우저에 남아 있는 내용이 지금 로그인한 계정의 것인지(다른 계정이 쓰던 PC가 아닌지) */
-    let localOwner = null;
-    try { localOwner = localStorage.getItem(typeof LS_OWNER_KEY !== "undefined" ? LS_OWNER_KEY : "__none__"); } catch (e) {}
+    /* (2026-11-24) 메모리에 있는 DB의 주인(app.js LS_DATA_OWNER — 데이터와 한 값에 저장된 주인 표시) */
+    const localOwner = (typeof LS_DATA_OWNER !== "undefined") ? LS_DATA_OWNER : null;
     const hasLocalData = DB && Array.isArray(DB.projects) && DB.projects.length > 0;
-    const localIsMine = hasLocalData && localOwner && currentUser && localOwner === currentUser.username;
+    let localIsMine = !!(hasLocalData && localOwner && currentUser && localOwner === currentUser.username);
+    /* 예전 형식(주인 표시를 따로 저장하던 때) 데이터는 표시가 틀렸을 수 있다 — 서버 작품과 겹치는 것이 없으면 남의 것으로 본다 */
+    if (localIsMine && !serverDataLoaded && !LS_DATA_EMBEDDED && data && Array.isArray(data.projects) && data.projects.length
+        && !syncRelated(DB, data)) localIsMine = false;
     /* (2026-11-24) 다른 학생이 이 브라우저에 남긴 글은 버리기 전에 그 학생 이름으로 보관(공용 PC) */
     if (!serverDataLoaded && localOwner && currentUser && localOwner !== currentUser.username) stashLeftoverFor(localOwner);
 
@@ -623,7 +646,7 @@ async function loadFromServer() {
           applyMergedDB(m.db);
           if (!wasLoaded && typeof resetUndoHistory === "function") resetUndoHistory();
           render();
-        }
+        } else lsSaveMine();
         if (syncSnapshot(DB).json !== serverSnap.json) {
           lastSavedJson = null;
           if (st) st.innerHTML = CLOUD_ICON + " 서버와 합치는 중…";
@@ -635,6 +658,7 @@ async function loadFromServer() {
         alertSyncCopies(m.copies);
       } else {
         DB = data;
+        if (typeof LS_DATA_OWNER !== "undefined") LS_DATA_OWNER = currentUser.username; // 메모리의 DB는 이제 이 계정 것
         P = currentProject();
         setSyncBase(serverSnap.base, rev);
         lastSavedJson = serverSnap.json;
@@ -773,7 +797,7 @@ async function doServerSave(pid, isRetry, keepalive) {
     const serverSnap = syncSnapshot(server);
     const m = mergeSyncData(DB, server, syncBase);
     setSyncBase(serverSnap.base, Number(res.body.rev) || 0);
-    if (m.changed) { applyMergedDB(m.db); render(); }
+    if (m.changed) { applyMergedDB(m.db); render(); } else lsSaveMine();
     lastSavedJson = null;
     alertSyncCopies(m.copies);
     if (serverConflictStreak <= 3) { serverSaveQueued = false; doServerSave(DB.current, true); return; }
@@ -803,6 +827,7 @@ async function doServerSave(pid, isRetry, keepalive) {
     serverConflictStreak = 0;
     lastSavedJson = payload;
     setSyncBase(snap.base, Number(res.body && res.body.rev) || 0);
+    lsSaveMine(); // 바뀐 기준을 이 브라우저의 데이터와 한 값으로 다시 저장(2026-11-24)
   }
   if (st) st.innerHTML = CLOUD_ICON + (res.ok ? " 서버에 저장됨" : " 서버 저장 실패");
   if (typeof projSaveState === "object") projSaveState[pid] = res.ok ? "saved" : "error";
