@@ -9598,6 +9598,8 @@ function notifyOpenStudent(it){
 
 let profAssignFolderId=null; // 열려있는 과제 폴더(제출함) id — null이면 과제 목록 화면
 let profReviewId=null;       // 열려있는 첨삭 화면의 제출물 id — null이면 제출함/목록 화면
+/* 2026-11-24 (과제 관리 허브): [과제별] | [학생별] 보기 — 학생별은 학생 한 명이 낸 제출물을 과제 폴더·차수별로 모아 본다 */
+let profHubView=(()=>{ try{ return sessionStorage.getItem("sh_hubView")==="students"?"students":"folders"; }catch(e){ return "folders"; } })();
 let profReviewVersion=null;  // 과제 관리 목록의 버전 드롭다운으로 옛 버전을 골랐을 때 그 버전 번호 — null이면 최신(=이어서 편집 가능)
 let profClassId=null;        // 2026-08-24: 열려있는 수업 id — null이면 수업 목록 화면, "none"이면 수업 미지정(전체 공개) 과제함
 let profClassTab="assignments"; // 수업 상세 화면에서 활성 탭: "notices"(공지) | "assignments"(과제 관리) | "students"(수강 학생)
@@ -9615,7 +9617,7 @@ let navRestoring=false;
 function navSnapshot(){
   try{
     return {activeTab, plotEditOpen, writeEditOpen, learnDetailFor, practiceFor, practiceStep, clicheStep, romanceStep, twistStep, charDetailFor, charViewMode, sideViewMode,
-      profClassId, profClassTab, profAssignFolderId, profReviewId, profReviewVersion,
+      profClassId, profClassTab, profAssignFolderId, profReviewId, profReviewVersion, profHubView,
       feedbackPage: feedbackPage ? {type:feedbackPage.type, mode:feedbackPage.mode, id:feedbackPage.id||null} : null};
   }catch(e){ return null; }
 }
@@ -9643,6 +9645,7 @@ window.addEventListener("popstate", e=>{
   charViewMode=st.charViewMode; sideViewMode=st.sideViewMode;
   profClassId=st.profClassId; profClassTab=st.profClassTab; profAssignFolderId=st.profAssignFolderId;
   profReviewId=st.profReviewId; profReviewVersion=st.profReviewVersion; feedbackPage=st.feedbackPage;
+  if(st.profHubView==="folders"||st.profHubView==="students"){ profHubView=st.profHubView; try{ sessionStorage.setItem("sh_hubView", profHubView); }catch(err){} }
   try{ localStorage.setItem(TAB_KEY, activeTab); }catch(err){}
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===activeTab));
   navRestoring=true;
@@ -11370,7 +11373,23 @@ function rProfAssignHub(){
   if(profReviewId){ rProfSubmissionReview(profReviewId, profReviewVersion); return; }
   if(profAssignFolderId){ rProfAssignmentFolder(profAssignFolderId); return; }
   const c=document.createElement("div"); c.className="card";
-  c.innerHTML=`<h2>${ICONS.book} 과제 관리</h2>
+  const tabs=`<div class="auth-tabs class-tabs hub-view-tabs">
+      <button type="button" class="auth-tab${profHubView==="folders"?" active":""}" data-view="folders">${ICONS.book} 과제별</button>
+      <button type="button" class="auth-tab${profHubView==="students"?" active":""}" data-view="students">${ICONS.user} 학생별</button>
+    </div>`;
+  if(profHubView==="students"){
+    c.innerHTML=`<h2>${ICONS.book} 과제 관리</h2>${tabs}
+      <p class="hint">학생 한 명이 낸 제출물을 과제 폴더·차수별로 모아 봅니다. 학생 줄을 누르면 펼쳐지고, 제출물을 누르면 첨삭 화면이 열립니다(<b>[목록으로]</b>로 돌아옵니다).
+        초록 = 첨삭 완료, 노랑 = 확인만 함, 흰색 = 아직 손대지 않음.</p>
+      <div class="assign-folder-actions">
+        <select id="hubStuClass" class="hub-stu-class" title="분반(수업)으로 거르기"></select>
+        <label class="hint hub-stu-only"><input type="checkbox" id="hubStuOnly"> 제출한 학생만</label>
+        <button type="button" class="btn ghost sm" id="hubStuReload">${ICONS.refresh} 새로고침</button>
+        <input type="search" id="hubStuFilter" class="hub-filter" placeholder="이름·학번 검색">
+      </div>
+      <div id="hubStuWrap"><p class="hint">불러오는 중…</p></div>`;
+  } else {
+    c.innerHTML=`<h2>${ICONS.book} 과제 관리</h2>${tabs}
     <p class="hint">과제 폴더를 중심으로, 같은 과제가 어느 분반에 있는지 한눈에 봅니다(과제명과 종류가 같으면 같은 과제로 묶습니다).
       분반 칸을 누르면 그 분반의 제출함이 열리고, <b>＋ 칸</b>을 누르면 같은 설정(과제명·종류·배점·제출기한)의 과제 폴더가 그 분반에 <b>따로</b> 하나 생깁니다.
       폴더는 분반마다 독립이라 제출함·마감·설정 변경은 분반별로 관리됩니다. 칸 오른쪽 위 <b>[기한]</b>으로 분반별 마감일·시간을 따로 정할 수 있습니다.</p>
@@ -11379,13 +11398,127 @@ function rProfAssignHub(){
       <input type="search" id="hubFilter" class="hub-filter" placeholder="과제명 검색">
     </div>
     <div id="hubWrap"><p class="hint">불러오는 중…</p></div>`;
+  }
   app.appendChild(c);
+  c.querySelectorAll(".hub-view-tabs .auth-tab").forEach(b=>{
+    b.onclick=()=>{ if(b.dataset.view===profHubView) return; profHubView=b.dataset.view; try{ sessionStorage.setItem("sh_hubView", profHubView); }catch(e){} render(); };
+  });
+  if(profHubView==="students"){ initProfHubStudents(c); return; }
   const reload=()=>loadProfAssignHub(c);
   c.querySelector("#hubNewBtn").onclick=()=>openAssignmentModal(null, null, reload);
   const f=c.querySelector("#hubFilter");
   try{ f.value=sessionStorage.getItem("sh_hubFilter")||""; }catch(e){}
   f.oninput=()=>{ try{ sessionStorage.setItem("sh_hubFilter", f.value); }catch(e){} applyHubFilter(c); };
   reload();
+}
+/* ===== 과제 관리 — 학생별 보기 (2026-11-24) =====
+   professor-student-submissions(내 과제의 제출물 전체 + 학생 명단 + 분반 배정)를 한 번에 받아,
+   학생 → 과제 폴더(+종류) → 차수 순서로 묶는다. 필터(분반·검색·제출한 학생만)와 펼친 학생은
+   sessionStorage에 남겨, 첨삭 화면에서 [목록으로] 돌아와도 보던 자리가 그대로다. */
+function hubSS(k, v){ try{ if(v===undefined) return sessionStorage.getItem(k); sessionStorage.setItem(k, v); }catch(e){} return null; }
+function hubOpenStudents(){ try{ return new Set(JSON.parse(hubSS("sh_hubStuOpen")||"[]").map(Number)); }catch(e){ return new Set(); } }
+function initProfHubStudents(c){
+  const sel=c.querySelector("#hubStuClass"), q=c.querySelector("#hubStuFilter"), only=c.querySelector("#hubStuOnly");
+  q.value=hubSS("sh_hubStuFilter")||"";
+  only.checked=hubSS("sh_hubStuOnly")==="1";
+  let data=null;
+  const draw=()=>{ if(data) drawProfHubStudents(c, data); };
+  q.oninput=()=>{ hubSS("sh_hubStuFilter", q.value); draw(); };
+  only.onchange=()=>{ hubSS("sh_hubStuOnly", only.checked?"1":"0"); draw(); };
+  sel.onchange=()=>{ hubSS("sh_hubStuClass", sel.value); draw(); };
+  const load=async ()=>{
+    const wrap=c.querySelector("#hubStuWrap");
+    const [cres, ares, sres]=await Promise.all([apiFetch("professor-classes"), apiFetch("professor-assignments"), apiFetch("professor-student-submissions")]);
+    if(!wrap.isConnected) return;
+    if(!cres.ok || !ares.ok || !sres.ok || !sres.body){ wrap.innerHTML=`<p class="hint">불러오지 못했습니다.</p>`; return; }
+    data={classes:(cres.body&&cres.body.classes)||[], assigns:(ares.body&&ares.body.assignments)||[],
+      students:sres.body.students||[], memberships:sres.body.memberships||[], submissions:sres.body.submissions||[]};
+    const saved=hubSS("sh_hubStuClass")||"";
+    const hasNone=data.assigns.some(a=>a.class_id==null);
+    sel.innerHTML=`<option value="">전체 분반</option>`+data.classes.map(cl=>`<option value="${cl.id}">${esc(classLabel(cl))}</option>`).join("")
+      +(hasNone?`<option value="none">수업 미지정 과제</option>`:"");
+    sel.value=[...sel.options].some(o=>o.value===saved)?saved:"";
+    draw();
+  };
+  c.querySelector("#hubStuReload").onclick=load;
+  load();
+}
+function drawProfHubStudents(c, data){
+  const wrap=c.querySelector("#hubStuWrap"); if(!wrap) return;
+  const cls=c.querySelector("#hubStuClass").value;
+  const q=(c.querySelector("#hubStuFilter").value||"").trim().toLowerCase();
+  const onlySub=c.querySelector("#hubStuOnly").checked;
+  const aMap=new Map(data.assigns.map(a=>[a.id, a]));
+  const clMap=new Map(data.classes.map(cl=>[cl.id, cl]));
+  const memberOf=new Map();
+  data.memberships.forEach(m=>{ if(!memberOf.has(m.student_id)) memberOf.set(m.student_id, new Set()); memberOf.get(m.student_id).add(m.class_id); });
+  /* 분반 필터 — 그 분반 과제 폴더에 낸 제출물만 남기고, 학생은 그 분반 수강생이거나 거기에 낸 적 있는 학생 */
+  const subOk=s=>{ const a=aMap.get(s.assignment_id); if(!a) return false;
+    if(!cls) return true; if(cls==="none") return a.class_id==null; return a.class_id===Number(cls); };
+  const subsBy=new Map();
+  data.submissions.filter(subOk).forEach(s=>{ if(!subsBy.has(s.student_id)) subsBy.set(s.student_id, []); subsBy.get(s.student_id).push(s); });
+  const people=data.students.filter(st=>{
+    const mine=subsBy.get(st.id)||[];
+    if(onlySub && !mine.length) return false;
+    if(cls && cls!=="none" && !mine.length && !(memberOf.get(st.id)||new Set()).has(Number(cls))) return false;
+    if(cls==="none" && !mine.length) return false;
+    if(q && !(String(st.name||"").toLowerCase().includes(q) || String(st.username||"").toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(!data.students.length){ wrap.innerHTML=`<p class="hint">아직 등록한 학생이 없습니다.</p>`; return; }
+  if(!people.length){ wrap.innerHTML=`<p class="hint">조건과 맞는 학생이 없습니다.</p>`; return; }
+  const open=hubOpenStudents();
+  const stateText=a=>a.open?(isAssignPastDue(a)?"기한 지남":"제출 가능"):"마감됨";
+  const rowState=s=>s.has_feedback?" row-done":(s.checked_at?" row-checked":"");
+  wrap.innerHTML=`<p class="hint hub-stu-count">학생 ${people.length}명</p>`+people.map(st=>{
+    const mine=subsBy.get(st.id)||[];
+    /* 과제 폴더(+종류)별로 묶기 — 최근에 낸 폴더가 위로 */
+    const folders=new Map();
+    mine.forEach(s=>{ const k=s.assignment_id+"|"+s.type; if(!folders.has(k)) folders.set(k, []); folders.get(k).push(s); });
+    const fl=[...folders.values()].map(rows=>rows.sort((x,y)=>(x.submit_round||0)-(y.submit_round||0)||(x.submitted_at||0)-(y.submitted_at||0)||x.id-y.id))
+      .sort((x,y)=>Math.max(...y.map(s=>s.submitted_at||0))-Math.max(...x.map(s=>s.submitted_at||0)));
+    const latest=fl.map(rows=>rows[rows.length-1]);
+    const nDone=latest.filter(s=>s.has_feedback).length, nTodo=latest.filter(s=>!s.has_feedback&&!s.checked_at).length;
+    const clNames=[...(memberOf.get(st.id)||[])].map(id=>clMap.get(id)).filter(Boolean).map(classLabel);
+    const isOpen=open.has(st.id);
+    const body=!isOpen?"":(!fl.length?`<p class="hint">이 조건에서 낸 과제가 없습니다.</p>`:fl.map(rows=>{
+      const a=aMap.get(rows[0].assignment_id)||{};
+      const cl=a.class_id!=null?clMap.get(a.class_id):null;
+      const ms=a.max_score!=null?a.max_score:null;
+      const items=rows.map((s,i)=>{
+        const late=a.due_at && s.submitted_at>Number(a.due_at);
+        const score=s.score!=null?`점수 ${s.score}${ms!=null?` / ${ms}`:""}점`:"점수 없음";
+        const st2=s.has_feedback?`${ICONS.check} 첨삭 완료`:(s.checked_at?`${ICONS.check} 확인함`:"미확인");
+        return `<button type="button" class="hub-sub-item${rowState(s)}" data-review="${s.id}" title="첨삭 화면 열기">
+          <span class="assign-type-badge round-badge">${s.submit_round||(i+1)}차</span>
+          <span>제출 ${fmtDateTime(s.submitted_at)}</span>${late?`<span class="assign-type-badge hub-late">기한 후 제출</span>`:""}
+          <span class="hint">${score}</span><span class="hub-sub-state">${st2}</span></button>`;
+      }).join("");
+      return `<div class="hub-sub-folder">
+        <div class="hub-sub-head"><b>${esc(a.title||"(삭제된 과제)")}</b>
+          <span class="assign-type-badge">${esc(TYPE_LABEL[rows[0].type]||rows[0].type||"")}</span>
+          <span class="hint">${esc(cl?classLabel(cl):"수업 미지정")} · ${a.due_at?("기한 "+esc(fmtDue(a.due_at))):"기한 없음"} · ${stateText(a)}</span></div>
+        <div class="hub-sub-items">${items}</div></div>`;
+    }).join(""));
+    return `<div class="hub-group hub-stu${isOpen?" open":""}">
+      <button type="button" class="hub-stu-head" data-stu="${st.id}">
+        <span class="hub-stu-caret">${isOpen?"▾":"▸"}</span>
+        <span class="hub-group-title">${esc(st.name||"")}</span><span class="hint">(${esc(st.username||"")})</span>
+        ${clNames.length?`<span class="hint">${esc(clNames.join(", "))}</span>`:""}
+        <span class="hint hub-stu-sum">${fl.length?`과제 ${fl.length}건 · 첨삭 완료 ${nDone} · 미확인 ${nTodo}`:"제출 없음"}</span>
+      </button>${isOpen?`<div class="hub-stu-body">${body}</div>`:""}</div>`;
+  }).join("");
+  wrap.querySelectorAll(".hub-stu-head").forEach(b=>{
+    b.onclick=()=>{
+      const id=Number(b.dataset.stu), set=hubOpenStudents();
+      if(set.has(id)) set.delete(id); else set.add(id);
+      hubSS("sh_hubStuOpen", JSON.stringify([...set]));
+      drawProfHubStudents(c, data);
+    };
+  });
+  wrap.querySelectorAll(".hub-sub-item").forEach(b=>{
+    b.onclick=()=>{ profReviewId=Number(b.dataset.review); profReviewVersion=null; profAssignFolderId=null; render(); window.scrollTo(0,0); };
+  });
 }
 function applyHubFilter(c){
   const q=(c.querySelector("#hubFilter").value||"").trim().toLowerCase();
@@ -12143,7 +12276,7 @@ function bulkDownloadAssignmentPdfs(assignment, submissionList, btn){
    내용(이전 버전에서 이어서 편집한 첨삭+메모)이 새 버전으로 저장된다. */
 async function rProfSubmissionReview(id, version){
   const c=document.createElement("div"); c.className="card";
-  c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} 제출함으로</button>
+  c.innerHTML=`<button class="btn ghost sm" id="reviewBackBtn" style="margin-bottom:10px">${ICONS.close} ${activeTab==="profAssignHub"&&!profAssignFolderId?"목록으로":"제출함으로"}</button>
     <h2 id="reviewTitle">${ICONS.edit} 불러오는 중…</h2>
     <p class="hint" id="reviewHint">학생 원본 옆의 <b>[피드백 입력]</b>을 누르면 오른쪽에 피드백 입력칸이 열립니다. 거기서 바로 고치거나 블록을 넣고 지울 수 있고, 고친 곳은 양쪽에 같은 색으로 표시됩니다. 왼쪽 원본을 <b>우클릭</b>하면 <b>메모</b>(글자를 드래그해 선택한 채면 그 범위에 각주로, 아니면 블록 전체에)를 답니다. 다 마쳤으면 맨 아래 [피드백 전달]로 학생에게 돌려주세요.</p>
     <div id="reviewCheckBar"></div>
@@ -14262,7 +14395,7 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
-      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다. 칸 오른쪽 위 <b>[기한]</b>을 누르면 그 분반 폴더의 마감일·시간만 따로 바꿀 수 있습니다.</li>
+      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다. 칸 오른쪽 위 <b>[기한]</b>을 누르면 그 분반 폴더의 마감일·시간만 따로 바꿀 수 있습니다. 위쪽 <b>[학생별]</b> 탭으로 바꾸면 학생마다 낸 과제를 과제 폴더·차수별로 모아 봅니다(제출 시각·기한 후 제출 여부·점수·확인/첨삭 상태). 분반 선택과 이름·학번 검색으로 거를 수 있고, 제출물을 누르면 첨삭 화면이 열립니다.</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 등록 화면의 <b>[만들 수업]</b>에서 여러 분반을 체크하면 같은 과제가 분반마다 <b>따로</b> 하나씩 만들어집니다(제출함·마감·설정 변경은 분반별로 따로). 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 용량 제한은 관리자 설정값 · 기본 1.5MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>
