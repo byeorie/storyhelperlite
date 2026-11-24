@@ -267,3 +267,15 @@ DROP INDEX IF EXISTS idx_user_data_updated;
 --   assignment_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, material_ids TEXT,
 --   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
 -- CREATE TABLE IF NOT EXISTS notice_reads (notice_id INTEGER NOT NULL, student_id INTEGER NOT NULL, read_at INTEGER NOT NULL);
+
+-- (2026-11-24) 학생 작품 데이터 이전 버전 보관 — 저장으로 덮어쓰기 직전 상태(20분에 한 번, 최근 6개 + 5일간 날짜별 1개).
+-- 운영 DB에서는 functions/api/_utils.js ensureHistorySchema()가 자동으로 만든다. 관리자 화면 [학생 작품 복구]에서 되돌린다.
+CREATE TABLE IF NOT EXISTS user_data_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  rev INTEGER,
+  saved_at INTEGER NOT NULL,
+  reason TEXT  -- 'auto' | 'before-restore'
+);
+CREATE INDEX IF NOT EXISTS idx_udh_user_time ON user_data_history(user_id, saved_at);

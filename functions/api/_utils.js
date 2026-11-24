@@ -237,7 +237,7 @@ export async function wipeIfDue(env) {
      (2026-10-31) 수업 공지(class_notices)와 교수 자료실(materials·material_classes, R2 파일)도 일부러
      여기에 넣지 않는다 — 교수가 올린 수업 자료는 학기가 바뀌어도 그대로 남아야 한다. */
   const tables = [
-    "user_data",
+    "user_data", "user_data_history",
     "sessions", "password_resets", "rate_limits",
   ];
   for (const t of tables) {
@@ -326,6 +326,63 @@ export async function checkRateLimit(env, key, maxAttempts, windowSec) {
 }
 
 /* Authorization: Bearer <token> 헤더로 로그인된 사용자 조회 */
+/* ===== (2026-11-24) 학생 작품 데이터 이전 버전 자동 보관 =====
+   2026-11-24 사고(저장 번호 배포 직후 글·아이디어가 사라짐) 때 서버에 데이터가 한 벌만 있어서, D1 Time Travel로
+   DB 전체를 잠깐 되돌려야만 학생 한 명을 복구할 수 있었다. 이제 저장으로 덮어쓰기 직전의 상태를 user_data_history에
+   남겨 두고, 관리자 화면에서 학생별로 골라 되돌릴 수 있게 한다(admin-data-history.js).
+   - 간격: 같은 학생은 HISTORY_MIN_GAP_SEC(20분)에 한 번만 보관 — D1 쓰기 사용량을 거의 늘리지 않는다.
+   - 보관 개수: 최근 HISTORY_KEEP_RECENT(6)개 + 최근 HISTORY_KEEP_DAYS(5)일 동안 날짜별 마지막 1개. 직전 보관본과 같으면 저장하지 않는다.
+     (D1 무료 요금제는 DB 하나가 500MB까지라 넉넉히 잡지 않았다. 관리자 화면에 보관 용량이 표시된다.)
+   - 3/1·9/1 정기 초기화(wipeIfDue)와 관리자 데이터 초기화·회원 삭제 때 함께 지운다.
+   - 어떤 단계가 실패해도 저장 자체는 막지 않는다. */
+export const HISTORY_MIN_GAP_SEC = 20 * 60;
+export const HISTORY_KEEP_RECENT = 6;
+export const HISTORY_KEEP_DAYS = 5;
+let historySchemaEnsured = false;
+export async function ensureHistorySchema(env) {
+  if (historySchemaEnsured) return;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS user_data_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, " +
+      "data TEXT NOT NULL, rev INTEGER, saved_at INTEGER NOT NULL, reason TEXT)",
+    "CREATE INDEX IF NOT EXISTS idx_udh_user_time ON user_data_history(user_id, saved_at)",
+  ];
+  for (const sql of stmts) { try { await env.DB.prepare(sql).run(); } catch (e) {} }
+  historySchemaEnsured = true;
+}
+/* 지금 user_data에 있는 내용을 보관본으로 복사한다(서버 안에서 복사 — 데이터를 주고받지 않음).
+   force=false면 마지막 보관 후 20분이 안 지났을 때 건너뛴다. 보관했으면 true. */
+export async function snapshotUserData(env, userId, reason, force) {
+  try {
+    await ensureHistorySchema(env);
+    const now = nowSec();
+    if (!force) {
+      const last = await env.DB.prepare(
+        "SELECT saved_at FROM user_data_history WHERE user_id = ? ORDER BY saved_at DESC, id DESC LIMIT 1"
+      ).bind(userId).first();
+      if (last && now - last.saved_at < HISTORY_MIN_GAP_SEC) return false;
+    }
+    const r = await env.DB.prepare(
+      "INSERT INTO user_data_history (user_id, data, rev, saved_at, reason) " +
+      "SELECT user_id, data, rev, ?, ? FROM user_data WHERE user_id = ? " +
+      "AND data <> COALESCE((SELECT h.data FROM user_data_history h WHERE h.user_id = ? ORDER BY h.saved_at DESC, h.id DESC LIMIT 1), '')"
+    ).bind(now, reason || "auto", userId, userId).run();
+    const added = r && r.meta && r.meta.changes > 0;
+    if (added) await pruneUserHistory(env, userId, now);
+    return !!added;
+  } catch (e) { return false; }
+}
+/* 최근 6개 + 최근 5일 날짜별(한국 시간 기준) 마지막 1개만 남기고 지운다 */
+export async function pruneUserHistory(env, userId, now) {
+  try {
+    const since = (now || nowSec()) - HISTORY_KEEP_DAYS * 86400;
+    await env.DB.prepare(
+      "DELETE FROM user_data_history WHERE user_id = ? " +
+      "AND id NOT IN (SELECT id FROM user_data_history WHERE user_id = ? ORDER BY saved_at DESC, id DESC LIMIT ?) " +
+      "AND id NOT IN (SELECT MAX(id) FROM user_data_history WHERE user_id = ? AND saved_at >= ? GROUP BY (saved_at + 32400) / 86400)"
+    ).bind(userId, userId, HISTORY_KEEP_RECENT, userId, since).run();
+  } catch (e) {}
+}
+
 export async function requireAuth(request, env) {
   const authHeader = request.headers.get("Authorization") || "";
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();

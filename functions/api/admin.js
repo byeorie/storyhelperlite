@@ -1,5 +1,13 @@
 import { requireAdmin, jsonResponse, ADMIN_USERNAME, ensureGameSchema, deleteClassBoard } from "./_utils.js";
 
+/* (2026-11-24) 작품 데이터를 지울 때 이전 버전 보관본(user_data_history)도 함께 지운다 — 표가 아직 없으면 무시 */
+async function deleteHistory(env, userId) {
+  try {
+    if (userId) await env.DB.prepare("DELETE FROM user_data_history WHERE user_id = ?").bind(userId).run();
+    else await env.DB.prepare("DELETE FROM user_data_history").run();
+  } catch (e) {}
+}
+
 /* GET /api/admin — 회원 명단 조회 (관리자 전용) */
 export async function onRequestGet({ request, env }) {
   const auth = await requireAdmin(request, env);
@@ -38,11 +46,13 @@ export async function onRequestPost({ request, env }) {
 
   if (mode === "data") {
     await env.DB.prepare("DELETE FROM user_data").run();
+    await deleteHistory(env);
     return jsonResponse({ ok: true, mode: "data" });
   }
 
   if (mode === "all") {
     await env.DB.prepare("DELETE FROM user_data").run();
+    await deleteHistory(env);
     await env.DB.prepare("DELETE FROM sessions WHERE user_id != ?").bind(auth.user.id).run();
     await env.DB.prepare("DELETE FROM users WHERE id != ?").bind(auth.user.id).run();
     return jsonResponse({ ok: true, mode: "all" });
@@ -139,6 +149,7 @@ export async function onRequestPost({ request, env }) {
     } catch (e) {}
     await env.DB.prepare("DELETE FROM submissions WHERE student_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM user_data WHERE user_id = ?").bind(userId).run();
+    await deleteHistory(env, userId);
     await env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM password_resets WHERE user_id = ?").bind(userId).run();
     await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();

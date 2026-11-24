@@ -9273,6 +9273,18 @@ function rAdmin(){
     <p class="hint">가입한 회원 명단입니다. 교수 계정에는 학생이 그룹 가입 시 입력할 6자리 코드가 함께 표시됩니다.</p>
     <div id="adminUsersWrap"><p class="hint">불러오는 중…</p></div>
   </div>
+  <div class="card"><h2>${ICONS.undo||ICONS.file} 학생 작품 복구 (이전 버전)</h2>
+    <p class="hint">학생이 저장할 때 서버가 <b>덮어쓰기 직전 상태</b>를 자동으로 보관합니다(같은 학생은 20분에 한 번,
+      최근 6개 + 최근 5일 동안 날짜별 마지막 1개). 작품이 사라졌다는 학생이 있으면 아이디로 찾아 그 전 버전으로 되돌리세요.
+      되돌리기 직전 상태도 따로 보관되므로, 잘못 되돌렸다면 다시 되돌릴 수 있습니다.</p>
+    <div class="assign-folder-actions">
+      <input type="text" id="adminHistUser" list="adminHistUserList" placeholder="학생 아이디(예: hs26126)" style="width:200px" autocomplete="off">
+      <datalist id="adminHistUserList"></datalist>
+      <button class="btn" id="adminHistLoadBtn">버전 보기</button>
+      <span class="hint" id="adminHistTotal"></span>
+    </div>
+    <div id="adminHistWrap"></div>
+  </div>
   <div class="card"><h2>${ICONS.file} 파일 제출 용량 제한</h2>
     <p class="hint">"파일 제출" 과제에서 학생이 올릴 수 있는 <b>파일 하나당 최대 용량</b>입니다(0.5MB ~ 10MB).
       바꾸면 모든 계정에 바로 적용되며, 서버에서도 같은 값으로 막습니다. 값을 키우면 서버 저장 용량이 더 빨리 찹니다.</p>
@@ -9300,9 +9312,62 @@ function rAdmin(){
   </div>`;
   app.appendChild(c);
   renderAdminUsers();
+  initAdminHistory(c);
   c.querySelector("#adminFileMaxSaveBtn").onclick=()=>doAdminSaveFileMax(c);
   c.querySelector("#adminResetDataBtn").onclick=()=>doAdminReset("data");
   c.querySelector("#adminResetAllBtn").onclick=()=>doAdminReset("all");
+}
+/* ===== (2026-11-24) 학생 작품 복구 — 서버가 보관한 이전 버전 목록을 보고 골라서 되돌린다(functions/api/admin-data-history.js) ===== */
+function fmtKB(n){ return n>=1024*1024 ? (n/1024/1024).toFixed(1)+"MB" : Math.max(1,Math.round(n/1024))+"KB"; }
+async function initAdminHistory(c){
+  const input=c.querySelector("#adminHistUser"), btn=c.querySelector("#adminHistLoadBtn");
+  const go=()=>loadAdminHistory(c, input.value.trim());
+  btn.onclick=go;
+  input.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } };
+  const res=await apiFetch("admin-data-history");
+  const tot=c.querySelector("#adminHistTotal");
+  if(tot && res.ok && res.body && res.body.total) tot.textContent=`전체 보관본 ${res.body.total.count}개 · ${fmtKB(res.body.total.bytes)}`;
+  const users=await loadAdminUsers();
+  const dl=c.querySelector("#adminHistUserList");
+  if(dl) dl.innerHTML=users.filter(u=>u.role!=="professor").map(u=>`<option value="${esc(u.username)}">${esc(u.name)} · ${esc(u.school||"")}</option>`).join("");
+}
+function adminHistSummaryHtml(s){
+  if(!s) return "-";
+  if(s.broken) return `<span class="hint">손상된 데이터</span>`;
+  const names=(s.projects||[]).join(", ");
+  return `작품 ${s.projectCount}개${names?` <span class="hint">(${esc(names)})</span>`:""} · 아이디어 ${s.ideaCount}개 · 글자 약 ${Number(s.chars||0).toLocaleString()}자`;
+}
+async function loadAdminHistory(c, username){
+  const wrap=c.querySelector("#adminHistWrap");
+  if(!username){ wrap.innerHTML=`<p class="hint">학생 아이디를 입력해 주세요.</p>`; return; }
+  wrap.innerHTML=`<p class="hint">불러오는 중…</p>`;
+  const res=await apiFetch("admin-data-history?username="+encodeURIComponent(username));
+  if(!wrap.isConnected) return;
+  if(!res.ok || !res.body || !res.body.user){ wrap.innerHTML=`<p class="hint">${esc((res.body&&res.body.error)||"불러오지 못했습니다.")}</p>`; return; }
+  const {user, current, versions}=res.body;
+  const reasonLabel=r=>r==="before-restore"?"되돌리기 직전":"자동 보관";
+  const rows=(versions||[]).map(v=>`<tr>
+      <td>${fmtDateTime(v.savedAt)}</td><td>${reasonLabel(v.reason)}</td>
+      <td>${adminHistSummaryHtml(v.summary)}</td><td>${fmtKB(v.size)}</td>
+      <td><button class="btn ghost sm admin-hist-restore" data-id="${v.id}" data-at="${v.savedAt}" ${v.summary&&v.summary.broken?"disabled":""}>이 버전으로 되돌리기</button></td>
+    </tr>`).join("");
+  wrap.innerHTML=`
+    <p style="margin-top:12px"><b>${esc(user.name)}</b> (${esc(user.username)}${user.school?" · "+esc(user.school):""})</p>
+    <p class="hint">지금 상태: ${current?`${fmtDateTime(current.updatedAt)} 저장 · ${adminHistSummaryHtml(current.summary)} · ${fmtKB(current.size)}`:"서버에 저장된 작품이 없습니다."}</p>
+    ${(versions||[]).length?`<div style="overflow-x:auto"><table class="admin-table"><thead><tr><th>보관 시각</th><th>종류</th><th>내용</th><th>크기</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      :`<p class="hint">보관된 이전 버전이 아직 없습니다. (이 기능은 2026-11-24부터 보관을 시작했습니다. 그 전 시점은 Cloudflare D1 Time Travel로만 복구할 수 있습니다.)</p>`}`;
+  wrap.querySelectorAll(".admin-hist-restore").forEach(b=>{
+    b.onclick=async()=>{
+      const when=fmtDateTime(Number(b.dataset.at));
+      if(!confirm(`${user.name}(${user.username}) 학생의 작품 데이터를 ${when} 보관본으로 되돌릴까요?\n\n`+
+        `· 지금 상태도 "되돌리기 직전" 보관본으로 남으므로 나중에 다시 되돌릴 수 있습니다.\n`+
+        `· 학생에게 사이트 창을 모두 닫았다가 다시 열어 달라고 안내해 주세요.`)) return;
+      b.disabled=true; b.textContent="되돌리는 중…";
+      const r=await apiFetch("admin-data-history", {method:"POST", body:JSON.stringify({userId:user.id, historyId:Number(b.dataset.id)})});
+      if(r.ok && r.body && r.body.ok){ alert(`${when} 버전으로 되돌렸습니다.`); loadAdminHistory(c, username); }
+      else{ alert((r.body&&r.body.error)||"되돌리지 못했습니다."); b.disabled=false; b.textContent="이 버전으로 되돌리기"; }
+    };
+  });
 }
 /* 파일 제출 용량 제한 저장 — 서버(server_meta)에 넣고, 이 화면의 FILE_MAX_MB도 바로 갱신한다 */
 async function doAdminSaveFileMax(c){
