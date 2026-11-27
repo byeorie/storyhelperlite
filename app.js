@@ -11585,7 +11585,7 @@ function rProfAssignHub(){
     c.innerHTML=`<h2>${ICONS.book} 과제 관리</h2>${tabs}
     <p class="hint">과제 폴더를 중심으로, 같은 과제가 어느 분반에 있는지 한눈에 봅니다(과제명과 종류가 같으면 같은 과제로 묶습니다).
       분반 칸을 누르면 그 분반의 제출함이 열리고, <b>＋ 칸</b>을 누르면 같은 설정(과제명·종류·배점·제출기한)의 과제 폴더가 그 분반에 <b>따로</b> 하나 생깁니다.
-      폴더는 분반마다 독립이라 제출함·마감·설정 변경은 분반별로 관리됩니다. 칸 오른쪽 위 <b>[기한]</b>으로 분반별 마감일·시간을 따로 정할 수 있습니다.</p>
+      폴더는 분반마다 독립이라 제출함·마감·설정 변경은 분반별로 관리됩니다. 칸 오른쪽 위 <b>[기한]</b>으로 분반별 마감일·시간을 따로 정할 수 있고, 과제명 오른쪽 <b>[수정]</b>으로 과제명·종류·배점을 여러 분반에 한 번에 고칠 수 있습니다.</p>
     <div class="assign-folder-actions">
       <button class="btn" id="hubNewBtn">${ICONS.plus} 과제 등록</button>
       <input type="search" id="hubFilter" class="hub-filter" placeholder="과제명 검색">
@@ -11765,6 +11765,7 @@ async function loadProfAssignHub(c){
       <div class="hub-group-head">
         <span class="hub-group-title">${ICONS.book} ${esc(src.title||"")}</span>
         <span class="hint">${src.type?esc(TYPE_LABEL[src.type]||src.type)+" 과제":"종류 미지정"}${src.max_score!=null?` · 배점 ${src.max_score}점`:""} · ${have}/${classes.length+(byClass(null).length?1:0)}개 분반</span>
+        <button type="button" class="btn ghost sm hub-edit-btn" data-edit="${gi}" title="과제명·종류·배점 수정">${ICONS.edit} 수정</button>
       </div>
       <div class="hub-cells">${cells}${none}</div>
     </div>`;
@@ -11780,6 +11781,10 @@ async function loadProfAssignHub(c){
       const cl=classes.find(x=>x.id===(a.class_id??null));
       openDueEditModal(a, cl?classLabel(cl):"수업 미지정", ()=>loadProfAssignHub(c));
     };
+  });
+  /* 2026-11-27: 묶음 머리의 [수정] — 과제명·종류·배점을 분반 폴더 여러 개에 한 번에 */
+  wrap.querySelectorAll(".hub-edit-btn").forEach(b=>{
+    b.onclick=()=>openHubGroupEditModal(list[Number(b.dataset.edit)], classes, ()=>loadProfAssignHub(c));
   });
   wrap.querySelectorAll(".hub-cell.add").forEach(b=>{
     b.onclick=async ()=>{
@@ -11876,7 +11881,57 @@ function openDueEditModal(a, label, onSaved){
   };
 }
 
-/* 과제 등록 / 설정 변경 공용 모달 (2026-09-08: 등록 후에도 과제명·제출기한·수업·마감 여부를 고칠 수
+/* 2026-11-27: 과제 관리 허브 — 과제 묶음(같은 과제명·종류의 분반 폴더들)의 과제명·종류·배점 수정.
+   적용할 분반을 체크로 고른다(처음엔 전부). 고른 분반 폴더마다 professor-assignment POST로
+   { id, title, type, maxScore }만 보내므로 제출기한·마감·제출물은 그대로다.
+   일부 분반만 바꾸면 과제명·종류가 달라진 폴더는 허브에서 다른 묶음으로 나뉘어 보인다. */
+function openHubGroupEditModal(g, classes, onSaved){
+  const src=g.slice().sort((x,y)=>(y.created_at||0)-(x.created_at||0))[0];
+  const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
+  const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  const box=document.createElement("div"); box.className="plot-modal";
+  const top=document.createElement("div"); top.className="plot-picker-top";
+  const ttl=document.createElement("span"); ttl.className="plot-picker-title"; ttl.textContent="과제 수정";
+  top.append(ttl, iconBtn(ICONS.close,"닫기",close));
+  box.appendChild(top);
+  const labelOf=a=>{ const cl=classes.find(x=>x.id===(a.class_id??null)); return cl?classLabel(cl):"수업 미지정"; };
+  const typeOpts=Object.keys(TYPE_LABEL).map(k=>`<option value="${k}"${src.type===k?" selected":""}>${esc(TYPE_LABEL[k])}</option>`).join("");
+  box.insertAdjacentHTML("beforeend",
+    `<label>과제명</label><input type="text" id="hubEditTitle" value="${esc(src.title||"")}">
+     <label>과제 종류</label>
+     <select id="hubEditType"><option value="none"${src.type?"":" selected"}>지정 안 함(어느 탭에서든 제출 가능)</option>${typeOpts}</select>
+     <label>배점 (선택 · 비워두면 배점 없음)</label>
+     <input type="number" id="hubEditMax" min="0" step="0.5" value="${src.max_score!=null?src.max_score:""}">
+     <label>적용할 분반 <span class="hint">(체크한 분반의 과제 폴더만 바뀝니다 — 제출기한·마감·제출물은 그대로)</span></label>
+     <div id="hubEditClasses" class="notice-class-list">${g.map(a=>
+       `<label class="notice-class-chk"><input type="checkbox" value="${a.id}" checked> ${esc(labelOf(a))} <span class="hint">(제출 ${a.submission_count||0}건)</span></label>`).join("")}</div>
+     <p class="hint" style="margin:4px 0 0">일부 분반만 바꾸면, 과제명·종류가 달라진 폴더는 목록에서 다른 과제로 나뉘어 보입니다.</p>
+     <button class="btn" id="hubEditSave" style="margin-top:14px;width:100%">변경 내용 저장</button>`);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const titleEl=box.querySelector("#hubEditTitle"); titleEl.focus(); titleEl.select();
+  box.querySelector("#hubEditSave").onclick=async e=>{
+    const btn=e.currentTarget;
+    const title=titleEl.value.replace(/\s+/g," ").trim();
+    if(!title){ alert("과제명을 입력해주세요."); return; }
+    const typeVal=box.querySelector("#hubEditType").value;
+    const maxStr=(box.querySelector("#hubEditMax").value||"").trim();
+    const maxScore = maxStr==="" ? null : Number(maxStr);
+    if(maxScore!==null && !(Number.isFinite(maxScore) && maxScore>=0)){ alert("배점은 0 이상의 숫자로 입력해주세요."); return; }
+    const ids=[...box.querySelectorAll("#hubEditClasses input:checked")].map(i=>Number(i.value));
+    if(!ids.length){ alert("적용할 분반을 하나 이상 골라주세요."); return; }
+    btn.disabled=true; btn.textContent="저장 중…";
+    const fails=[];
+    for(const id of ids){
+      const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id, title, type:typeVal==="none"?null:typeVal, maxScore})});
+      if(!r.ok){ const a=g.find(x=>x.id===id); fails.push(`${labelOf(a)}: ${(r.body&&r.body.error)||"실패"}`); }
+    }
+    if(fails.length){ alert("일부 분반은 저장하지 못했습니다.\n"+fails.join("\n")); btn.disabled=false; btn.textContent="변경 내용 저장"; if(fails.length<ids.length && typeof onSaved==="function") onSaved(); return; }
+    close(); if(typeof onSaved==="function") onSaved();
+  };
+}
+
+/* 과제 등록 / 설정 변경 공용 모달 (2026-09-08:등록 후에도 과제명·제출기한·수업·마감 여부를 고칠 수
    있게 확장. 예전에는 마감 스위치만 바꿀 수 있어서, 과제명을 잘못 적으면 과제를 지우고 다시 만드는
    수밖에 없었고 그때 학생 제출물까지 함께 사라졌다) */
 /* 2026-11-17: onSaved를 주면 저장 후 그걸 부른다(과제 관리 허브). classId가 null이면 등록 화면에서 처음엔 아무 수업도 체크하지 않는다 */

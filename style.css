@@ -1977,6 +1977,7 @@ mark.memo-hl .dh{background:transparent}
 .hub-group-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .hub-group-title{font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:6px}
 .hub-group-head .hint{margin:0}
+.hub-edit-btn{margin-left:auto;align-self:center}
 .hub-cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
 .hub-cell{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px;border-radius:8px;
   border:1px solid var(--line);background:var(--bg);color:inherit;cursor:pointer;font:inherit;min-width:0}
