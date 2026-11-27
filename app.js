@@ -11583,9 +11583,9 @@ function rProfAssignHub(){
       <div id="hubStuWrap"><p class="hint">불러오는 중…</p></div>`;
   } else {
     c.innerHTML=`<h2>${ICONS.book} 과제 관리</h2>${tabs}
-    <p class="hint">과제 폴더를 중심으로, 같은 과제가 어느 분반에 있는지 한눈에 봅니다(과제명과 종류가 같으면 같은 과제로 묶습니다).
-      분반 칸을 누르면 그 분반의 제출함이 열리고, <b>＋ 칸</b>을 누르면 같은 설정(과제명·종류·배점·제출기한)의 과제 폴더가 그 분반에 <b>따로</b> 하나 생깁니다.
-      폴더는 분반마다 독립이라 제출함·마감·설정 변경은 분반별로 관리됩니다. 칸 오른쪽 위 <b>[기한]</b>으로 분반별 마감일·시간을 따로 정할 수 있고, 과제명 오른쪽 <b>[수정]</b>으로 과제명·종류·배점을 여러 분반에 한 번에 고칠 수 있습니다.</p>
+    <p class="hint">과제마다 분반 폴더를 한 줄씩 보여줍니다(과제명과 종류가 같으면 같은 과제로 묶습니다). 줄을 누르면 그 분반의 제출함이 열립니다.
+      줄 앞 <b>체크박스</b>로 여러 폴더를 고르면 위쪽 막대에서 <b>기한 변경 · 제출 열기 · 제출 닫기</b>를 한 번에 할 수 있습니다(과제 줄의 체크박스 = 그 과제의 분반 전체).
+      과제명 오른쪽 <b>[수정]</b>은 과제명·종류·배점, <b>＋ 분반</b>은 같은 설정의 폴더를 그 분반에 <b>따로</b> 하나 만듭니다.</p>
     <div class="assign-folder-actions">
       <button class="btn" id="hubNewBtn">${ICONS.plus} 과제 등록</button>
       <input type="search" id="hubFilter" class="hub-filter" placeholder="과제명 검색">
@@ -11728,9 +11728,14 @@ function drawProfHubStudents(c, data){
 function applyHubFilter(c){
   const q=(c.querySelector("#hubFilter").value||"").trim().toLowerCase();
   let shown=0;
-  c.querySelectorAll(".hub-group").forEach(g=>{ const on=!q || g.dataset.title.toLowerCase().includes(q); g.style.display=on?"":"none"; if(on) shown++; });
+  c.querySelectorAll("#hubWrap [data-title]").forEach(g=>{ const on=!q || g.dataset.title.toLowerCase().includes(q); g.style.display=on?"":"none"; if(on) shown++; });
   const empty=c.querySelector("#hubNoMatch"); if(empty) empty.style.display=(q && !shown)?"":"none";
+  if(c._hubSyncSel) c._hubSyncSel();
 }
+/* 2026-11-27: [과제별] 화면을 카드 → 리스트(표)로. 과제 묶음마다 머리 줄(과제명·종류·배점·[수정]·없는 분반 ＋) 아래에
+   분반 폴더 한 줄씩. 줄 앞 체크박스로 여러 폴더를 골라 위쪽 막대에서 [기한 변경]·[제출 열기]·[제출 닫기]를 한 번에.
+   선택은 새로고침(저장 후 다시 불러오기)해도 남아 있게 모듈 변수에 둔다(사라진 폴더는 뺀다). */
+const hubSelected=new Set();
 async function loadProfAssignHub(c){
   const wrap=c.querySelector("#hubWrap");
   const [cres, ares]=await Promise.all([apiFetch("professor-classes"), apiFetch("professor-assignments")]);
@@ -11740,64 +11745,140 @@ async function loadProfAssignHub(c){
   const assigns=(ares.body&&ares.body.assignments)||[];
   if(!classes.length && !assigns.length){ wrap.innerHTML=`<p class="hint">아직 수업도 과제도 없습니다. [수업 관리]에서 수업을 먼저 만들어 주세요.</p>`; return; }
   if(!assigns.length){ wrap.innerHTML=`<p class="hint">등록된 과제가 없습니다. [과제 등록]으로 첫 과제를 만들어 보세요.</p>`; return; }
+  [...hubSelected].forEach(id=>{ if(!assigns.some(a=>a.id===id)) hubSelected.delete(id); });
   /* 묶기 — 묶음 순서는 가장 최근에 만든 폴더 기준 */
   const groups=new Map();
   assigns.forEach(a=>{ const k=assignHubKey(a); if(!groups.has(k)) groups.set(k, []); groups.get(k).push(a); });
   const list=[...groups.values()].sort((x,y)=>Math.max(...y.map(a=>a.created_at||0))-Math.max(...x.map(a=>a.created_at||0)));
-  const stateText=a=>a.open?(isAssignPastDue(a)?"기한 지남":"제출 가능"):"마감됨";
-  /* 2026-11-20: 칸 오른쪽 위 [기한] 버튼 — 그 분반 폴더의 제출기한(날짜·시간)만 바로 바꾼다 */
-  const cellHtml=(label, a)=>`<div class="hub-cell-wrap"><button type="button" class="hub-cell has${a.open&&!isAssignPastDue(a)?"":" closed"}" data-open="${a.id}" title="${esc(label)} 제출함 열기">
-      <span class="hub-cell-name">${esc(label)}</span>
-      <span class="hub-cell-meta">${a.due_at?("기한 "+esc(fmtDue(a.due_at))):"기한 없음"} · 제출 ${a.submission_count||0}건 · ${stateText(a)}</span></button>
-      <button type="button" class="hub-due-btn" data-due="${a.id}" title="${esc(label)} 마감일·시간 설정">${ICONS.edit} 기한</button></div>`;
-  wrap.innerHTML=list.map((g,gi)=>{
+  const reload=()=>loadProfAssignHub(c);
+  const labelOf=a=>{ const cl=classes.find(x=>x.id===(a.class_id??null)); return cl?classLabel(cl):"수업 미지정"; };
+  const stateHtml=a=>!a.open?`<span class="hub-state closed">닫힘</span>`
+    : isAssignPastDue(a)?`<span class="hub-state past">기한 지남</span>`:`<span class="hub-state open">제출 가능</span>`;
+  const rowHtml=a=>`<tr class="hub-row${isAssignOpen(a)?"":" closed"}" data-open="${a.id}" title="${esc(labelOf(a))} 제출함 열기">
+      <td class="hub-chk"><input type="checkbox" class="hub-sel" value="${a.id}"${hubSelected.has(a.id)?" checked":""} aria-label="${esc(labelOf(a))} 선택"></td>
+      <td class="hub-cls">${esc(labelOf(a))}</td>
+      <td class="hub-due">${a.due_at?esc(fmtDue(a.due_at)):`<span class="hint">기한 없음</span>`}</td>
+      <td class="hub-cnt">${a.submission_count||0}건</td>
+      <td class="hub-st">${stateHtml(a)}</td>
+      <td class="hub-act"><button type="button" class="btn ghost sm hub-due-btn" data-due="${a.id}" title="${esc(labelOf(a))} 마감일·시간 설정">${ICONS.edit} 기한</button></td>
+    </tr>`;
+  const groupHtml=(g,gi)=>{
     const src=g[0];
-    const byClass=cid=>g.filter(a=>(a.class_id??null)===cid);
-    const cells=classes.map(cl=>{
-      const own=byClass(cl.id);
-      if(own.length) return own.map(a=>cellHtml(classLabel(cl), a)).join("");
-      return `<button type="button" class="hub-cell add" data-group="${gi}" data-class="${cl.id}" title="같은 과제를 ${esc(classLabel(cl))}에 새로 만듭니다">
-        <span class="hub-cell-name">${ICONS.plus} ${esc(classLabel(cl))}</span><span class="hub-cell-meta">눌러서 이 분반에 만들기</span></button>`;
-    }).join("");
-    const none=byClass(null).map(a=>cellHtml("수업 미지정", a)).join("");
-    const have=new Set(g.map(a=>a.class_id??null)).size;
-    return `<div class="hub-group" data-title="${esc(src.title||"")}">
-      <div class="hub-group-head">
-        <span class="hub-group-title">${ICONS.book} ${esc(src.title||"")}</span>
-        <span class="hint">${src.type?esc(TYPE_LABEL[src.type]||src.type)+" 과제":"종류 미지정"}${src.max_score!=null?` · 배점 ${src.max_score}점`:""} · ${have}/${classes.length+(byClass(null).length?1:0)}개 분반</span>
-        <button type="button" class="btn ghost sm hub-edit-btn" data-edit="${gi}" title="과제명·종류·배점 수정">${ICONS.edit} 수정</button>
-      </div>
-      <div class="hub-cells">${cells}${none}</div>
-    </div>`;
-  }).join("") + `<p class="hint" id="hubNoMatch" style="display:none">검색과 맞는 과제가 없습니다.</p>`;
+    const rows=g.slice().sort((x,y)=>{
+      const ix=classes.findIndex(cl=>cl.id===(x.class_id??null)), iy=classes.findIndex(cl=>cl.id===(y.class_id??null));
+      return (ix<0?1e9:ix)-(iy<0?1e9:iy) || (x.created_at||0)-(y.created_at||0);
+    });
+    const have=new Set(g.map(a=>a.class_id??null));
+    const missing=classes.filter(cl=>!have.has(cl.id));
+    const adds=missing.map(cl=>`<button type="button" class="hub-add-btn" data-group="${gi}" data-class="${cl.id}" title="같은 과제(과제명·종류·배점·제출기한)를 ${esc(classLabel(cl))}에 따로 새로 만듭니다">${ICONS.plus} ${esc(classLabel(cl))}</button>`).join("");
+    return `<tbody class="hub-lgroup" data-title="${esc(src.title||"")}">
+      <tr class="hub-ghead"><td class="hub-chk"><input type="checkbox" class="hub-gsel" data-group="${gi}" aria-label="이 과제의 분반 전체 선택"></td>
+        <td colspan="5"><div class="hub-ghead-in">
+          <span class="hub-group-title">${ICONS.book} ${esc(src.title||"")}</span>
+          <span class="hint">${src.type?esc(TYPE_LABEL[src.type]||src.type)+" 과제":"종류 미지정"}${src.max_score!=null?` · 배점 ${src.max_score}점`:""} · ${have.size}개 분반</span>
+          <button type="button" class="btn ghost sm hub-edit-btn" data-edit="${gi}" title="과제명·종류·배점 수정">${ICONS.edit} 수정</button>
+        </div>${adds?`<div class="hub-adds"><span class="hint">다른 분반에도 만들기:</span>${adds}</div>`:""}</td></tr>
+      ${rows.map(rowHtml).join("")}
+    </tbody>`;
+  };
+  wrap.innerHTML=`<div class="hub-bulk" id="hubBulk">
+      <label class="hub-bulk-all"><input type="checkbox" id="hubSelAll"> 전체</label>
+      <span class="hub-bulk-n" id="hubSelN">선택한 폴더 없음</span>
+      <button type="button" class="btn ghost sm" id="hubBulkDue" disabled>${ICONS.edit} 기한 변경</button>
+      <button type="button" class="btn ghost sm" id="hubBulkOpen" disabled>제출 열기</button>
+      <button type="button" class="btn ghost sm" id="hubBulkClose" disabled>제출 닫기</button>
+      <button type="button" class="btn ghost sm" id="hubBulkClear" disabled>선택 해제</button>
+    </div>
+    <div class="hub-table-wrap"><table class="hub-table">
+      <thead><tr><th class="hub-chk"></th><th>분반</th><th>제출기한</th><th>제출</th><th>상태</th><th></th></tr></thead>
+      ${list.map(groupHtml).join("")}
+    </table></div>
+    <p class="hint" id="hubNoMatch" style="display:none">검색과 맞는 과제가 없습니다.</p>`;
+
+  /* 선택 — 검색으로 숨긴 줄은 [전체]·묶음 체크에서 빼고, 일괄 작업도 보이는 줄만 대상으로 한다 */
+  const visible=el=>{ const tb=el.closest("tbody"); return !tb || tb.style.display!=="none"; };
+  const selIds=()=>[...wrap.querySelectorAll(".hub-sel:checked")].filter(visible).map(i=>Number(i.value));
+  const setChk=(el, list)=>{ const on=list.filter(i=>i.checked).length; el.checked=list.length>0 && on===list.length; el.indeterminate=on>0 && on<list.length; };
+  const syncSel=()=>{
+    if(!wrap.isConnected) return;
+    hubSelected.clear(); wrap.querySelectorAll(".hub-sel:checked").forEach(i=>hubSelected.add(Number(i.value)));
+    const ids=selIds(), n=ids.length;
+    wrap.querySelector("#hubSelN").innerHTML=n?`<b>${n}</b>개 폴더 선택`:"선택한 폴더 없음";
+    ["#hubBulkDue","#hubBulkOpen","#hubBulkClose","#hubBulkClear"].forEach(s=>{ wrap.querySelector(s).disabled=!n; });
+    wrap.querySelector("#hubBulk").classList.toggle("on", n>0);
+    wrap.querySelectorAll(".hub-gsel").forEach(gc=>setChk(gc, [...gc.closest("tbody").querySelectorAll(".hub-sel")]));
+    setChk(wrap.querySelector("#hubSelAll"), [...wrap.querySelectorAll(".hub-sel")].filter(visible));
+    wrap.querySelectorAll(".hub-row").forEach(r=>r.classList.toggle("sel", r.querySelector(".hub-sel").checked));
+  };
+  c._hubSyncSel=syncSel;
+  wrap.querySelectorAll(".hub-sel").forEach(i=>{ i.onchange=syncSel; i.onclick=e=>e.stopPropagation(); });
+  wrap.querySelectorAll(".hub-chk").forEach(td=>{ td.onclick=e=>{ e.stopPropagation(); if(e.target===td){ const i=td.querySelector("input"); if(i){ i.click(); } } }; });
+  wrap.querySelectorAll(".hub-gsel").forEach(gc=>{
+    gc.onchange=()=>{ gc.closest("tbody").querySelectorAll(".hub-sel").forEach(i=>{ i.checked=gc.checked; }); syncSel(); };
+  });
+  wrap.querySelector("#hubSelAll").onchange=e=>{
+    const on=e.target.checked;
+    wrap.querySelectorAll(".hub-sel").forEach(i=>{ if(visible(i)) i.checked=on; }); syncSel();
+  };
+  wrap.querySelector("#hubBulkClear").onclick=()=>{ wrap.querySelectorAll(".hub-sel").forEach(i=>{ i.checked=false; }); syncSel(); };
   applyHubFilter(c);
-  wrap.querySelectorAll(".hub-cell.has").forEach(b=>{
-    b.onclick=()=>{ profAssignFolderId=Number(b.dataset.open); profReviewId=null; render(); window.scrollTo(0,0); };
+
+  /* 일괄 작업 — 폴더마다 professor-assignment POST(보낸 항목만 바뀜) */
+  const runBulk=async (btn, ids, makeBody, doneMsg)=>{
+    const bar=wrap.querySelector("#hubBulk"); bar.querySelectorAll("button,input").forEach(x=>x.disabled=true);
+    const old=btn.innerHTML; btn.textContent="처리 중…";
+    const fails=[];
+    for(const id of ids){
+      const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id, ...makeBody(id)})});
+      if(!r.ok){ const a=assigns.find(x=>x.id===id); fails.push(`${a?(a.title+" · "+labelOf(a)):id}: ${(r.body&&r.body.error)||"실패"}`); }
+    }
+    btn.innerHTML=old;
+    if(fails.length) alert(`${ids.length-fails.length}개는 ${doneMsg}, ${fails.length}개는 실패했습니다.\n`+fails.join("\n"));
+    reload();
+  };
+  wrap.querySelector("#hubBulkOpen").onclick=e=>{
+    const ids=selIds(); if(!ids.length) return;
+    const past=ids.filter(id=>{ const a=assigns.find(x=>x.id===id); return a && isAssignPastDue(a); }).length;
+    if(past && !confirm(`고른 폴더 중 ${past}개는 제출기한이 지나서, 열어도 기한을 바꾸기 전까지 학생이 제출할 수 없습니다. 계속할까요?`)) return;
+    runBulk(e.currentTarget, ids, ()=>({open:1}), "열었고");
+  };
+  wrap.querySelector("#hubBulkClose").onclick=e=>{
+    const ids=selIds(); if(!ids.length) return;
+    if(!confirm(`고른 ${ids.length}개 폴더를 닫을까요? 닫으면 학생이 그 과제에 제출할 수 없습니다(이미 낸 제출물은 그대로).`)) return;
+    runBulk(e.currentTarget, ids, ()=>({open:0}), "닫았고");
+  };
+  wrap.querySelector("#hubBulkDue").onclick=()=>{
+    const ids=selIds(); if(!ids.length) return;
+    const items=ids.map(id=>assigns.find(x=>x.id===id)).filter(Boolean);
+    openDueEditModal(items, items.length===1?labelOf(items[0]):`${items.length}개 폴더`, reload);
+  };
+
+  wrap.querySelectorAll(".hub-row").forEach(r=>{
+    r.onclick=()=>{ profAssignFolderId=Number(r.dataset.open); profReviewId=null; render(); window.scrollTo(0,0); };
   });
   wrap.querySelectorAll(".hub-due-btn").forEach(b=>{
     b.onclick=e=>{
       e.stopPropagation();
       const a=assigns.find(x=>x.id===Number(b.dataset.due)); if(!a) return;
-      const cl=classes.find(x=>x.id===(a.class_id??null));
-      openDueEditModal(a, cl?classLabel(cl):"수업 미지정", ()=>loadProfAssignHub(c));
+      openDueEditModal([a], labelOf(a), reload);
     };
   });
   /* 2026-11-27: 묶음 머리의 [수정] — 과제명·종류·배점을 분반 폴더 여러 개에 한 번에 */
   wrap.querySelectorAll(".hub-edit-btn").forEach(b=>{
-    b.onclick=()=>openHubGroupEditModal(list[Number(b.dataset.edit)], classes, ()=>loadProfAssignHub(c));
+    b.onclick=()=>openHubGroupEditModal(list[Number(b.dataset.edit)], classes, reload);
   });
-  wrap.querySelectorAll(".hub-cell.add").forEach(b=>{
+  wrap.querySelectorAll(".hub-add-btn").forEach(b=>{
     b.onclick=async ()=>{
       if(b.disabled) return;
       const g=list[Number(b.dataset.group)], cid=Number(b.dataset.class);
       /* 원본 설정 — 묶음에서 가장 최근에 만든 폴더 */
       const src=g.slice().sort((x,y)=>(y.created_at||0)-(x.created_at||0))[0];
-      b.disabled=true; b.classList.add("busy");
-      b.querySelector(".hub-cell-meta").textContent="만드는 중…";
+      const old=b.innerHTML;
+      b.disabled=true; b.classList.add("busy"); b.textContent="만드는 중…";
       const r=await apiFetch("professor-assignments", {method:"POST", body:JSON.stringify({
         title:String(src.title||"").replace(/\s+/g," ").trim(), dueAt:src.due_at||null, classIds:[cid], type:src.type||null, maxScore:src.max_score!=null?src.max_score:null})});
-      if(!r.ok){ alert((r.body&&r.body.error)||"만들지 못했습니다."); b.disabled=false; b.classList.remove("busy"); b.querySelector(".hub-cell-meta").textContent="눌러서 이 분반에 만들기"; return; }
-      loadProfAssignHub(c);
+      if(!r.ok){ alert((r.body&&r.body.error)||"만들지 못했습니다."); b.disabled=false; b.classList.remove("busy"); b.innerHTML=old; return; }
+      reload();
     };
   });
 }
@@ -11835,8 +11916,14 @@ function openNewAssignmentModal(classId){ openAssignmentModal(classId, null); }
 /* 2026-11-20: 과제 관리 허브 — 과제 폴더(분반 칸) 하나의 제출기한만 바꾸는 작은 창.
    같은 과제라도 분반마다 폴더가 따로라서, 여기서 바꾼 기한은 그 분반 폴더에만 적용된다.
    서버는 { id, dueAt }만 보내면 기한만 바꾼다(professor-assignment POST). 시간 규칙은 등록 창과 같다
-   ([시간 지정]을 끄면 그날 23:59, 10분 단위, 날짜를 비우면 기한 없음). */
-function openDueEditModal(a, label, onSaved){
+   ([시간 지정]을 끄면 그날 23:59, 10분 단위, 날짜를 비우면 기한 없음).
+   2026-11-27: 폴더 배열을 받는다 — 체크박스로 여러 폴더를 골랐을 때 같은 기한을 한 번에 적용(폴더마다 POST). */
+function openDueEditModal(items, label, onSaved){
+  if(!Array.isArray(items)) items=[items];
+  const multi=items.length>1;
+  /* 처음 보여줄 값 — 고른 폴더의 기한이 모두 같으면 그 값, 다르면 비워둔다 */
+  const same=items.every(x=>(x.due_at||null)===(items[0].due_at||null));
+  const a={title: multi?"":items[0].title, due_at: same?items[0].due_at:null};
   const overlay=document.createElement("div"); overlay.className="plot-modal-overlay";
   const close=()=>{ if(overlay.isConnected) document.body.removeChild(overlay); };
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
@@ -11847,7 +11934,11 @@ function openDueEditModal(a, label, onSaved){
   box.appendChild(top);
   const t=dueTimeState(a.due_at);
   box.insertAdjacentHTML("beforeend",
-    `<p class="hint" style="margin:0 0 8px"><b>${esc(a.title||"")}</b> · ${esc(label)}<br>이 분반의 과제 폴더에만 적용됩니다(다른 분반 기한은 그대로).</p>
+    (multi
+      ? `<p class="hint" style="margin:0 0 8px"><b>${esc(label)}</b>에 같은 기한을 적용합니다${same?"":" (지금 기한이 서로 달라 칸을 비워 두었습니다)"}.<br>
+           <span class="due-multi-list">${esc([...new Set(items.map(x=>String(x.title||"").trim()))].join(", "))}</span></p>`
+      : `<p class="hint" style="margin:0 0 8px"><b>${esc(a.title||"")}</b> · ${esc(label)}<br>이 분반의 과제 폴더에만 적용됩니다(다른 분반 기한은 그대로).</p>`)+
+    `
      <label>제출기한</label>
      <div class="due-row">
        <input type="date" id="dueEditDate" value="${unixToDateInput(a.due_at)}">
@@ -11865,18 +11956,26 @@ function openDueEditModal(a, label, onSaved){
   on.onchange=()=>{ box.querySelector("#dueEditH").disabled=!on.checked; box.querySelector("#dueEditM").disabled=!on.checked; };
   const save=async (dueAt, btn)=>{
     btn.disabled=true;
-    const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:a.id, dueAt})});
+    const fails=[];
+    for(const x of items){
+      const r=await apiFetch("professor-assignment", {method:"POST", body:JSON.stringify({id:x.id, dueAt})});
+      if(!r.ok) fails.push((r.body&&r.body.error)||"저장에 실패했습니다.");
+    }
     btn.disabled=false;
-    if(!r.ok){ alert((r.body&&r.body.error)||"저장에 실패했습니다."); return; }
+    if(fails.length){
+      alert(multi?`${items.length-fails.length}개는 저장했고 ${fails.length}개는 실패했습니다.\n${fails[0]}`:fails[0]);
+      if(fails.length===items.length) return;
+    }
     close(); if(typeof onSaved==="function") onSaved();
   };
   box.querySelector("#dueEditSave").onclick=e=>{
     const d=box.querySelector("#dueEditDate").value;
+    if(multi && !d){ alert("날짜를 골라 주세요. 기한을 모두 없애려면 [기한 없애기]를 누르세요."); return; }
     const tm=on.checked ? `${box.querySelector("#dueEditH").value}:${box.querySelector("#dueEditM").value}:00` : "23:59:59";
     save(d ? Math.floor(new Date(`${d}T${tm}`).getTime()/1000) : null, e.currentTarget);
   };
   box.querySelector("#dueEditClear").onclick=e=>{
-    if(a.due_at && !confirm("이 분반 과제의 제출기한을 없앨까요?")) return;
+    if(multi ? !confirm(`고른 ${items.length}개 폴더의 제출기한을 모두 없앨까요?`) : (a.due_at && !confirm("이 분반 과제의 제출기한을 없앨까요?"))) return;
     save(null, e.currentTarget);
   };
 }
@@ -14715,7 +14814,7 @@ const GUIDE_SECTIONS=[
       <li><b>수업 관리</b>: [수업 만들기]로 과목별 수업을 만들면 6자리 <b>등록 코드</b>가 자동으로 발급됩니다. 학생이 그 코드를 입력하면 해당 수업 수강생이 됩니다. "코드 크게 보기"로 강의실에서 바로 띄워 보여줄 수 있습니다.</li>
       <li>수업 이름 외에 학교이름 · 분반 · 요일 · 시간도 함께 기록할 수 있고, 목록에서 <b>손잡이를 끌어 수업 순서</b>를 바꿀 수 있습니다.</li>
       <li>화면 위쪽의 <b>[전체 학생 명단]</b>에서 내 수업에 등록한 전체 학생을, <b>[수업 미지정 과제]</b>에서 특정 수업에 묶이지 않은 과제를 볼 수 있습니다.</li>
-      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 안에 분반 칸이 나뉘어 있습니다. 칸을 누르면 그 분반의 제출함이 열리고, 비어 있는 <b>＋ 분반 칸</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다. 칸 오른쪽 위 <b>[기한]</b>을 누르면 그 분반 폴더의 마감일·시간만 따로 바꿀 수 있습니다. 위쪽 <b>[학생별]</b> 탭으로 바꾸면 학생마다 낸 과제를 과제 폴더·차수별로 모아 봅니다(제출 시각·기한 후 제출 여부·점수·확인/첨삭 상태). 분반 선택과 이름·학번 검색으로 거를 수 있고, 제출물을 누르면 첨삭 화면이 열립니다. 학생 이름 줄 오른쪽 <b>[과제 다운로드]</b>를 누르면 그 학생이 낸 과제(재제출 차수 전부)를 과제별 폴더로 나눠 zip 하나로 내려받습니다(차수마다 PDF, 콘티·파일 과제는 올린 파일 원본도 함께).</li>
+      <li><b>과제 관리(메뉴)</b>: 왼쪽 [교수] → <b>[과제 관리]</b>는 과제 폴더를 중심으로 봅니다. 과제명·종류가 같은 폴더를 한 묶음으로, 그 아래 분반 폴더가 한 줄씩 나옵니다. 줄을 누르면 그 분반의 제출함이 열리고, 과제 줄의 <b>＋ 분반</b>을 누르면 같은 과제명·종류·배점·제출기한의 폴더가 그 분반에 <b>따로</b> 생깁니다. 줄 오른쪽 <b>[기한]</b>은 그 분반 폴더의 마감일·시간만, 과제 줄의 <b>[수정]</b>은 과제명·종류·배점을 바꿉니다. 줄 앞 <b>체크박스</b>로 여러 폴더를 고르면 위쪽 막대에서 <b>기한 변경 · 제출 열기 · 제출 닫기</b>를 한 번에 할 수 있습니다. 위쪽 <b>[학생별]</b> 탭으로 바꾸면 학생마다 낸 과제를 과제 폴더·차수별로 모아 봅니다(제출 시각·기한 후 제출 여부·점수·확인/첨삭 상태). 분반 선택과 이름·학번 검색으로 거를 수 있고, 제출물을 누르면 첨삭 화면이 열립니다. 학생 이름 줄 오른쪽 <b>[과제 다운로드]</b>를 누르면 그 학생이 낸 과제(재제출 차수 전부)를 과제별 폴더로 나눠 zip 하나로 내려받습니다(차수마다 PDF, 콘티·파일 과제는 올린 파일 원본도 함께).</li>
       <li><b>과제 관리</b>: 각 수업 안에서 과제를 등록합니다. 등록 화면의 <b>[만들 수업]</b>에서 여러 분반을 체크하면 같은 과제가 분반마다 <b>따로</b> 하나씩 만들어집니다(제출함·마감·설정 변경은 분반별로 따로). 과제마다 <b>종류(기획서 · 캐릭터 · 배경 · 사건 · 플롯 · 글쓰기 · 콘티 · 파일 제출)</b>와 제출기한(날짜, [시간 지정]을 켜면 24시간 · 10분 단위 시각까지 · 켜지 않으면 그날 23:59)을 지정할 수 있고, 등록 후에도 [과제 설정 변경]으로 수정할 수 있습니다.</li>
       <li><b>과제 목록</b>과 <b>제출함</b>은 1분마다 저절로 다시 불러옵니다(오른쪽 위 <b>[자동]</b> 체크를 끄면 멈춥니다). 바로 확인하고 싶을 때는 <b>[새로고침]</b>을 누르세요.</li>
       <li><b>파일 제출</b> 과제: 작품 내용과 상관없이 학생이 <b>jpg · png · clip</b> 파일만 냅니다(파일당 용량 제한은 관리자 설정값 · 기본 1.5MB, 한 번에 10개까지). 학생은 왼쪽 <b>[파일 과제]</b> 탭에서 내고, 제출함에서 jpg · png는 바로 보이며 <b>[피드백 그리기]</b>를 눌렀을 때만 그림 위에 첨삭할 수 있습니다. clip 파일은 내려받아 확인합니다.</li>

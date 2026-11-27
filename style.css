@@ -1978,6 +1978,7 @@ mark.memo-hl .dh{background:transparent}
 .hub-group-title{font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:6px}
 .hub-group-head .hint{margin:0}
 .hub-edit-btn{margin-left:auto;align-self:center}
+.hub-ghead-in .hub-edit-btn{margin-left:auto}
 .hub-cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
 .hub-cell{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px;border-radius:8px;
   border:1px solid var(--line);background:var(--bg);color:inherit;cursor:pointer;font:inherit;min-width:0}
@@ -1991,10 +1992,60 @@ mark.memo-hl .dh{background:transparent}
 .hub-cell.busy{opacity:.6;cursor:progress}
 .hub-cell-wrap{position:relative;min-width:0;display:flex}
 .hub-cell-wrap .hub-cell{flex:1;padding-right:58px}
-.hub-due-btn{position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;gap:3px;padding:2px 7px;font:inherit;font-size:11px;
-  border:1px solid var(--line);border-radius:6px;background:var(--card);color:inherit;cursor:pointer}
-.hub-due-btn .icon{width:12px;height:12px}
-.hub-due-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* 2026-11-27: [과제별] 리스트(표) + 일괄 작업 막대 */
+.hub-bulk{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;margin:10px 0 6px;
+  border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.hub-bulk.on{border-color:var(--accent)}
+.hub-bulk button:disabled{opacity:.45;cursor:default}
+.hub-bulk-all{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer;font-size:13px}
+.hub-bulk-all input,.hub-chk input{width:auto;margin:0;cursor:pointer}
+.hub-bulk-n{font-size:13px;color:var(--muted,#888);margin-right:auto}
+.hub-table-wrap{overflow-x:auto}
+.hub-table{width:100%;border-collapse:collapse;font-size:13px}
+.hub-table th{text-align:left;font-weight:600;font-size:12px;color:var(--muted,#888);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.hub-table td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.hub-table .hub-chk{width:28px;text-align:center;cursor:pointer}
+.hub-ghead td{background:var(--bg);padding-top:10px;padding-bottom:8px}
+.hub-lgroup + .hub-lgroup .hub-ghead td{border-top:2px solid var(--line)}
+.hub-ghead-in{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hub-ghead-in .hint{margin:0}
+.hub-adds{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.hub-adds .hint{margin:0;font-size:12px}
+.hub-add-btn{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;font:inherit;font-size:12px;border:1px dashed var(--line);border-radius:6px;
+  background:transparent;color:var(--muted,#888);cursor:pointer}
+.hub-add-btn .icon{width:12px;height:12px}
+.hub-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+.hub-add-btn.busy{opacity:.6;cursor:progress}
+.hub-row{cursor:pointer}
+.hub-row:hover td{background:var(--accent2,var(--bg))}
+.hub-row.sel td{background:var(--accent2,var(--bg))}
+.hub-row.closed .hub-cls,.hub-row.closed .hub-due{color:var(--muted,#888)}
+.hub-row .hub-cls{font-weight:600;padding-left:14px}
+.hub-due,.hub-cnt,.hub-st{white-space:nowrap}
+.hub-act{text-align:right;width:1%;white-space:nowrap}
+.hub-state{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;border:1px solid var(--line)}
+.hub-state.open{border-color:#3a9a5b;color:#2e8a4e}
+.hub-state.past{border-color:#c98a1a;color:#b07610}
+.hub-state.closed{color:var(--muted,#888)}
+.due-multi-list{display:inline-block;margin-top:4px;color:var(--muted,#888)}
+.hub-cls{white-space:nowrap}
+/* 좁은 화면: 표 머리 숨기고, 폴더 줄은 두 단(분반 / 기한·제출·상태)으로 */
+@media (max-width:600px){
+  .hub-table thead{display:none}
+  .hub-table,.hub-table tbody{display:block}
+  .hub-ghead{display:flex}
+  .hub-ghead td{display:block;border-bottom:1px solid var(--line)}
+  .hub-ghead td:last-child{flex:1;min-width:0}
+  .hub-row{display:grid;grid-template-columns:28px auto auto 1fr auto;grid-template-areas:"chk cls cls cls act" "chk due cnt st act";
+    border-bottom:1px solid var(--line);align-items:center}
+  .hub-row td{display:block;border-bottom:0;padding:4px 6px}
+  .hub-row .hub-chk{grid-area:chk}
+  .hub-row .hub-cls{grid-area:cls;padding-left:6px;padding-bottom:0}
+  .hub-row .hub-due{grid-area:due;font-size:12px}
+  .hub-row .hub-cnt{grid-area:cnt;font-size:12px}
+  .hub-row .hub-st{grid-area:st}
+  .hub-row .hub-act{grid-area:act;width:auto}
+}
 /* 2026-11-24: 과제 관리 [과제별]|[학생별] 탭 + 학생별 보기 */
 .hub-view-tabs{max-width:280px}
 .hub-stu-class{max-width:220px}
